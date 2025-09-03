@@ -43,4 +43,4 @@ EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "fuza_elevadores.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "synchrobi.wsgi:application"]
