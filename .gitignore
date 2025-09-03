@@ -1,0 +1,45 @@
+# Arquivos Django
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+db.sqlite3
+db.sqlite3-journal
+docker-compose.yml
+
+# Ambiente virtual
+.venv/
+venv/
+env/
+
+# Configurações locais
+.env
+local_settings.py
+
+# Logs
+logs/
+*.log
+
+# Cache
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Media files (uploads)
+media/
+
+# Static files coletados
+staticfiles/
+collected_static/
+
+# Migrations (opcional - você decide)
+# */migrations/

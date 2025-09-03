@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+{% block title %}Login - SynchroBI{% endblock %}
+
+{% block navbar_title %}<span class="app-title-text">SynchroBI</span>{% endblock %}
+
+{% block content_class %}login-page{% endblock %}
+
+{% block content %}
+<div class="modern-login-box">
+    <div class="login-header text-center">
+        <div class="login-icon">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <h2>SynchroBI</h2>
+        <p class="text-muted mb-0">Sistema de Gestão Financeira</p>
+    </div>
+
+    <form method="post" class="modern-form">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {% for error in form.non_field_errors %}
+                    {{ error }}
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        <div class="modern-form-group">
+            <label for="{{ form.username.id_for_label }}" class="modern-label">
+                <i class="fas fa-user me-2"></i>Usuário
+            </label>
+            <input type="text" name="username" class="form-control modern-input" 
+                   id="{{ form.username.id_for_label }}" 
+                   value="{{ form.username.value|default:'' }}" 
+                   placeholder="Digite seu usuário" required>
+            {% if form.username.errors %}
+                <div class="text-danger small mt-1">{{ form.username.errors.0 }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="modern-form-group">
+            <label for="{{ form.password.id_for_label }}" class="modern-label">
+                <i class="fas fa-lock me-2"></i>Senha
+            </label>
+            <input type="password" name="password" class="form-control modern-input" 
+                   id="{{ form.password.id_for_label }}" 
+                   placeholder="Digite sua senha" required>
+            {% if form.password.errors %}
+                <div class="text-danger small mt-1">{{ form.password.errors.0 }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="text-center">
+            <button type="submit" class="btn modern-button mt-3 w-100">
+                <i class="fas fa-sign-in-alt me-2"></i> Entrar no Sistema
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 70vh;
+}
+
+.modern-login-box {
+    background-color: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 2.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    color: #ffffff;
+    max-width: 450px;
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+    margin: 0 auto;
+}
+
+.modern-login-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+    z-index: 1;
+}
+
+.login-header {
+    margin-bottom: 2rem;
+}
+
+.login-icon {
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(135deg, #3b82f6, #1e40af);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.25rem;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.login-icon i {
+    font-size: 2rem;
+    color: white;
+}
+
+.login-header h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #f0f9ff;
+    margin-bottom: 0.5rem;
+}
+
+.modern-form-group {
+    margin-bottom: 1.25rem;
+}
+
+.modern-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #d1d5db;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.modern-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 8px;
+    color: white !important;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+}
+
+.modern-input:focus {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(59, 130, 246, 0.5) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+    color: white !important;
+}
+
+.modern-input::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.modern-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    font-weight: 500;
+    padding: 0.85rem 2.5rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.modern-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+    color: white;
+    text-decoration: none;
+}
+
+.modern-button:active {
+    transform: translateY(1px);
+    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.3);
+}
+</style>
+{% endblock %}

@@ -1,0 +1,346 @@
+/* static/css/contrato.css */
+
+/* Variáveis de cor para manter consistência */
+:root {
+    --primary-color: #4A6785;
+    --secondary-color: #6c757d;
+    --light-gray: #f8f9fa;
+    --border-color: #ddd;
+    --text-dark: #333;
+    --text-muted: #666;
+}
+
+/* Configurações básicas da página para PDF */
+@page {
+    size: A4;
+    margin: 1.8cm 1.5cm 2cm 1.5cm;
+    
+    @top-center {
+        content: "ELEVADORES FUZA LTDA EPP";
+        font-size: 9px;
+        color: var(--text-muted);
+        font-weight: bold;
+    }
+    
+    @bottom-center {
+        content: "Página " counter(page) " de " counter(pages);
+        font-size: 9px;
+        color: var(--text-muted);
+    }
+    
+    @bottom-right {
+        content: "www.elevadoresfuza.com.br";
+        font-size: 8px;
+        color: var(--text-muted);
+    }
+}
+
+/* Reset e configurações gerais */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-dark);
+    margin: 0;
+    padding: 0;
+    background-color: white;
+}
+
+/* Títulos e cabeçalhos */
+.header {
+    text-align: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 3px solid var(--primary-color);
+    background: linear-gradient(135deg, var(--light-gray) 0%, #ffffff 100%);
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.header h1 {
+    font-size: 20px;
+    margin: 0 0 10px 0;
+    color: var(--primary-color);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.contract-info {
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.contract-info strong {
+    color: var(--primary-color);
+}
+
+/* Partes contratantes */
+.parties {
+    margin-bottom: 25px;
+}
+
+.party {
+    margin-bottom: 15px;
+    padding: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--light-gray) 0%, #ffffff 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.party-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--primary-color);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--primary-color);
+    padding-bottom: 3px;
+    display: inline-block;
+}
+
+.party-name {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--text-dark);
+}
+
+.party-info {
+    margin-bottom: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* Cláusulas */
+.clause {
+    margin-bottom: 22px;
+    page-break-inside: avoid;
+}
+
+.clause-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--primary-color);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 4px;
+    background: linear-gradient(90deg, var(--light-gray) 0%, transparent 100%);
+    padding-left: 8px;
+    margin-left: -8px;
+}
+
+.clause-content {
+    margin-left: 10px;
+}
+
+.clause-content p {
+    margin-bottom: 8px;
+    text-align: justify;
+}
+
+/* Subcláusulas */
+.subcclause {
+    margin-bottom: 12px;
+    padding-left: 15px;
+    border-left: 2px solid var(--light-gray);
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.subcclause-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--secondary-color);
+}
+
+/* Tabelas de especificações */
+.specs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.specs-table th,
+.specs-table td {
+    border: 1px solid var(--border-color);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.specs-table th {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #3a5a7a 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.specs-table .spec-label {
+    font-weight: 600;
+    width: 35%;
+    background-color: var(--light-gray);
+    color: var(--primary-color);
+}
+
+.specs-table tr:nth-child(even) td {
+    background-color: #fafafa;
+}
+
+/* Caixas de valor */
+.value-box {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin: 15px 0;
+    padding: 15px;
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--light-gray) 0%, #ffffff 100%);
+    box-shadow: 0 4px 8px rgba(74, 103, 133, 0.15);
+}
+
+/* Cronograma de pagamento */
+.payment-schedule {
+    background: linear-gradient(135deg, #e8f4f8 0%, #ffffff 100%);
+    padding: 18px;
+    border-radius: 8px;
+    margin: 12px 0;
+    border: 1px solid #b8daff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.payment-schedule strong {
+    color: var(--primary-color);
+}
+
+/* Área de assinaturas */
+.signature-area {
+    margin-top: 30px;
+    page-break-inside: avoid;
+}
+
+.signature-box {
+    border: 2px solid var(--border-color);
+    padding: 25px 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    min-height: 120px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--light-gray) 0%, #ffffff 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.signature-title {
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: var(--primary-color);
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.signature-line {
+    border-top: 2px solid var(--text-dark);
+    margin: 25px auto 8px auto;
+    width: 320px;
+}
+
+/* Área de testemunhas */
+.witness-area {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+    gap: 15px;
+}
+
+.witness-box {
+    width: 48%;
+    border: 1px solid var(--border-color);
+    padding: 20px 15px;
+    text-align: center;
+    min-height: 100px;
+    border-radius: 8px;
+    background-color: var(--light-gray);
+}
+
+.witness-box .signature-title {
+    font-size: 10px;
+    margin-bottom: 15px;
+}
+
+.witness-box .signature-line {
+    width: 80%;
+    margin: 15px auto 5px auto;
+}
+
+/* Utilitários */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-justify { text-align: justify; }
+
+.mb-10 { margin-bottom: 10px; }
+.mb-15 { margin-bottom: 15px; }
+.mb-20 { margin-bottom: 20px; }
+.mt-20 { margin-top: 20px; }
+.mt-30 { margin-top: 30px; }
+
+.font-bold { font-weight: 700; }
+.font-medium { font-weight: 600; }
+
+/* Quebras de página */
+.page-break { 
+    page-break-before: always; 
+}
+
+.page-break-avoid {
+    page-break-inside: avoid;
+}
+
+/* Melhorias para impressão */
+@media print {
+    .signature-box,
+    .party,
+    .payment-schedule {
+        box-shadow: none;
+        border-width: 1px;
+    }
+    
+    .header {
+        box-shadow: none;
+    }
+    
+    .specs-table {
+        box-shadow: none;
+    }
+}
+
+/* Responsividade básica (caso seja visualizado em tela) */
+@media screen and (max-width: 768px) {
+    .witness-area {
+        flex-direction: column;
+    }
+    
+    .witness-box {
+        width: 100%;
+    }
+    
+    .specs-table {
+        font-size: 9px;
+    }
+    
+    .signature-line {
+        width: 90%;
+    }
+}

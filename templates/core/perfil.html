@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Meu Perfil | SynchroBI{% endblock %}
+
+{% block navbar_title %}<span class="app-title-text">SynchroBI</span>{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="card shadow mb-4">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center">
+        <i class="fas fa-user-circle me-2"></i>
+        <h4 class="mb-0">Meu Perfil</h4>
+      </div>
+      <div>
+        <!-- Redirecionamento baseado no nível do usuário -->
+        {% if user.nivel == 'analista' or user.nivel == 'contador' %}
+          <a href="{% url 'gestor:home' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+          </a>
+        {% elif user.nivel == 'gestor' or user.nivel == 'admin' or user.nivel == 'diretor' %}
+          <a href="{% url 'gestor:home' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+          </a>
+        {% else %}
+          <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Informações do perfil -->
+    <div class="col-lg-4 mb-4">
+      <div class="card shadow h-100">
+        <div class="card-header bg-light">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-id-card me-2"></i> Informações do Perfil
+          </h5>
+        </div>
+        <div class="card-body text-center">
+          <div class="mb-4">
+            {% if usuario.foto_perfil %}
+              <img src="{{ usuario.foto_perfil.url }}" alt="{{ usuario.username }}" class="rounded-circle img-thumbnail" style="width: 150px; height: 150px; object-fit: cover;">
+            {% else %}
+              <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 150px; height: 150px; border: 1px solid #dee2e6;">
+                <i class="fas fa-user-circle text-secondary" style="font-size: 80px;"></i>
+              </div>
+            {% endif %}
+          </div>
+          
+          <h4>{{ usuario.get_full_name|default:usuario.username }}</h4>
+          <p class="text-muted mb-1">{{ usuario.email }}</p>
+          
+          <div class="mb-3">
+            <span class="badge 
+              {% if usuario.nivel == 'admin' %}bg-danger
+              {% elif usuario.nivel == 'diretor' %}bg-warning
+              {% elif usuario.nivel == 'gestor' %}bg-primary
+              {% elif usuario.nivel == 'analista' %}bg-info
+              {% elif usuario.nivel == 'contador' %}bg-success
+              {% else %}bg-secondary{% endif %}">
+              {{ usuario.get_nivel_display }}
+            </span>
+          </div>
+          
+          <div class="d-flex justify-content-center gap-2 flex-wrap">            
+            <span class="badge bg-light text-dark">
+              <i class="fas fa-phone me-1"></i>
+              {{ usuario.telefone|default:"Não informado" }}
+            </span>
+            {% if usuario.centro_custo %}
+            <span class="badge bg-light text-dark">
+              <i class="fas fa-building me-1"></i>
+              CC: {{ usuario.centro_custo }}
+            </span>
+            {% endif %}
+            {% if usuario.unidade_negocio %}
+            <span class="badge bg-light text-dark">
+              <i class="fas fa-sitemap me-1"></i>
+              {{ usuario.unidade_negocio }}
+            </span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Formulário de edição -->
+    <div class="col-lg-8">
+      <div class="card shadow">
+        <div class="card-header bg-light">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-user-edit me-2"></i> Editar Perfil
+          </h5>
+        </div>
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="row g-3">
+              <!-- Nome e Sobrenome -->
+              <div class="col-md-6">
+                <label for="first_name" class="form-label">Nome</label>
+                <input type="text" class="form-control" id="first_name" name="first_name" value="{{ usuario.first_name }}">
+              </div>
+              
+              <div class="col-md-6">
+                <label for="last_name" class="form-label">Sobrenome</label>
+                <input type="text" class="form-control" id="last_name" name="last_name" value="{{ usuario.last_name }}">
+              </div>
+              
+              <!-- Email e Telefone -->
+              <div class="col-md-6">
+                <label for="email" class="form-label">E-mail</label>
+                <input type="email" class="form-control" id="email" name="email" value="{{ usuario.email }}">
+              </div>
+              
+              <div class="col-md-6">
+                <label for="telefone" class="form-label">Telefone</label>
+                <input type="text" class="form-control" id="telefone" name="telefone" value="{{ usuario.telefone|default:'' }}" data-mask="(00) 00000-0000">
+              </div>
+              
+              <!-- Campos específicos do SynchroBI -->
+              <div class="col-md-6">
+                <label for="centro_custo" class="form-label">Centro de Custo</label>
+                <input type="text" class="form-control" id="centro_custo" name="centro_custo" value="{{ usuario.centro_custo|default:'' }}" readonly>
+                <div class="form-text small">Definido pelo administrador do sistema.</div>
+              </div>
+              
+              <div class="col-md-6">
+                <label for="unidade_negocio" class="form-label">Unidade de Negócio</label>
+                <input type="text" class="form-control" id="unidade_negocio" name="unidade_negocio" value="{{ usuario.unidade_negocio|default:'' }}" readonly>
+                <div class="form-text small">Definido pelo administrador do sistema.</div>
+              </div>
+              
+              <!-- Senha -->
+              <div class="col-12">
+                <label for="nova_senha" class="form-label">Nova Senha</label>
+                <input type="password" class="form-control" id="nova_senha" name="nova_senha">
+                <div class="form-text small">Deixe em branco para manter a senha atual.</div>
+              </div>
+              
+              <!-- Foto de Perfil -->
+              <div class="col-12">
+                <label for="foto" class="form-label">Alterar Foto de Perfil</label>
+                <input type="file" class="form-control" id="foto" name="foto" accept="image/*">
+                <div class="form-text small">Formatos aceitos: JPG, PNG, GIF (máximo 5MB)</div>
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-2"></i> Salvar Alterações
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Script para máscaras de input -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Máscara para telefone
+    const telefoneInput = document.getElementById('telefone');
+    if (telefoneInput) {
+        telefoneInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length <= 11) {
+                value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+                if (value.length < 15) {
+                    value = value.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+                }
+            }
+            e.target.value = value;
+        });
+    }
+});
+</script>
+{% endblock %}
