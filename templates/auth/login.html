@@ -8,6 +8,11 @@
 {% block content %}
 <div class="modern-login-box">
 
+    <div class="login-header text-center">
+        <h2>Acesso ao Sistema</h2>
+    </div>
+
+
     <form method="post" class="modern-form">
         {% csrf_token %}
         
@@ -19,6 +24,8 @@
             </div>
         {% endif %}
         
+
+
         <div class="modern-form-group">
             <label for="{{ form.username.id_for_label }}" class="modern-label">
                 <i class="fas fa-user me-2"></i>Usuário
