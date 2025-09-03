@@ -5,6 +5,111 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from core.models import Usuario, Unidade, CentroCusto, ContaContabil, Fornecedor, ParametroSistema
 
+# core/forms.py - Formulário Unidade simplificado
+
+class UnidadeForm(forms.ModelForm):
+    """Formulário para criar/editar unidades organizacionais"""
+    
+    # Campo para exibir unidade pai (somente leitura, calculado automaticamente)
+    unidade_pai_display = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'readonly': True
+        }),
+        label="Unidade Superior"
+    )
+    
+    class Meta:
+        model = Unidade
+        fields = [
+            'codigo', 'codigo_allstrategy', 'nome', 
+            'descricao', 'ativa'
+        ]
+        widgets = {
+            'codigo': forms.TextInput(attrs={
+                'class': 'form-control'
+            
+            }),
+            'codigo_allstrategy': forms.TextInput(attrs={
+                'class': 'form-control'
+                
+            }),
+            'nome': forms.TextInput(attrs={
+                'class': 'form-control'
+                
+            }),
+            'descricao': forms.Textarea(attrs={
+                'class': 'form-control', 
+                'rows': 3
+            
+            }),
+            'ativa': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Se está editando, mostrar a unidade pai atual
+        if self.instance.pk and self.instance.unidade_pai:
+            self.fields['unidade_pai_display'].initial = f"{self.instance.unidade_pai.codigo} - {self.instance.unidade_pai.nome}"
+        elif self.instance.pk:
+            self.fields['unidade_pai_display'].initial = "Unidade Raiz (sem superior)"
+    
+    def clean_codigo(self):
+        """Validação específica para código principal"""
+        codigo = self.cleaned_data.get('codigo', '').strip()
+        
+        if not codigo:
+            raise forms.ValidationError("Código é obrigatório.")
+        
+        # Validar formato (números e pontos apenas)
+        import re
+        if not re.match(r'^[\d\.]+$', codigo):
+            raise forms.ValidationError("Código deve conter apenas números e pontos.")
+        
+        # Verificar se já existe OUTRO registro com este código
+        queryset = Unidade.objects.filter(codigo=codigo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Já existe uma unidade com este código.")
+        
+        return codigo
+    
+    def clean_codigo_allstrategy(self):
+        """Validação para código All Strategy"""
+        codigo_allstrategy = self.cleaned_data.get('codigo_allstrategy', '').strip()
+        
+        # Verificar duplicação de código all strategy (se fornecido)
+        if codigo_allstrategy:
+            queryset = Unidade.objects.filter(codigo_allstrategy=codigo_allstrategy)
+            if self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            
+            if queryset.exists():
+                raise forms.ValidationError("Já existe uma unidade com este código All Strategy.")
+        
+        return codigo_allstrategy
+    
+    def save(self, commit=True):
+        """Override do save - o modelo cuida da hierarquia automaticamente"""
+        unidade = super().save(commit=False)
+        
+        # Se não tem código All Strategy, sugerir baseado no código
+        if not unidade.codigo_allstrategy and unidade.codigo:
+            partes = unidade.codigo.split('.')
+            ultimo_segmento = partes[-1]
+            if ultimo_segmento.isdigit():
+                unidade.codigo_allstrategy = ultimo_segmento
+        
+        if commit:
+            unidade.save()
+        
+        return unidade
+
+
 class UsuarioForm(forms.ModelForm):
     """Formulário para criar/editar usuários do SynchroBI"""
     
@@ -70,170 +175,6 @@ class UsuarioForm(forms.ModelForm):
             usuario.save()
         
         return usuario
-
-class UnidadeForm(forms.ModelForm):
-    """Formulário para criar/editar unidades organizacionais"""
-    
-    class Meta:
-        model = Unidade
-        fields = [
-            'codigo_allstrategy', 'codigo_interno', 'nome', 
-            'unidade_pai', 'tipo', 'descricao', 'responsavel', 'ativa'
-        ]
-        widgets = {
-            'codigo_allstrategy': forms.TextInput(attrs={
-                'class': 'form-control', 
-                'placeholder': 'Ex: 1.2.01.20.01'
-            }),
-            'codigo_interno': forms.TextInput(attrs={
-                'class': 'form-control', 
-                'placeholder': 'Ex: 101 (para unidades analíticas)'
-            }),
-            'nome': forms.TextInput(attrs={
-                'class': 'form-control', 
-                'placeholder': 'Nome da unidade organizacional'
-            }),
-            'unidade_pai': forms.Select(attrs={'class': 'form-select'}),
-            'tipo': forms.Select(attrs={'class': 'form-select'}),
-            'descricao': forms.Textarea(attrs={
-                'class': 'form-control', 
-                'rows': 3,
-                'placeholder': 'Descrição adicional da unidade...'
-            }),
-            'responsavel': forms.Select(attrs={'class': 'form-select'}),
-            'ativa': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        }
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # Configurar queryset para unidade pai (só unidades sintéticas)
-        self.fields['unidade_pai'].queryset = Unidade.objects.filter(
-            tipo='S', ativa=True
-        ).order_by('codigo_allstrategy')
-        self.fields['unidade_pai'].empty_label = "Nenhuma (Unidade Raiz)"
-        
-        # Configurar queryset para responsável
-        self.fields['responsavel'].queryset = Usuario.objects.filter(
-            is_active=True
-        ).order_by('first_name', 'last_name')
-        self.fields['responsavel'].empty_label = "Nenhum responsável"
-        
-        # Se estiver editando, não permitir alterar para pai de si mesmo
-        if self.instance.pk:
-            # Excluir a própria unidade e suas sub-unidades das opções de pai
-            excluir_ids = [self.instance.pk]
-            sub_unidades = self.instance.get_todas_sub_unidades()
-            excluir_ids.extend([u.pk for u in sub_unidades])
-            
-            self.fields['unidade_pai'].queryset = self.fields['unidade_pai'].queryset.exclude(
-                pk__in=excluir_ids
-            )
-    
-    def clean_codigo_allstrategy(self):
-        """Validação específica para código All Strategy"""
-        codigo = self.cleaned_data.get('codigo_allstrategy', '').strip()
-        
-        if not codigo:
-            raise forms.ValidationError("Código All Strategy é obrigatório.")
-        
-        # Validar formato (números e pontos apenas)
-        import re
-        if not re.match(r'^[\d\.]+$', codigo):
-            raise forms.ValidationError("Código deve conter apenas números e pontos.")
-        
-        # Verificar se já existe (excluindo a instância atual se estiver editando)
-        queryset = Unidade.objects.filter(codigo_allstrategy=codigo)
-        if self.instance.pk:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        
-        if queryset.exists():
-            raise forms.ValidationError("Já existe uma unidade com este código All Strategy.")
-        
-        return codigo
-    
-    def clean_codigo_interno(self):
-        """Validação para código interno"""
-        codigo_interno = self.cleaned_data.get('codigo_interno', '').strip()
-        tipo = self.cleaned_data.get('tipo')
-        
-        # Se é analítica e não tem código interno, tentar extrair do All Strategy
-        if tipo == 'A' and not codigo_interno:
-            codigo_allstrategy = self.cleaned_data.get('codigo_allstrategy', '')
-            if codigo_allstrategy:
-                partes = codigo_allstrategy.split('.')
-                ultimo_segmento = partes[-1]
-                if ultimo_segmento.isdigit():
-                    codigo_interno = ultimo_segmento
-        
-        # Verificar duplicação de código interno (se fornecido)
-        if codigo_interno:
-            queryset = Unidade.objects.filter(codigo_interno=codigo_interno)
-            if self.instance.pk:
-                queryset = queryset.exclude(pk=self.instance.pk)
-            
-            if queryset.exists():
-                raise forms.ValidationError("Já existe uma unidade com este código interno.")
-        
-        return codigo_interno
-    
-    def clean(self):
-        """Validação geral do formulário"""
-        cleaned_data = super().clean()
-        unidade_pai = cleaned_data.get('unidade_pai')
-        codigo_allstrategy = cleaned_data.get('codigo_allstrategy', '')
-        
-        # Validar hierarquia baseada no código
-        if unidade_pai and codigo_allstrategy:
-            # O código deve começar com o código do pai
-            if not codigo_allstrategy.startswith(unidade_pai.codigo_allstrategy + '.'):
-                self.add_error('unidade_pai', 
-                    f"Para ser filha de '{unidade_pai.codigo_allstrategy}', "
-                    f"o código deve começar com '{unidade_pai.codigo_allstrategy}.'")
-        
-        return cleaned_data
-
-class ImportarUnidadesForm(forms.Form):
-    """Formulário para importar unidades do All Strategy via Excel"""
-    
-    arquivo_excel = forms.FileField(
-        label="Arquivo Excel do All Strategy",
-        help_text="Selecione o arquivo Excel com a estrutura organizacional",
-        widget=forms.FileInput(attrs={
-            'class': 'form-control', 
-            'accept': '.xlsx,.xls'
-        })
-    )
-    
-    atualizar_existentes = forms.BooleanField(
-        label="Atualizar unidades existentes",
-        required=False,
-        initial=True,
-        help_text="Se marcado, os registros existentes serão atualizados com os novos dados",
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
-    )
-    
-    limpar_base_antes = forms.BooleanField(
-        label="Limpar base antes da importação",
-        required=False,
-        initial=False,
-        help_text="ATENÇÃO: Remove todas as unidades existentes antes de importar",
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
-    )
-    
-    def clean_arquivo_excel(self):
-        arquivo = self.cleaned_data['arquivo_excel']
-        
-        # Verificar extensão
-        if not arquivo.name.lower().endswith(('.xlsx', '.xls')):
-            raise forms.ValidationError("Arquivo deve ser Excel (.xlsx ou .xls)")
-        
-        # Verificar tamanho (máximo 10MB)
-        if arquivo.size > 10 * 1024 * 1024:
-            raise forms.ValidationError("Arquivo muito grande (máximo 10MB)")
-        
-        return arquivo
-        
 class ParametroSistemaForm(forms.ModelForm):
     """Formulário para criar/editar parâmetros do sistema"""
     

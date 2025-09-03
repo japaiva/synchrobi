@@ -3,7 +3,7 @@
 {% block title %}Portal do Gestor - SynchroBI{% endblock %}
 
 {% block navbar_title %}
-<span class="app-title-text">SynchroBI - Gestão Financeira</span>
+<span class="app-title-text">Portal Controladoria</span>
 {% endblock %}
 
 {% block nav_items %}
@@ -13,48 +13,28 @@
   <span class="nav-link" style="border-left: 2px solid #60a5fa; height: 24px; margin: 8px 15px;"></span>
 </li>
 
-<!-- Menu de Estrutura Organizacional -->
+<!-- Menu de Cadastros -->
 <li class="nav-item dropdown">
   <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-    <i class="fas fa-sitemap me-1"></i> Estrutura
+    </i> Cadastros
   </a>
   <ul class="dropdown-menu dropdown-menu-dark">
     <li><a class="dropdown-item" href="{% url 'gestor:unidade_list' %}">
-        <i class="fas fa-building me-2"></i> Unidades
+        </i> Unidades
+    </a></li>
+    <li><a class="dropdown-item" href="{% url 'gestor:unidade_list' %}">
+        </i> Centro de Custos
+    </a></li>
+    <li><a class="dropdown-item" href="{% url 'gestor:unidade_list' %}">
+        </i> Contas Contábeis
+    </a></li>
+
+    <li><a class="dropdown-item" >
+        </i> Usuários
     </a></li>
     <li><hr class="dropdown-divider"></li>
-    <li><a class="dropdown-item" href="{% url 'gestor:unidade_importar' %}">
-        <i class="fas fa-file-import me-2"></i> Importar Unidades
-    </a></li>
-  </ul>
-</li>
-
-<!-- Menu de Usuários -->
-<li class="nav-item dropdown">
-  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-    <i class="fas fa-users me-1"></i> Usuários
-  </a>
-  <ul class="dropdown-menu dropdown-menu-dark">
-    <li><a class="dropdown-item" href="{% url 'gestor:usuario_list' %}">
-        <i class="fas fa-user me-2"></i> Usuários
-    </a></li>
-    <li><a class="dropdown-item" href="{% url 'gestor:usuario_create' %}">
-        <i class="fas fa-user-plus me-2"></i> Novo Usuário
-    </a></li>
-  </ul>
-</li>
-
-<!-- Menu de Configurações -->
-<li class="nav-item dropdown">
-  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-    <i class="fas fa-cog me-1"></i> Sistema
-  </a>
-  <ul class="dropdown-menu dropdown-menu-dark">
-    <li><a class="dropdown-item" href="{% url 'gestor:parametro_list' %}">
-        <i class="fas fa-sliders-h me-2"></i> Parâmetros
-    </a></li>
-    <li><a class="dropdown-item" href="{% url 'gestor:parametro_create' %}">
-        <i class="fas fa-plus me-2"></i> Novo Parâmetro
+    <li><a class="dropdown-item" >
+        </i> Parâmetros
     </a></li>
   </ul>
 </li>
