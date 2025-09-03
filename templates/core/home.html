@@ -6,62 +6,6 @@
 
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-12">
-    <div class="card bg-light bg-opacity-90 shadow">
-      <div class="card-body text-center p-5">
-        <img src="{% static 'img/fuzalogo.png' %}" alt="Plataforma de Gestão Integrada" class="img-fluid mb-4" style="max-height: 60px;">
-        <div class="row justify-content-center">
-          <div class="col-md-12">
-            <div class="row g-4">
-
-              <!-- Portal do Gestor -->
-              <div class="col-lg-4 col-md-6 mb-4">
-                <div class="card h-100 bg-primary bg-opacity-10 border-primary shadow-sm">
-                  <div class="card-body text-center p-5">
-                    <i class="fas fa-user-tie fa-2x text-primary mb-3"></i>
-                    <h5 class="card-title">Gestor</h5>
-                    <a href="{% url 'gestor:home' %}" class="btn btn-primary btn-lg mt-3 px-4">Acessar</a>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Portal de Produção -->
-              <div class="col-lg-4 col-md-6 mb-4">
-                <div class="card h-100 bg-info bg-opacity-10 border-info shadow-sm">
-                  <div class="card-body text-center p-5">
-                    <i class="fas fa-industry fa-2x text-info mb-3"></i>
-                    <h5 class="card-title">Produção</h5>
-                    <a href="{% url 'producao:home' %}" class="btn btn-info btn-lg mt-3 px-4">Acessar</a>
-                  </div>
-                </div>
-              </div>
- 
-              
-              <!-- Portal do Vendedor -->
-              <div class="col-lg-4 col-md-6 mb-4">
-                <div class="card h-100 bg-info bg-opacity-10 border-info shadow-sm">
-                  <div class="card-body text-center p-5">
-                    <i class="fas fa-handshake fa-2x text-info mb-3"></i>
-                    <h5 class="card-title">Vendedor</h5>
-                    <a href="{% url 'vendedor:home' %}" class="btn btn-info btn-lg mt-3 px-4">Acessar</a>
-                  </div>
-                </div>
-              </div>
-
-
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% endblock %}
-
-
-
-{% block content %}
-<div class="row justify-content-center">
   <div class="col-lg-8">
     <div class="card bg-light bg-opacity-90 shadow">
       <div class="card-body text-center p-5">
