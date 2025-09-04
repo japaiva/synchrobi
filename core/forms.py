@@ -210,9 +210,17 @@ class EmpresaForm(forms.ModelForm):
         
         return empresa
 
+# core/forms.py - UsuarioForm Simplificado para seu modelo atual
+
+from django import forms
+from core.models import Usuario
+from django.contrib.auth.hashers import make_password
+
 class UsuarioForm(forms.ModelForm):
-    """Formulário para criar/editar usuários do SynchroBI"""
-    
+    """
+    Formulário simplificado para usuários SynchroBI
+    Compatível com o modelo atual, mas usando apenas campos essenciais
+    """
     confirm_password = forms.CharField(
         widget=forms.PasswordInput(attrs={'class': 'form-control'}), 
         required=False,
@@ -227,31 +235,71 @@ class UsuarioForm(forms.ModelForm):
     class Meta:
         model = Usuario
         fields = [
-            'username', 'first_name', 'last_name', 'email', 'nivel', 
-            'telefone', 'centro_custo', 'unidade_negocio', 'is_active'
+            'username',     # código
+            'first_name',   # nome (sem last_name para ser maior)
+            'email', 
+            'telefone',
+            'nivel',        # admin/gestor/analista/contador/diretor  
+            'is_active'     # status
         ]
         widgets = {
-            'username': forms.TextInput(attrs={'class': 'form-control'}),
-            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'username': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Código do usuário'
+            }),
+            'first_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nome completo do usuário'
+            }),
+            'email': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'email@exemplo.com'
+            }),
+            'telefone': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '(11) 99999-9999',
+                'data-mask': '(00) 00000-0000'
+            }),
             'nivel': forms.Select(attrs={'class': 'form-select'}),
-            'telefone': forms.TextInput(attrs={'class': 'form-control'}),
-            'centro_custo': forms.TextInput(attrs={'class': 'form-control'}),
-            'unidade_negocio': forms.TextInput(attrs={'class': 'form-control'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        
+        labels = {
+            'username': 'Código',
+            'first_name': 'Nome',
+            'email': 'Email',
+            'telefone': 'Telefone',
+            'nivel': 'Nível',
+            'is_active': 'Ativo'
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Se estiver editando, não exigir senha
+        # Se estiver editando um usuário existente, não exigir senha
         if self.instance.pk:
             self.fields['password'].required = False
             self.fields['confirm_password'].required = False
+            self.fields['password'].help_text = "Deixe em branco para manter a senha atual"
         else:
             self.fields['password'].required = True
             self.fields['confirm_password'].required = True
+        
+        # Tornar campos obrigatórios
+        self.fields['username'].required = True
+        self.fields['first_name'].required = True
+        self.fields['nivel'].required = True
+        
+        # Ajustar choices do nível conforme seu modelo atual
+        # admin/gestor/analista/contador/diretor
+        self.fields['nivel'].choices = [
+            ('', '--- Selecione ---'),
+            ('admin', 'Administrador'),
+            ('gestor', 'Gestor Financeiro'), 
+            ('analista', 'Analista Financeiro'),
+            ('contador', 'Contador'),
+            ('diretor', 'Diretor'),
+        ]
     
     def clean(self):
         cleaned_data = super().clean()
@@ -271,10 +319,20 @@ class UsuarioForm(forms.ModelForm):
         if password:
             usuario.password = make_password(password)
         
+        # Limpar campos não utilizados (opcional, para não interferir)
+        # Manter os campos do modelo, mas não exibir no form
+        if not usuario.centro_custo:
+            usuario.centro_custo = ''
+        if not usuario.unidade_negocio:
+            usuario.unidade_negocio = ''
+        if not usuario.last_name:
+            usuario.last_name = ''
+        
         if commit:
             usuario.save()
         
         return usuario
+
 
 class ParametroSistemaForm(forms.ModelForm):
     """Formulário para criar/editar parâmetros do sistema"""

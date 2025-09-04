@@ -54,7 +54,6 @@ urlpatterns = [
     # Usuários
     path('usuarios/', views.usuario_list, name='usuario_list'),
     path('usuarios/criar/', views.usuario_create, name='usuario_create'),
-    path('usuarios/<int:pk>/', views.usuario_detail, name='usuario_detail'),
     path('usuarios/<int:pk>/editar/', views.usuario_update, name='usuario_update'),
     path('usuarios/<int:pk>/excluir/', views.usuario_delete, name='usuario_delete'),
     

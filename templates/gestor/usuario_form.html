@@ -1,0 +1,255 @@
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}{{ title }} | Portal Comercial{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas fa-user-plus me-2"></i> {{ title }}
+    </h5>
+    <a href="{% url 'gestor:usuario_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+  
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="row g-4">
+        <!-- DADOS BÁSICOS -->
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-header bg-light">
+              <h6 class="card-title mb-0">
+                <i class="fas fa-user me-2"></i>Dados Básicos
+              </h6>
+            </div>
+            <div class="card-body">
+              <!-- CÓDIGO -->
+              <div class="mb-3">
+                <label for="{{ form.username.id_for_label }}" class="form-label fw-semibold">
+                  Código do Usuário *
+                </label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.username.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">Nome de usuário para acesso ao sistema</div>
+              </div>
+              
+              <!-- NOME -->
+              <div class="mb-3">
+                <label for="{{ form.first_name.id_for_label }}" class="form-label fw-semibold">
+                  Nome Completo *
+                </label>
+                {{ form.first_name }}
+                {% if form.first_name.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.first_name.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+              
+              <!-- EMAIL -->
+              <div class="mb-3">
+                <label for="{{ form.email.id_for_label }}" class="form-label fw-semibold">
+                  Email
+                </label>
+                {{ form.email }}
+                {% if form.email.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.email.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+              
+              <!-- TELEFONE -->
+              <div class="mb-3">
+                <label for="{{ form.telefone.id_for_label }}" class="form-label fw-semibold">
+                  Telefone
+                </label>
+                {{ form.telefone }}
+                {% if form.telefone.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.telefone.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEGURANÇA E PERFIL -->
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-header bg-light">
+              <h6 class="card-title mb-0">
+                <i class="fas fa-shield-alt me-2"></i>Segurança e Perfil
+              </h6>
+            </div>
+            <div class="card-body">
+              <!-- SENHA -->
+              <div class="mb-3">
+                <label for="{{ form.password.id_for_label }}" class="form-label fw-semibold">
+                  Senha {% if not form.instance.pk %}*{% endif %}
+                </label>
+                {{ form.password }}
+                {% if form.password.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.password.errors.0 }}
+                  </div>
+                {% endif %}
+                {% if form.instance.pk %}
+                  <div class="form-text">Deixe em branco para manter a senha atual</div>
+                {% endif %}
+              </div>
+              
+              <!-- CONFIRMAR SENHA -->
+              <div class="mb-3">
+                <label for="{{ form.confirm_password.id_for_label }}" class="form-label fw-semibold">
+                  Confirmar Senha {% if not form.instance.pk %}*{% endif %}
+                </label>
+                {{ form.confirm_password }}
+                {% if form.confirm_password.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.confirm_password.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+              
+              <!-- NÍVEL -->
+              <div class="mb-3">
+                <label for="{{ form.nivel.id_for_label }}" class="form-label fw-semibold">
+                  Nível de Acesso *
+                </label>
+                {{ form.nivel }}
+                {% if form.nivel.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.nivel.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">
+                  <small>
+                    <strong>Admin:</strong> Acesso total • 
+                    <strong>Gestor:</strong> Gestão financeira • 
+                    <strong>Analista:</strong> Análises • 
+                    <strong>Contador:</strong> Contabilidade •
+                    <strong>Diretor:</strong> Visão executiva
+                  </small>
+                </div>
+              </div>
+              
+              <!-- STATUS -->
+              <div class="mb-3">
+                <div class="form-check form-switch">
+                  {{ form.is_active }}
+                  <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">
+                    <i class="fas fa-toggle-on me-1"></i>Usuário Ativo
+                  </label>
+                </div>
+                {% if form.is_active.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ form.is_active.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">Usuários inativos não podem acessar o sistema</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTÕES -->
+      <div class="row mt-4">
+        <div class="col-12">
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'gestor:usuario_list' %}" class="btn btn-outline-secondary">
+              <i class="fas fa-times me-1"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save me-1"></i> 
+              {% if form.instance.pk %}Atualizar{% else %}Criar{% endif %} Usuário
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTA SOBRE CAMPOS OBRIGATÓRIOS -->
+      <div class="row mt-3">
+        <div class="col-12">
+          <div class="alert alert-light border">
+            <small class="text-muted">
+              <i class="fas fa-info-circle me-1"></i>
+              <strong>Campos obrigatórios:</strong> Os campos marcados com (*) são obrigatórios.
+            </small>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Aplicar máscara no telefone
+    const telefoneInput = document.getElementById('id_telefone');
+    if (telefoneInput) {
+        telefoneInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length >= 11) {
+                value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+            } else if (value.length >= 7) {
+                value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+            } else if (value.length >= 3) {
+                value = value.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+            }
+            e.target.value = value;
+        });
+    }
+
+    // Validação de senha em tempo real
+    const passwordInput = document.getElementById('id_password');
+    const confirmPasswordInput = document.getElementById('id_confirm_password');
+    
+    if (confirmPasswordInput) {
+        confirmPasswordInput.addEventListener('blur', function() {
+            const password = passwordInput.value;
+            const confirmPassword = this.value;
+            
+            if (password && confirmPassword && password !== confirmPassword) {
+                this.classList.add('is-invalid');
+                let errorDiv = this.parentNode.querySelector('.text-danger');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'text-danger small mt-1';
+                    this.parentNode.appendChild(errorDiv);
+                }
+                errorDiv.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>As senhas não coincidem.';
+            } else {
+                this.classList.remove('is-invalid');
+                const errorDiv = this.parentNode.querySelector('.text-danger');
+                if (errorDiv && errorDiv.textContent.includes('As senhas não coincidem')) {
+                    errorDiv.remove();
+                }
+            }
+        });
+    }
+
+    console.log('✅ Formulário de usuário carregado!');
+});
+</script>
+{% endblock %}
+{% endblock %}
