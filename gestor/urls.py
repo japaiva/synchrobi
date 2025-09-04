@@ -1,4 +1,4 @@
-# gestor/urls.py - URLs do módulo gestor
+# gestor/urls.py - URLs atualizadas com Centro de Custo e Conta Contábil
 
 from django.urls import path
 from . import views
@@ -10,7 +10,7 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('home/', views.home, name='home'),
     
-   # Empresas
+    # Empresas
     path('empresas/', views.empresa_list, name='empresa_list'),
     path('empresas/criar/', views.empresa_create, name='empresa_create'),
     path('empresas/<str:sigla>/editar/', views.empresa_update, name='empresa_update'),
@@ -20,7 +20,6 @@ urlpatterns = [
     path('api/validar-sigla-empresa/', views.api_validar_sigla_empresa, name='api_validar_sigla_empresa'),
     path('api/validar-cnpj-empresa/', views.api_validar_cnpj_empresa, name='api_validar_cnpj_empresa'),
     path('api/empresa/<str:sigla>/info/', views.api_empresa_info, name='api_empresa_info'),
-
 
     # Unidades
     path('unidades/', views.unidade_list, name='unidade_list'),
@@ -33,6 +32,24 @@ urlpatterns = [
     # APIs para Unidades
     path('api/validar-codigo/', views.api_validar_codigo, name='api_validar_codigo'),
     path('api/unidade/<int:pk>/filhas/', views.api_unidade_filhas, name='api_unidade_filhas'),
+    
+    # NOVO: Centros de Custo
+    path('centros-custo/', views.centrocusto_list, name='centrocusto_list'),
+    path('centros-custo/criar/', views.centrocusto_create, name='centrocusto_create'),
+    path('centros-custo/<str:codigo>/editar/', views.centrocusto_update, name='centrocusto_update'),
+    path('centros-custo/<str:codigo>/excluir/', views.centrocusto_delete, name='centrocusto_delete'),
+    
+    # APIs para Centros de Custo
+    path('api/validar-codigo-centrocusto/', views.api_validar_codigo_centrocusto, name='api_validar_codigo_centrocusto'),
+    
+    # NOVO: Contas Contábeis
+    path('contas-contabeis/', views.contacontabil_list, name='contacontabil_list'),
+    path('contas-contabeis/criar/', views.contacontabil_create, name='contacontabil_create'),
+    path('contas-contabeis/<str:codigo>/editar/', views.contacontabil_update, name='contacontabil_update'),
+    path('contas-contabeis/<str:codigo>/excluir/', views.contacontabil_delete, name='contacontabil_delete'),
+    
+    # APIs para Contas Contábeis
+    path('api/validar-codigo-contacontabil/', views.api_validar_codigo_contacontabil, name='api_validar_codigo_contacontabil'),
     
     # Usuários
     path('usuarios/', views.usuario_list, name='usuario_list'),

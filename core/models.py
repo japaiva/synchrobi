@@ -1,4 +1,4 @@
-# core/models.py - Modelos base do SynchroBI
+# core/models.py - Modelos atualizados com Centro de Custo e Conta Contábil
 
 import logging
 from django.db import models
@@ -145,7 +145,7 @@ class Empresa(models.Model):
             models.Index(fields=['ativa']),
         ]
 
-# ===== MODELO UNIDADE (agora com campo empresa) =====
+# ===== MODELO UNIDADE (com campo empresa) =====
 
 class Unidade(models.Model):
     """
@@ -160,12 +160,12 @@ class Unidade(models.Model):
     nome = models.CharField(max_length=255, verbose_name="Nome da Unidade")
     
     empresa = models.ForeignKey(
-    Empresa,
-    on_delete=models.PROTECT,
-    related_name='unidades',
-    verbose_name="Empresa",
-    null=True,      # Adicione esta linha
-    blank=True      # Adicione esta linha
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name='unidades',
+        verbose_name="Empresa",
+        null=True,
+        blank=True
     )
     
     unidade_pai = models.ForeignKey(
@@ -373,55 +373,178 @@ class Unidade(models.Model):
             models.Index(fields=['ativa']),
             models.Index(fields=['unidade_pai', 'ativa']),
             models.Index(fields=['nivel']),
-            models.Index(fields=['empresa']),  # Adicione esta linha de volta
+            models.Index(fields=['empresa']),
         ]
 
-# ===== OUTROS MODELOS =====
-
+# ===== NOVO: MODELO CENTRO DE CUSTO =====
+\
 class CentroCusto(models.Model):
-    """Centros de custo para controle gerencial"""
-    codigo = models.CharField(max_length=20, primary_key=True)
-    nome = models.CharField(max_length=255)
-    descricao = models.TextField(blank=True)
-    unidade = models.ForeignKey(Unidade, on_delete=models.PROTECT, 
-                               related_name='centros_custo', null=True, blank=True)
-    responsavel = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='centros_custo_responsavel')
-    tipo = models.CharField(max_length=50, choices=[
-        ('operacional', 'Operacional'),
-        ('administrativo', 'Administrativo'),
-        ('comercial', 'Comercial'),
-        ('financeiro', 'Financeiro'),
-        ('ti', 'Tecnologia da Informação'),
-        ('rh', 'Recursos Humanos'),
-        ('projeto', 'Projeto Específico'),
-    ], default='operacional')
-    ativo = models.BooleanField(default=True)
-    data_criacao = models.DateTimeField(auto_now_add=True)
+    """Modelo para centros de custo hierárquicos"""
     
-    # Campos para orçamento
-    orcamento_anual = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
-    orcamento_mensal = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    codigo = models.CharField(max_length=20, primary_key=True, verbose_name="Código")
+    nome = models.CharField(max_length=255, verbose_name="Nome do Centro de Custo")
+    descricao = models.TextField(blank=True, verbose_name="Descrição")
+    
+    # Hierarquia
+    centro_pai = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='sub_centros',
+        verbose_name="Centro de Custo Superior"
+    )
+    
+    nivel = models.IntegerField(verbose_name="Nível Hierárquico")
+    ativo = models.BooleanField(default=True, verbose_name="Ativo")
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    
+    @property
+    def tipo(self):
+        """
+        Tipo determinado dinamicamente:
+        - 'S' (Sintético) se tem sub-centros
+        - 'A' (Analítico) se não tem sub-centros
+        """
+        if not self.pk:
+            return 'A'
+        
+        if not hasattr(self, '_cached_tipo'):
+            self._cached_tipo = 'S' if self.tem_sub_centros else 'A'
+        return self._cached_tipo
+    
+    def get_tipo_display(self):
+        """Retorna o nome do tipo para exibição"""
+        return 'Sintético' if self.tipo == 'S' else 'Analítico'
+    
+    @property
+    def e_sintetico(self):
+        """Verifica se é sintético (tem sub-centros)"""
+        return self.tipo == 'S'
+    
+    @property
+    def e_analitico(self):
+        """Verifica se é analítico (folha da árvore)"""
+        return self.tipo == 'A'
+    
+    @property
+    def tem_sub_centros(self):
+        """Verifica se tem sub-centros ativos"""
+        if not self.pk:
+            return False
+        return self.sub_centros.filter(ativo=True).exists()
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Validar formato do código principal
+        if not re.match(r'^[\d\.]+$', self.codigo):
+            raise ValidationError({
+                'codigo': 'Código deve conter apenas números e pontos'
+            })
+        
+        # Se tem ponto no código mas não tem pai, buscar automaticamente
+        if '.' in self.codigo and not self.centro_pai:
+            partes = self.codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
+            
+            try:
+                self.centro_pai = CentroCusto.objects.get(codigo=codigo_pai)
+            except CentroCusto.DoesNotExist:
+                raise ValidationError({
+                    'codigo': f'Centro de custo pai com código "{codigo_pai}" não existe'
+                })
+    
+    def save(self, *args, **kwargs):
+        """Override do save para calcular nível e pai automaticamente"""
+        
+        # Calcular nível baseado no número de pontos no código
+        self.nivel = self.codigo.count('.') + 1
+        
+        # Buscar centro pai baseado no código se não foi definido
+        if not self.centro_pai and '.' in self.codigo:
+            partes = self.codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
+            
+            try:
+                self.centro_pai = CentroCusto.objects.get(codigo=codigo_pai)
+            except CentroCusto.DoesNotExist:
+                pass  # Será validado no clean()
+        
+        # Validar antes de salvar
+        self.full_clean()
+        
+        super().save(*args, **kwargs)
+        
+        # Limpar cache do pai se houver
+        if self.centro_pai and hasattr(self.centro_pai, '_cached_tipo'):
+            del self.centro_pai._cached_tipo
+    
+    @property
+    def nome_completo(self):
+        """Nome com hierarquia completa"""
+        if self.centro_pai:
+            return f"{self.centro_pai.nome_completo} > {self.nome}"
+        return self.nome
+    
+    @property
+    def caminho_hierarquico(self):
+        """Lista com toda a hierarquia até este centro"""
+        caminho = []
+        centro_atual = self
+        
+        while centro_atual:
+            caminho.insert(0, centro_atual)
+            centro_atual = centro_atual.centro_pai
+        
+        return caminho
+    
+    def delete(self, *args, **kwargs):
+        """Override do delete para limpar cache do pai"""
+        pai = self.centro_pai
+        super().delete(*args, **kwargs)
+        
+        if pai and hasattr(pai, '_cached_tipo'):
+            del pai._cached_tipo
     
     def __str__(self):
-        return f"{self.codigo} - {self.nome}"
+        tipo_icon = "💼" if self.e_sintetico else "🎯"
+        return f"{tipo_icon} {self.codigo} - {self.nome}"
     
     class Meta:
         db_table = 'centros_custo'
         verbose_name = 'Centro de Custo'
         verbose_name_plural = 'Centros de Custo'
         ordering = ['codigo']
+        indexes = [
+            models.Index(fields=['codigo']),
+            models.Index(fields=['ativo']),
+            models.Index(fields=['centro_pai', 'ativo']),
+            models.Index(fields=['nivel']),
+        ]
+
+# ===== NOVO: MODELO CONTA CONTÁBIL =====
 
 class ContaContabil(models.Model):
-    """Plano de contas contábil"""
-    codigo = models.CharField(max_length=20, primary_key=True)
-    nome = models.CharField(max_length=255)
-    descricao = models.TextField(blank=True)
+    """Modelo para plano de contas contábil hierárquico"""
+    
+    codigo = models.CharField(max_length=20, primary_key=True, verbose_name="Código")
+    nome = models.CharField(max_length=255, verbose_name="Nome da Conta")
+    descricao = models.TextField(blank=True, verbose_name="Descrição")
     
     # Hierarquia
-    conta_pai = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
-                                 related_name='subcontas')
-    nivel = models.IntegerField()
+    conta_pai = models.ForeignKey(
+        'self', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='subcontas',
+        verbose_name="Conta Superior"
+    )
+    
+    nivel = models.IntegerField(verbose_name="Nível Hierárquico")
     
     # Classificação DRE
     tipo_conta = models.CharField(max_length=50, choices=[
@@ -431,23 +554,158 @@ class ContaContabil(models.Model):
         ('ativo', 'Ativo'),
         ('passivo', 'Passivo'),
         ('patrimonio', 'Patrimônio Líquido'),
-    ])
+    ], verbose_name="Tipo da Conta")
     
     # Classificação para relatórios gerenciais
-    categoria_dre = models.CharField(max_length=100, blank=True, help_text="Ex: Receita Bruta, CMV, Despesas Operacionais")
-    subcategoria_dre = models.CharField(max_length=100, blank=True, help_text="Ex: Vendas, Material, Pessoal")
+    categoria_dre = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Categoria DRE",
+        help_text="Ex: Receita Bruta, CMV, Despesas Operacionais"
+    )
+    subcategoria_dre = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Subcategoria DRE",
+        help_text="Ex: Vendas, Material, Pessoal"
+    )
     
-    ativa = models.BooleanField(default=True)
-    aceita_lancamento = models.BooleanField(default=True, help_text="Se False, é conta sintética")
+    ativa = models.BooleanField(default=True, verbose_name="Ativa")
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    
+    @property
+    def tipo(self):
+        """
+        Tipo determinado dinamicamente:
+        - 'S' (Sintético) se tem subcontas
+        - 'A' (Analítico) se não tem subcontas
+        """
+        if not self.pk:
+            return 'A'
+        
+        if not hasattr(self, '_cached_tipo'):
+            self._cached_tipo = 'S' if self.tem_subcontas else 'A'
+        return self._cached_tipo
+    
+    def get_tipo_display(self):
+        """Retorna o nome do tipo para exibição"""
+        return 'Sintético' if self.tipo == 'S' else 'Analítico'
+    
+    @property
+    def e_sintetico(self):
+        """Verifica se é sintético (tem subcontas)"""
+        return self.tipo == 'S'
+    
+    @property
+    def e_analitico(self):
+        """Verifica se é analítico (folha da árvore)"""
+        return self.tipo == 'A'
+    
+    @property
+    def aceita_lancamento(self):
+        """Contas analíticas aceitam lançamento, sintéticas não"""
+        return self.e_analitico
+    
+    @property
+    def tem_subcontas(self):
+        """Verifica se tem subcontas ativas"""
+        if not self.pk:
+            return False
+        return self.subcontas.filter(ativa=True).exists()
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Validar formato do código principal
+        if not re.match(r'^[\d\.]+$', self.codigo):
+            raise ValidationError({
+                'codigo': 'Código deve conter apenas números e pontos'
+            })
+        
+        # Se tem ponto no código mas não tem pai, buscar automaticamente
+        if '.' in self.codigo and not self.conta_pai:
+            partes = self.codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
+            
+            try:
+                self.conta_pai = ContaContabil.objects.get(codigo=codigo_pai)
+            except ContaContabil.DoesNotExist:
+                raise ValidationError({
+                    'codigo': f'Conta pai com código "{codigo_pai}" não existe'
+                })
+    
+    def save(self, *args, **kwargs):
+        """Override do save para calcular nível e pai automaticamente"""
+        
+        # Calcular nível baseado no número de pontos no código
+        self.nivel = self.codigo.count('.') + 1
+        
+        # Buscar conta pai baseada no código se não foi definida
+        if not self.conta_pai and '.' in self.codigo:
+            partes = self.codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
+            
+            try:
+                self.conta_pai = ContaContabil.objects.get(codigo=codigo_pai)
+            except ContaContabil.DoesNotExist:
+                pass  # Será validado no clean()
+        
+        # Validar antes de salvar
+        self.full_clean()
+        
+        super().save(*args, **kwargs)
+        
+        # Limpar cache do pai se houver
+        if self.conta_pai and hasattr(self.conta_pai, '_cached_tipo'):
+            del self.conta_pai._cached_tipo
+    
+    @property
+    def nome_completo(self):
+        """Nome com hierarquia completa"""
+        if self.conta_pai:
+            return f"{self.conta_pai.nome_completo} > {self.nome}"
+        return self.nome
+    
+    @property
+    def caminho_hierarquico(self):
+        """Lista com toda a hierarquia até esta conta"""
+        caminho = []
+        conta_atual = self
+        
+        while conta_atual:
+            caminho.insert(0, conta_atual)
+            conta_atual = conta_atual.conta_pai
+        
+        return caminho
+    
+    def delete(self, *args, **kwargs):
+        """Override do delete para limpar cache do pai"""
+        pai = self.conta_pai
+        super().delete(*args, **kwargs)
+        
+        if pai and hasattr(pai, '_cached_tipo'):
+            del pai._cached_tipo
     
     def __str__(self):
-        return f"{self.codigo} - {self.nome}"
+        tipo_icon = "📊" if self.e_sintetico else "📋"
+        return f"{tipo_icon} {self.codigo} - {self.nome}"
     
     class Meta:
         db_table = 'contas_contabeis'
         verbose_name = 'Conta Contábil'
         verbose_name_plural = 'Contas Contábeis'
         ordering = ['codigo']
+        indexes = [
+            models.Index(fields=['codigo']),
+            models.Index(fields=['ativa']),
+            models.Index(fields=['conta_pai', 'ativa']),
+            models.Index(fields=['nivel']),
+            models.Index(fields=['tipo_conta']),
+        ]
+
+# ===== MODELO FORNECEDOR (mantido como estava) =====
 
 class Fornecedor(models.Model):
     """Cadastro de fornecedores"""
@@ -477,6 +735,8 @@ class Fornecedor(models.Model):
         verbose_name = 'Fornecedor'
         verbose_name_plural = 'Fornecedores'
         ordering = ['razao_social']
+
+# ===== MODELO PARÂMETRO SISTEMA (mantido como estava) =====
 
 class ParametroSistema(models.Model):
     """Parâmetros globais de configuração do sistema"""
@@ -575,6 +835,8 @@ class ParametroSistema(models.Model):
         verbose_name = 'Parâmetro do Sistema'
         verbose_name_plural = 'Parâmetros do Sistema'
         ordering = ['categoria', 'nome']
+
+# ===== MODELO USUÁRIO CENTRO CUSTO (atualizado) =====
 
 class UsuarioCentroCusto(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='centros_custo_permitidos')

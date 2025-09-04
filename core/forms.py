@@ -1,9 +1,11 @@
-# core/forms.py - Forms para SynchroBI
+# core/forms.py - Forms atualizados com Centro de Custo e Conta Contábil
 
 from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
-from core.models import Usuario, Unidade, CentroCusto, ContaContabil, Fornecedor, ParametroSistema, Empresa
+from core.models import Usuario, Unidade, CentroCusto, ContaContabil, ParametroSistema, Empresa
+
+# ===== FORMULÁRIOS EXISTENTES (mantidos) =====
 
 class UnidadeForm(forms.ModelForm):
     """Formulário para criar/editar unidades organizacionais"""
@@ -373,3 +375,127 @@ class ParametroSistemaForm(forms.ModelForm):
             raise forms.ValidationError(f"Valor inválido para o tipo '{tipo}'.")
         
         return valor
+
+# ===== FORMULÁRIO CENTRO DE CUSTO (SIMPLIFICADO) =====
+
+class CentroCustoForm(forms.ModelForm):
+    """Formulário para criar/editar centros de custo"""
+    
+    class Meta:
+        model = CentroCusto
+        fields = [
+            'codigo', 'nome', 'descricao', 'ativo'
+        ]
+        widgets = {
+            'codigo': forms.TextInput(attrs={
+                'class': 'form-control'
+            }),
+            'nome': forms.TextInput(attrs={
+                'class': 'form-control'
+            }),
+            'descricao': forms.Textarea(attrs={
+                'class': 'form-control', 
+                'rows': 3
+            }),
+            'ativo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def clean_codigo(self):
+        """Validação específica para código do centro de custo"""
+        codigo = self.cleaned_data.get('codigo', '').strip()
+        
+        if not codigo:
+            raise forms.ValidationError("Código é obrigatório.")
+        
+        # Validar formato (números e pontos apenas)
+        import re
+        if not re.match(r'^[\d\.]+$', codigo):
+            raise forms.ValidationError("Código deve conter apenas números e pontos.")
+        
+        # Verificar se já existe OUTRO registro com este código
+        queryset = CentroCusto.objects.filter(codigo=codigo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Já existe um centro de custo com este código.")
+        
+        return codigo
+
+# ===== FORMULÁRIO CONTA CONTÁBIL =====
+
+class ContaContabilForm(forms.ModelForm):
+    """Formulário para criar/editar contas contábeis"""
+    
+    class Meta:
+        model = ContaContabil
+        fields = [
+            'codigo', 'nome', 'descricao', 'tipo_conta', 
+            'categoria_dre', 'subcategoria_dre', 'ativa'
+        ]
+        widgets = {
+            'codigo': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex: 010.010.01'
+            }),
+            'nome': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nome da conta contábil'
+            }),
+            'descricao': forms.Textarea(attrs={
+                'class': 'form-control', 
+                'rows': 3,
+                'placeholder': 'Descrição da conta...'
+            }),
+            'tipo_conta': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'categoria_dre': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex: Receita Bruta, CMV, Despesas Operacionais'
+            }),
+            'subcategoria_dre': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex: Vendas, Material, Pessoal'
+            }),
+            'ativa': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def clean_codigo(self):
+        """Validação específica para código da conta contábil"""
+        codigo = self.cleaned_data.get('codigo', '').strip()
+        
+        if not codigo:
+            raise forms.ValidationError("Código é obrigatório.")
+        
+        # Validar formato (números e pontos apenas)
+        import re
+        if not re.match(r'^[\d\.]+$', codigo):
+            raise forms.ValidationError("Código deve conter apenas números e pontos.")
+        
+        # Verificar se já existe OUTRO registro com este código
+        queryset = ContaContabil.objects.filter(codigo=codigo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Já existe uma conta contábil com este código.")
+        
+        return codigo
+    
+    def clean(self):
+        """Validação geral do formulário"""
+        cleaned_data = super().clean()
+        tipo_conta = cleaned_data.get('tipo_conta')
+        categoria_dre = cleaned_data.get('categoria_dre', '').strip()
+        
+        # Se é conta de resultado (receita, custo, despesa), categoria DRE é recomendada
+        if tipo_conta in ['receita', 'custo', 'despesa'] and not categoria_dre:
+            self.add_error('categoria_dre', 
+                'Categoria DRE é recomendada para contas de resultado.')
+        
+        return cleaned_data

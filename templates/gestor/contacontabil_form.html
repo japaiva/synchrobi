@@ -1,0 +1,147 @@
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}{% if form.instance.pk %}Editar{% else %}Nova{% endif %} Conta Contábil | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas {% if form.instance.pk %}fa-edit{% else %}fa-plus-circle{% endif %} me-2"></i>
+      {% if form.instance.pk %}Editar{% else %}Nova{% endif %} Conta Contábil
+    </h5>
+    <a href="{% url 'gestor:contacontabil_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+  
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p class="mb-0">{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+      
+      <!-- Informações Principais -->
+      <div class="row g-3 mb-4">
+        <!-- Primeira linha: Código e Nome -->
+        <div class="col-md-4">
+          <label for="{{ form.codigo.id_for_label }}" class="form-label">
+            Código <span class="text-danger">*</span>
+          </label>
+          {{ form.codigo }}
+          {% if form.codigo.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.codigo.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+          <div class="form-text">Ex: 010.010.01</div>
+        </div>
+        
+        <div class="col-md-8">
+          <label for="{{ form.nome.id_for_label }}" class="form-label">
+            Nome da Conta <span class="text-danger">*</span>
+          </label>
+          {{ form.nome }}
+          {% if form.nome.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.nome.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+        
+        <!-- Segunda linha: Tipo de Conta e Status -->
+        <div class="col-md-6">
+          <label for="{{ form.tipo_conta.id_for_label }}" class="form-label">
+            Tipo da Conta <span class="text-danger">*</span>
+          </label>
+          {{ form.tipo_conta }}
+          {% if form.tipo_conta.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.tipo_conta.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+        
+        <div class="col-md-6">
+          <div class="form-check form-switch mt-4">
+            {{ form.ativa }}
+            <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
+              Conta Ativa
+            </label>
+          </div>
+          {% if form.ativa.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.ativa.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+        
+        <!-- Terceira linha: Categorias DRE -->
+        <div class="col-md-6">
+          <label for="{{ form.categoria_dre.id_for_label }}" class="form-label">
+            Categoria DRE
+          </label>
+          {{ form.categoria_dre }}
+          {% if form.categoria_dre.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.categoria_dre.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+          <div class="form-text">Ex: Receita Bruta, CMV, Despesas Operacionais</div>
+        </div>
+        
+        <div class="col-md-6">
+          <label for="{{ form.subcategoria_dre.id_for_label }}" class="form-label">
+            Subcategoria DRE
+          </label>
+          {{ form.subcategoria_dre }}
+          {% if form.subcategoria_dre.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.subcategoria_dre.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+          <div class="form-text">Ex: Vendas, Material, Pessoal</div>
+        </div>
+        
+        <!-- Descrição -->
+        <div class="col-12">
+          <label for="{{ form.descricao.id_for_label }}" class="form-label">
+            Descrição (opcional)
+          </label>
+          {{ form.descricao }}
+          {% if form.descricao.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.descricao.errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Botões de ação -->
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if form.instance.pk %}
+          <a href="{% url 'gestor:contacontabil_delete' form.instance.codigo %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i> Excluir
+          </a>
+          {% endif %}
+        </div>
+        <div>
+          <a href="{% url 'gestor:contacontabil_list' %}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-times me-1"></i> Cancelar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> {% if form.instance.pk %}Salvar Alterações{% else %}Criar Conta{% endif %}
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

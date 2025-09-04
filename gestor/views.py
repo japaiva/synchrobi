@@ -10,8 +10,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 import logging
 
-from core.models import Usuario, Unidade, ParametroSistema, Empresa
-from core.forms import UsuarioForm, UnidadeForm, ParametroSistemaForm, EmpresaForm
+from core.models import Usuario, Unidade, ParametroSistema, Empresa, CentroCusto, ContaContabil
+from core.forms import UsuarioForm, UnidadeForm, ParametroSistemaForm, EmpresaForm, CentroCustoForm, ContaContabilForm
 
 logger = logging.getLogger('synchrobi')
 
@@ -856,3 +856,393 @@ def api_empresa_info(request, sigla):
     except Exception as e:
         logger.error(f'Erro na API de empresa: {str(e)}')
         return JsonResponse({'success': False, 'error': 'Erro interno'})
+    
+
+# ===== NOVAS VIEWS: CENTRO DE CUSTO =====
+
+# ===== NOVAS VIEWS: CENTRO DE CUSTO =====
+
+@login_required
+def centrocusto_list(request):
+    """Lista de centros de custo com filtros"""
+    search = request.GET.get('search', '')
+    nivel = request.GET.get('nivel', '')
+    ativo = request.GET.get('ativo', '')
+    
+    centros = CentroCusto.objects.select_related('centro_pai').filter(ativo=True)
+    
+    if search:
+        centros = centros.filter(
+            Q(codigo__icontains=search) |
+            Q(nome__icontains=search) |
+            Q(descricao__icontains=search)
+        )
+    
+    if nivel:
+        centros = centros.filter(nivel=nivel)
+    
+    if ativo:
+        centros = centros.filter(ativo=(ativo == 'true'))
+    
+    # Ordenar por código para manter hierarquia
+    centros = centros.order_by('codigo')
+    
+    # Paginação
+    paginator = Paginator(centros, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Opções para filtros
+    niveis_disponiveis = sorted(set(CentroCusto.objects.values_list('nivel', flat=True)))
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'nivel': nivel,
+        'ativo': ativo,
+        'niveis_disponiveis': niveis_disponiveis,
+    }
+    return render(request, 'gestor/centrocusto_list.html', context)
+
+@login_required
+def centrocusto_create(request):
+    """Criar novo centro de custo"""
+    if request.method == 'POST':
+        form = CentroCustoForm(request.POST)
+        if form.is_valid():
+            try:
+                centro = form.save()
+                messages.success(request, f'Centro de custo "{centro.nome}" criado com sucesso!')
+                logger.info(f'Centro de custo criado: {centro.codigo} - {centro.nome} por {request.user}')
+                return redirect('gestor:centrocusto_list')
+            except Exception as e:
+                messages.error(request, f'Erro ao criar centro de custo: {str(e)}')
+                logger.error(f'Erro ao criar centro de custo: {str(e)}')
+        else:
+            messages.error(request, 'Erro ao criar centro de custo. Verifique os dados.')
+    else:
+        form = CentroCustoForm()
+    
+    context = {
+        'form': form, 
+        'title': 'Novo Centro de Custo',
+        'is_create': True
+    }
+    return render(request, 'gestor/centrocusto_form.html', context)
+
+
+@login_required
+def centrocusto_update(request, codigo):
+    """Editar centro de custo"""
+    centro = get_object_or_404(CentroCusto, codigo=codigo)
+    
+    if request.method == 'POST':
+        form = CentroCustoForm(request.POST, instance=centro)
+        if form.is_valid():
+            try:
+                centro_atualizado = form.save()
+                messages.success(request, f'Centro de custo "{centro_atualizado.nome}" atualizado com sucesso!')
+                return redirect('gestor:centrocusto_list')
+            except Exception as e:
+                messages.error(request, f'Erro ao atualizar centro de custo: {str(e)}')
+                logger.error(f'Erro ao atualizar centro de custo {centro.codigo}: {str(e)}')
+        else:
+            messages.error(request, 'Erro ao atualizar centro de custo. Verifique os dados.')
+    else:
+        form = CentroCustoForm(instance=centro)
+    
+    context = {
+        'form': form, 
+        'title': 'Editar Centro de Custo', 
+        'centro': centro,
+        'is_create': False
+    }
+    return render(request, 'gestor/centrocusto_form.html', context)
+
+@login_required
+def centrocusto_delete(request, codigo):
+    """Deletar centro de custo"""
+    centro = get_object_or_404(CentroCusto, codigo=codigo)
+    
+    # Verificar se tem sub-centros
+    tem_sub_centros = centro.tem_sub_centros
+    
+    if request.method == 'POST':
+        if tem_sub_centros:
+            messages.error(request, 
+                f'Não é possível excluir o centro de custo "{centro.nome}" pois ele possui sub-centros.')
+            return redirect('gestor:centrocusto_list')
+        
+        nome = centro.nome
+        codigo_centro = centro.codigo
+        
+        try:
+            centro.delete()
+            messages.success(request, f'Centro de custo "{nome}" (código: {codigo_centro}) excluído com sucesso!')
+            logger.info(f'Centro de custo excluído: {codigo_centro} - {nome} por {request.user}')
+            return redirect('gestor:centrocusto_list')
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir centro de custo: {str(e)}')
+            logger.error(f'Erro ao excluir centro de custo {codigo_centro}: {str(e)}')
+            return redirect('gestor:centrocusto_list')
+    
+    context = {
+        'centro': centro,
+        'tem_sub_centros': tem_sub_centros,
+    }
+    return render(request, 'gestor/centrocusto_delete.html', context)
+
+# ===== NOVAS VIEWS: CONTA CONTÁBIL =====
+
+@login_required
+def contacontabil_list(request):
+    """Lista de contas contábeis com filtros"""
+    search = request.GET.get('search', '')
+    nivel = request.GET.get('nivel', '')
+    tipo_conta = request.GET.get('tipo_conta', '')
+    ativa = request.GET.get('ativa', '')
+    
+    contas = ContaContabil.objects.select_related('conta_pai').filter(ativa=True)
+    
+    if search:
+        contas = contas.filter(
+            Q(codigo__icontains=search) |
+            Q(nome__icontains=search) |
+            Q(descricao__icontains=search) |
+            Q(categoria_dre__icontains=search)
+        )
+    
+    if nivel:
+        contas = contas.filter(nivel=nivel)
+    
+    if tipo_conta:
+        contas = contas.filter(tipo_conta=tipo_conta)
+    
+    if ativa:
+        contas = contas.filter(ativa=(ativa == 'true'))
+    
+    # Ordenar por código para manter hierarquia
+    contas = contas.order_by('codigo')
+    
+    # Paginação
+    paginator = Paginator(contas, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Opções para filtros
+    niveis_disponiveis = sorted(set(ContaContabil.objects.values_list('nivel', flat=True)))
+    tipos_conta = ContaContabil._meta.get_field('tipo_conta').choices
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'nivel': nivel,
+        'tipo_conta': tipo_conta,
+        'ativa': ativa,
+        'niveis_disponiveis': niveis_disponiveis,
+        'tipos_conta': tipos_conta,
+    }
+    return render(request, 'gestor/contacontabil_list.html', context)
+
+@login_required
+def contacontabil_create(request):
+    """Criar nova conta contábil"""
+    if request.method == 'POST':
+        form = ContaContabilForm(request.POST)
+        if form.is_valid():
+            try:
+                conta = form.save()
+                messages.success(request, f'Conta contábil "{conta.nome}" criada com sucesso!')
+                logger.info(f'Conta contábil criada: {conta.codigo} - {conta.nome} por {request.user}')
+                return redirect('gestor:contacontabil_detail', codigo=conta.codigo)
+            except Exception as e:
+                messages.error(request, f'Erro ao criar conta contábil: {str(e)}')
+                logger.error(f'Erro ao criar conta contábil: {str(e)}')
+        else:
+            messages.error(request, 'Erro ao criar conta contábil. Verifique os dados.')
+    else:
+        form = ContaContabilForm()
+    
+    context = {
+        'form': form, 
+        'title': 'Nova Conta Contábil',
+        'is_create': True
+    }
+    return render(request, 'gestor/contacontabil_form.html', context)
+
+@login_required
+def contacontabil_detail(request, codigo):
+    """Detalhes da conta contábil"""
+    conta = get_object_or_404(ContaContabil, codigo=codigo)
+    
+    # Buscar subcontas diretas
+    subcontas = conta.subcontas.filter(ativa=True).order_by('codigo')
+    
+    # Caminho hierárquico
+    caminho = conta.caminho_hierarquico
+    
+    context = {
+        'conta': conta,
+        'subcontas': subcontas,
+        'caminho': caminho,
+    }
+    return render(request, 'gestor/contacontabil_detail.html', context)
+
+@login_required
+def contacontabil_update(request, codigo):
+    """Editar conta contábil"""
+    conta = get_object_or_404(ContaContabil, codigo=codigo)
+    
+    if request.method == 'POST':
+        form = ContaContabilForm(request.POST, instance=conta)
+        if form.is_valid():
+            try:
+                conta_atualizada = form.save()
+                messages.success(request, f'Conta contábil "{conta_atualizada.nome}" atualizada com sucesso!')
+                return redirect('gestor:contacontabil_detail', codigo=conta_atualizada.codigo)
+            except Exception as e:
+                messages.error(request, f'Erro ao atualizar conta contábil: {str(e)}')
+                logger.error(f'Erro ao atualizar conta contábil {conta.codigo}: {str(e)}')
+        else:
+            messages.error(request, 'Erro ao atualizar conta contábil. Verifique os dados.')
+    else:
+        form = ContaContabilForm(instance=conta)
+    
+    context = {
+        'form': form, 
+        'title': 'Editar Conta Contábil', 
+        'conta': conta,
+        'is_create': False
+    }
+    return render(request, 'gestor/contacontabil_form.html', context)
+
+@login_required
+def contacontabil_delete(request, codigo):
+    """Deletar conta contábil"""
+    conta = get_object_or_404(ContaContabil, codigo=codigo)
+    
+    # Verificar se tem subcontas
+    tem_subcontas = conta.tem_subcontas
+    
+    if request.method == 'POST':
+        if tem_subcontas:
+            messages.error(request, 
+                f'Não é possível excluir a conta contábil "{conta.nome}" pois ela possui subcontas.')
+            return redirect('gestor:contacontabil_detail', codigo=codigo)
+        
+        nome = conta.nome
+        codigo_conta = conta.codigo
+        
+        try:
+            conta.delete()
+            messages.success(request, f'Conta contábil "{nome}" (código: {codigo_conta}) excluída com sucesso!')
+            logger.info(f'Conta contábil excluída: {codigo_conta} - {nome} por {request.user}')
+            return redirect('gestor:contacontabil_list')
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir conta contábil: {str(e)}')
+            logger.error(f'Erro ao excluir conta contábil {codigo_conta}: {str(e)}')
+            return redirect('gestor:contacontabil_detail', codigo=codigo)
+    
+    context = {
+        'conta': conta,
+        'tem_subcontas': tem_subcontas,
+    }
+    return render(request, 'gestor/contacontabil_delete.html', context)
+
+# ===== API ENDPOINTS PARA CENTRO DE CUSTO E CONTA CONTÁBIL =====
+
+@login_required
+def api_validar_codigo_centrocusto(request):
+    """API para validar código de centro de custo em tempo real"""
+    codigo = request.GET.get('codigo', '').strip()
+    centro_codigo = request.GET.get('atual', None)
+    
+    if not codigo:
+        return JsonResponse({'valid': False, 'error': 'Código é obrigatório'})
+    
+    # Verificar formato
+    import re
+    if not re.match(r'^[\d\.]+$', codigo):
+        return JsonResponse({'valid': False, 'error': 'Código deve conter apenas números e pontos'})
+    
+    # Verificar duplicação
+    query = CentroCusto.objects.filter(codigo=codigo)
+    if centro_codigo:
+        query = query.exclude(codigo=centro_codigo)
+    
+    if query.exists():
+        return JsonResponse({'valid': False, 'error': 'Já existe um centro de custo com este código'})
+    
+    # Verificar hierarquia
+    info = {'valid': True}
+    
+    if '.' in codigo:
+        partes = codigo.split('.')
+        codigo_pai = '.'.join(partes[:-1])
+        
+        try:
+            centro_pai = CentroCusto.objects.get(codigo=codigo_pai)
+            info['pai'] = {
+                'codigo': centro_pai.codigo,
+                'nome': centro_pai.nome,
+                'tipo_display': centro_pai.get_tipo_display()
+            }
+                
+        except CentroCusto.DoesNotExist:
+            info['valid'] = False
+            info['error'] = f'Centro de custo pai com código "{codigo_pai}" não existe'
+    else:
+        info['pai'] = None
+    
+    # Calcular nível
+    info['nivel'] = codigo.count('.') + 1
+    
+    return JsonResponse(info)
+
+@login_required
+def api_validar_codigo_contacontabil(request):
+    """API para validar código de conta contábil em tempo real"""
+    codigo = request.GET.get('codigo', '').strip()
+    conta_codigo = request.GET.get('atual', None)
+    
+    if not codigo:
+        return JsonResponse({'valid': False, 'error': 'Código é obrigatório'})
+    
+    # Verificar formato
+    import re
+    if not re.match(r'^[\d\.]+$', codigo):
+        return JsonResponse({'valid': False, 'error': 'Código deve conter apenas números e pontos'})
+    
+    # Verificar duplicação
+    query = ContaContabil.objects.filter(codigo=codigo)
+    if conta_codigo:
+        query = query.exclude(codigo=conta_codigo)
+    
+    if query.exists():
+        return JsonResponse({'valid': False, 'error': 'Já existe uma conta contábil com este código'})
+    
+    # Verificar hierarquia
+    info = {'valid': True}
+    
+    if '.' in codigo:
+        partes = codigo.split('.')
+        codigo_pai = '.'.join(partes[:-1])
+        
+        try:
+            conta_pai = ContaContabil.objects.get(codigo=codigo_pai)
+            info['pai'] = {
+                'codigo': conta_pai.codigo,
+                'nome': conta_pai.nome,
+                'tipo_display': conta_pai.get_tipo_display()
+            }
+                
+        except ContaContabil.DoesNotExist:
+            info['valid'] = False
+            info['error'] = f'Conta contábil pai com código "{codigo_pai}" não existe'
+    else:
+        info['pai'] = None
+    
+    # Calcular nível
+    info['nivel'] = codigo.count('.') + 1
+    
+    return JsonResponse(info)
