@@ -1,4 +1,4 @@
-# core/models.py - Modelos base do SynchroBI - ORDEM CORRIGIDA
+# core/models.py - Modelos base do SynchroBI
 
 import logging
 from django.db import models
@@ -12,7 +12,7 @@ import re
 
 logger = logging.getLogger('synchrobi')
 
-# ===== MODELO USUARIO (deve vir antes dos outros) =====
+# ===== MODELO USUARIO (deve vir primeiro) =====
 
 class Usuario(AbstractUser):
     """
@@ -49,402 +49,30 @@ class Usuario(AbstractUser):
         nome_completo = f"{self.first_name} {self.last_name}".strip()
         return nome_completo or self.username
     
-    def get_centros_custo_permitidos(self):
-        """
-        Retorna queryset dos centros de custo que este usuário pode visualizar
-        """
-        # Admin e Diretor veem todos
-        if self.nivel in ['admin', 'diretor']:
-            return CentroCusto.objects.filter(ativo=True).order_by('codigo')
-        
-        # Gestor vê centros de custo da sua unidade + os que tem acesso específico
-        if self.nivel == 'gestor':
-            return CentroCusto.objects.filter(
-                models.Q(unidade_negocio=self.unidade_negocio) |
-                models.Q(usuarios_com_acesso__usuario=self),
-                ativo=True
-            ).distinct().order_by('codigo')
-        
-        # Outros usuários veem apenas os permitidos especificamente
-        try:
-            return CentroCusto.objects.filter(
-                usuarios_com_acesso__usuario=self,
-                usuarios_com_acesso__ativo=True,
-                ativo=True
-            ).distinct().order_by('codigo')
-        except:
-            return CentroCusto.objects.none()
-    
-    def pode_visualizar_centro_custo(self, centro_custo_codigo):
-        """
-        Verifica se o usuário pode visualizar um centro de custo específico
-        """
-        if self.nivel in ['admin', 'diretor']:
-            return True
-        
-        return self.get_centros_custo_permitidos().filter(
-            codigo=centro_custo_codigo
-        ).exists()
-    
     class Meta:
         db_table = 'usuarios'
         verbose_name = 'Usuário'
         verbose_name_plural = 'Usuários'
 
-class Unidade(models.Model):
-    """
-    Modelo para estrutura organizacional hierárquica da empresa
-    O tipo (Sintético/Analítico) é determinado automaticamente:
-    - Sintético: tem sub-unidades
-    - Analítico: não tem sub-unidades (folha da árvore)
-    """
-    
-    # ===== CAMPOS PRINCIPAIS =====
-    codigo = models.CharField(
-        max_length=50, 
-        unique=True,
-        verbose_name="Código",
-        help_text="Código hierárquico da unidade (ex: 1.2.01.20.01.101)"
-    )
-    
-    codigo_allstrategy = models.CharField(
-        max_length=20,
-        blank=True,
-        verbose_name="Código All Strategy",
-        help_text="Código original/interno da unidade (ex: 101, 102, etc)"
-    )
-    
-    nome = models.CharField(
-        max_length=255,
-        verbose_name="Nome da Unidade"
-    )
-    
-    # ===== HIERARQUIA =====
-    unidade_pai = models.ForeignKey(
-        'self',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='sub_unidades',
-        verbose_name="Unidade Superior"
-    )
-    
-    nivel = models.IntegerField(
-        verbose_name="Nível Hierárquico",
-        help_text="Nível na hierarquia (calculado automaticamente)"
-    )
-    
-    # ===== STATUS =====
-    ativa = models.BooleanField(
-        default=True,
-        verbose_name="Ativa"
-    )
-    
-    # ===== CAMPOS COMPLEMENTARES =====
-    descricao = models.TextField(
-        blank=True,
-        verbose_name="Descrição"
-    )
-    
-    # ===== CAMPOS DE CONTROLE =====
-    data_criacao = models.DateTimeField(auto_now_add=True)
-    data_alteracao = models.DateTimeField(auto_now=True)
-    
-    # ===== METADADOS ALL STRATEGY =====
-    sincronizado_allstrategy = models.BooleanField(
-        default=False,
-        verbose_name="Sincronizado All Strategy"
-    )
-    
-    data_ultima_sincronizacao = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Última Sincronização"
-    )
-    
-    @property
-    def tipo(self):
-        """
-        Tipo determinado dinamicamente:
-        - 'S' (Sintético) se tem sub-unidades
-        - 'A' (Analítico) se não tem sub-unidades
-        """
-        # Se não tem PK ainda (está sendo criado), é analítico por padrão
-        if not self.pk:
-            return 'A'
-        
-        # Usar cache para evitar múltiplas queries
-        if not hasattr(self, '_cached_tipo'):
-            self._cached_tipo = 'S' if self.tem_sub_unidades else 'A'
-        return self._cached_tipo
-    
-    def get_tipo_display(self):
-        """Retorna o nome do tipo para exibição"""
-        return 'Sintético' if self.tipo == 'S' else 'Analítico'
-    
-    @property
-    def e_sintetico(self):
-        """Verifica se é sintético (tem sub-unidades)"""
-        return self.tipo == 'S'
-    
-    @property
-    def e_analitico(self):
-        """Verifica se é analítico (folha da árvore)"""
-        return self.tipo == 'A'
-    
-    def clean(self):
-        """Validação customizada"""
-        super().clean()
-        
-        # Validar formato do código principal
-        if not re.match(r'^[\d\.]+$', self.codigo):
-            raise ValidationError({
-                'codigo': 'Código deve conter apenas números e pontos'
-            })
-        
-        # Se não tem pai e não é o nível 1, deve ter pai
-        if '.' in self.codigo and not self.unidade_pai:
-            # Tentar encontrar o pai baseado no código
-            partes = self.codigo.split('.')
-            codigo_pai = '.'.join(partes[:-1])
-            
-            try:
-                self.unidade_pai = Unidade.objects.get(codigo=codigo_pai)
-            except Unidade.DoesNotExist:
-                raise ValidationError({
-                    'codigo': f'Unidade pai com código "{codigo_pai}" não existe'
-                })
-        
-        # Para unidades novas (sem PK), sugerir código All Strategy se não fornecido
-        if not self.pk and not self.codigo_allstrategy and self.codigo:
-            # Extrair último segmento numérico do código
-            partes = self.codigo.split('.')
-            ultimo_segmento = partes[-1]
-            if ultimo_segmento.isdigit():
-                self.codigo_allstrategy = ultimo_segmento
-    
-    def save(self, *args, **kwargs):
-        """Override do save para calcular nível e pai automaticamente"""
-        
-        # Calcular nível baseado no número de pontos no código
-        self.nivel = self.codigo.count('.') + 1
-        
-        # Buscar unidade pai baseada no código se não foi definida
-        if not self.unidade_pai and '.' in self.codigo:
-            partes = self.codigo.split('.')
-            codigo_pai = '.'.join(partes[:-1])
-            
-            try:
-                self.unidade_pai = Unidade.objects.get(codigo=codigo_pai)
-            except Unidade.DoesNotExist:
-                pass  # Será validado no clean()
-        
-        # Validar antes de salvar
-        self.full_clean()
-        
-        super().save(*args, **kwargs)
-        
-        # Limpar cache relacionado
-        self._limpar_cache()
-    
-    def _limpar_cache(self):
-        """Limpa cache relacionado a esta unidade"""
-        from django.core.cache import cache
-        
-        # Limpar cache próprio
-        if hasattr(self, '_cached_tipo'):
-            del self._cached_tipo
-        
-        # Limpar cache do Django
-        cache_keys = [
-            f'unidade_hierarchy_{self.id}',
-            f'unidade_children_{self.id}',
-            'unidades_ativas_tree'
-        ]
-        
-        # Limpar cache da unidade pai também (pois o tipo dela pode ter mudado)
-        if self.unidade_pai:
-            cache_keys.append(f'unidade_children_{self.unidade_pai.id}')
-            if hasattr(self.unidade_pai, '_cached_tipo'):
-                del self.unidade_pai._cached_tipo
-        
-        for key in cache_keys:
-            cache.delete(key)
-    
-    @property
-    def codigo_display(self):
-        """Código para exibição (All Strategy se analítico, codigo se sintético)"""
-        if self.e_analitico and self.codigo_allstrategy:
-            return self.codigo_allstrategy
-        return self.codigo
-    
-    @property
-    def nome_completo(self):
-        """Nome com hierarquia completa"""
-        if self.unidade_pai:
-            return f"{self.unidade_pai.nome_completo} > {self.nome}"
-        return self.nome
-    
-    @property
-    def caminho_hierarquico(self):
-        """Lista com toda a hierarquia até esta unidade"""
-        caminho = []
-        unidade_atual = self
-        
-        while unidade_atual:
-            caminho.insert(0, unidade_atual)
-            unidade_atual = unidade_atual.unidade_pai
-        
-        return caminho
-    
-    @property
-    def tem_sub_unidades(self):
-        """Verifica se tem sub-unidades ativas"""
-        # Se não tem PK, não pode ter sub-unidades
-        if not self.pk:
-            return False
-        return self.sub_unidades.filter(ativa=True).exists()
-    
-    def get_todas_sub_unidades(self, include_self=False):
-        """Retorna todas as sub-unidades recursivamente"""
-        # Se não tem PK, retorna lista vazia
-        if not self.pk:
-            return []
-            
-        from django.core.cache import cache
-        cache_key = f'unidade_children_{self.id}_{include_self}'
-        resultado = cache.get(cache_key)
-        
-        if resultado is None:
-            unidades = []
-            
-            if include_self:
-                unidades.append(self)
-            
-            # Buscar filhos diretos
-            for filho in self.sub_unidades.filter(ativa=True):
-                unidades.append(filho)
-                # Recursão para sub-unidades dos filhos
-                unidades.extend(filho.get_todas_sub_unidades(include_self=False))
-            
-            resultado = unidades
-            cache.set(cache_key, resultado, 300)  # Cache por 5 minutos
-        
-        return resultado
-    
-    def get_unidades_operacionais(self):
-        """Retorna apenas unidades analíticas (operacionais) desta árvore"""
-        todas = self.get_todas_sub_unidades(include_self=True)
-        return [u for u in todas if u.e_analitico]
-    
-    def delete(self, *args, **kwargs):
-        """Override do delete para limpar cache do pai"""
-        pai = self.unidade_pai
-        super().delete(*args, **kwargs)
-        
-        # Se tinha pai, limpar cache dele pois pode ter mudado de sintético para analítico
-        if pai:
-            if hasattr(pai, '_cached_tipo'):
-                del pai._cached_tipo
-            from django.core.cache import cache
-            cache.delete(f'unidade_children_{pai.id}_True')
-            cache.delete(f'unidade_children_{pai.id}_False')
-    
-    def __str__(self):
-        tipo_icon = "📁" if self.e_sintetico else "🏢"
-        return f"{tipo_icon} {self.codigo_display} - {self.nome}"
-    
-    class Meta:
-        db_table = 'unidades'
-        verbose_name = 'Unidade Organizacional'
-        verbose_name_plural = 'Unidades Organizacionais'
-        ordering = ['codigo']
-        indexes = [
-            models.Index(fields=['codigo']),
-            models.Index(fields=['codigo_allstrategy']),
-            models.Index(fields=['ativa']),
-            models.Index(fields=['unidade_pai', 'ativa']),
-            models.Index(fields=['nivel']),
-        ]
+# ===== MODELO EMPRESA (deve vir antes de Unidade) =====
 
 class Empresa(models.Model):
     """Modelo para cadastro de empresas do grupo"""
     
-    # ===== CAMPOS PRINCIPAIS =====
-    sigla = models.CharField(
-        max_length=15, 
-        primary_key=True,
-        verbose_name="Sigla"
-    )
-    
-    razao_social = models.CharField(
-        max_length=255,
-        verbose_name="Razão Social"
-    )
-    
-    nome_fantasia = models.CharField(
-        max_length=255, 
-        blank=True,
-        verbose_name="Nome Fantasia"
-    )
-    
-    # ===== IDENTIFICAÇÃO FISCAL =====
-    cnpj = models.CharField(
-        max_length=18, 
-        unique=True,
-        verbose_name="CNPJ"
-    )
-    
-    inscricao_estadual = models.CharField(
-        max_length=30, 
-        blank=True,
-        verbose_name="Inscrição Estadual"
-    )
-    
-    inscricao_municipal = models.CharField(
-        max_length=30, 
-        blank=True,
-        verbose_name="Inscrição Municipal"
-    )
-    
-    # ===== CONTATOS =====
-    endereco = models.TextField(
-        blank=True,
-        verbose_name="Endereço"
-    )
-    
-    telefone = models.CharField(
-        max_length=20, 
-        blank=True,
-        verbose_name="Telefone"
-    )
-    
-    email = models.EmailField(
-        blank=True,
-        verbose_name="E-mail"
-    )
-    
-    # ===== CONFIGURAÇÕES =====
-    ativa = models.BooleanField(
-        default=True,
-        verbose_name="Ativa"
-    )
-    
-    # ===== CAMPOS DE CONTROLE =====
+    sigla = models.CharField(max_length=15, primary_key=True, verbose_name="Sigla")
+    razao_social = models.CharField(max_length=255, verbose_name="Razão Social")
+    nome_fantasia = models.CharField(max_length=255, blank=True, verbose_name="Nome Fantasia")
+    cnpj = models.CharField(max_length=18, unique=True, verbose_name="CNPJ")
+    inscricao_estadual = models.CharField(max_length=30, blank=True, verbose_name="Inscrição Estadual")
+    inscricao_municipal = models.CharField(max_length=30, blank=True, verbose_name="Inscrição Municipal")
+    endereco = models.TextField(blank=True, verbose_name="Endereço")
+    telefone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
+    email = models.EmailField(blank=True, verbose_name="E-mail")
+    ativa = models.BooleanField(default=True, verbose_name="Ativa")
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
-    
-    # ===== METADADOS ALL STRATEGY =====
-    sincronizado_allstrategy = models.BooleanField(
-        default=False,
-        verbose_name="Sincronizado All Strategy"
-    )
-    
-    data_ultima_sincronizacao = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Última Sincronização"
-    )
+    sincronizado_allstrategy = models.BooleanField(default=False, verbose_name="Sincronizado All Strategy")
+    data_ultima_sincronizacao = models.DateTimeField(null=True, blank=True, verbose_name="Última Sincronização")
     
     def clean(self):
         """Validação customizada"""
@@ -500,9 +128,8 @@ class Empresa(models.Model):
         return self.endereco[:50] + "..." if len(self.endereco) > 50 else self.endereco
     
     def get_unidades_vinculadas(self):
-        """Retorna unidades vinculadas a esta empresa (se houver relacionamento futuro)"""
-        # Placeholder para futuras integrações
-        return []
+        """Retorna unidades vinculadas a esta empresa"""
+        return self.unidades.filter(ativa=True)
     
     def __str__(self):
         return f"{self.sigla} - {self.nome_display}"
@@ -517,6 +144,239 @@ class Empresa(models.Model):
             models.Index(fields=['cnpj']),
             models.Index(fields=['ativa']),
         ]
+
+# ===== MODELO UNIDADE (agora com campo empresa) =====
+
+class Unidade(models.Model):
+    """
+    Modelo para estrutura organizacional hierárquica da empresa
+    O tipo (Sintético/Analítico) é determinado automaticamente:
+    - Sintético: tem sub-unidades
+    - Analítico: não tem sub-unidades (folha da árvore)
+    """
+    
+    codigo = models.CharField(max_length=50, unique=True, verbose_name="Código")
+    codigo_allstrategy = models.CharField(max_length=20, blank=True, verbose_name="Código All Strategy")
+    nome = models.CharField(max_length=255, verbose_name="Nome da Unidade")
+    
+    empresa = models.ForeignKey(
+    Empresa,
+    on_delete=models.PROTECT,
+    related_name='unidades',
+    verbose_name="Empresa",
+    null=True,      # Adicione esta linha
+    blank=True      # Adicione esta linha
+    )
+    
+    unidade_pai = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='sub_unidades',
+        verbose_name="Unidade Superior"
+    )
+    
+    nivel = models.IntegerField(verbose_name="Nível Hierárquico")
+    ativa = models.BooleanField(default=True, verbose_name="Ativa")
+    descricao = models.TextField(blank=True, verbose_name="Descrição")
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    sincronizado_allstrategy = models.BooleanField(default=False, verbose_name="Sincronizado All Strategy")
+    data_ultima_sincronizacao = models.DateTimeField(null=True, blank=True, verbose_name="Última Sincronização")
+    
+    @property
+    def tipo(self):
+        """
+        Tipo determinado dinamicamente:
+        - 'S' (Sintético) se tem sub-unidades
+        - 'A' (Analítico) se não tem sub-unidades
+        """
+        if not self.pk:
+            return 'A'
+        
+        if not hasattr(self, '_cached_tipo'):
+            self._cached_tipo = 'S' if self.tem_sub_unidades else 'A'
+        return self._cached_tipo
+    
+    def get_tipo_display(self):
+        """Retorna o nome do tipo para exibição"""
+        return 'Sintético' if self.tipo == 'S' else 'Analítico'
+    
+    @property
+    def e_sintetico(self):
+        """Verifica se é sintético (tem sub-unidades)"""
+        return self.tipo == 'S'
+    
+    @property
+    def e_analitico(self):
+        """Verifica se é analítico (folha da árvore)"""
+        return self.tipo == 'A'
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Validar formato do código principal
+        if not re.match(r'^[\d\.]+$', self.codigo):
+            raise ValidationError({
+                'codigo': 'Código deve conter apenas números e pontos'
+            })
+        
+        # Se não tem pai e não é o nível 1, deve ter pai
+        if '.' in self.codigo and not self.unidade_pai:
+            # Tentar encontrar o pai baseado no código
+            partes = self.codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
+            
+            try:
+                self.unidade_pai = Unidade.objects.get(codigo=codigo_pai)
+            except Unidade.DoesNotExist:
+                raise ValidationError({
+                    'codigo': f'Unidade pai com código "{codigo_pai}" não existe'
+                })
+        
+        # Para unidades novas (sem PK), sugerir código All Strategy se não fornecido
+        if not self.pk and not self.codigo_allstrategy and self.codigo:
+            partes = self.codigo.split('.')
+            ultimo_segmento = partes[-1]
+            if ultimo_segmento.isdigit():
+                self.codigo_allstrategy = ultimo_segmento
+    
+    def save(self, *args, **kwargs):
+        """Override do save para calcular nível e pai automaticamente"""
+        
+        # Calcular nível baseado no número de pontos no código
+        self.nivel = self.codigo.count('.') + 1
+        
+        # Buscar unidade pai baseada no código se não foi definida
+        if not self.unidade_pai and '.' in self.codigo:
+            partes = self.codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
+            
+            try:
+                self.unidade_pai = Unidade.objects.get(codigo=codigo_pai)
+            except Unidade.DoesNotExist:
+                pass  # Será validado no clean()
+        
+        # Validar antes de salvar
+        self.full_clean()
+        
+        super().save(*args, **kwargs)
+        
+        # Limpar cache relacionado
+        self._limpar_cache()
+    
+    def _limpar_cache(self):
+        """Limpa cache relacionado a esta unidade"""
+        if hasattr(self, '_cached_tipo'):
+            del self._cached_tipo
+        
+        cache_keys = [
+            f'unidade_hierarchy_{self.id}',
+            f'unidade_children_{self.id}',
+            'unidades_ativas_tree'
+        ]
+        
+        if self.unidade_pai:
+            cache_keys.append(f'unidade_children_{self.unidade_pai.id}')
+            if hasattr(self.unidade_pai, '_cached_tipo'):
+                del self.unidade_pai._cached_tipo
+        
+        for key in cache_keys:
+            cache.delete(key)
+    
+    @property
+    def codigo_display(self):
+        """Código para exibição (All Strategy se analítico, codigo se sintético)"""
+        if self.e_analitico and self.codigo_allstrategy:
+            return self.codigo_allstrategy
+        return self.codigo
+    
+    @property
+    def nome_completo(self):
+        """Nome com hierarquia completa"""
+        if self.unidade_pai:
+            return f"{self.unidade_pai.nome_completo} > {self.nome}"
+        return self.nome
+    
+    @property
+    def caminho_hierarquico(self):
+        """Lista com toda a hierarquia até esta unidade"""
+        caminho = []
+        unidade_atual = self
+        
+        while unidade_atual:
+            caminho.insert(0, unidade_atual)
+            unidade_atual = unidade_atual.unidade_pai
+        
+        return caminho
+    
+    @property
+    def tem_sub_unidades(self):
+        """Verifica se tem sub-unidades ativas"""
+        if not self.pk:
+            return False
+        return self.sub_unidades.filter(ativa=True).exists()
+    
+    def get_todas_sub_unidades(self, include_self=False):
+        """Retorna todas as sub-unidades recursivamente"""
+        if not self.pk:
+            return []
+            
+        cache_key = f'unidade_children_{self.id}_{include_self}'
+        resultado = cache.get(cache_key)
+        
+        if resultado is None:
+            unidades = []
+            
+            if include_self:
+                unidades.append(self)
+            
+            for filho in self.sub_unidades.filter(ativa=True):
+                unidades.append(filho)
+                unidades.extend(filho.get_todas_sub_unidades(include_self=False))
+            
+            resultado = unidades
+            cache.set(cache_key, resultado, 300)
+        
+        return resultado
+    
+    def get_unidades_operacionais(self):
+        """Retorna apenas unidades analíticas (operacionais) desta árvore"""
+        todas = self.get_todas_sub_unidades(include_self=True)
+        return [u for u in todas if u.e_analitico]
+    
+    def delete(self, *args, **kwargs):
+        """Override do delete para limpar cache do pai"""
+        pai = self.unidade_pai
+        super().delete(*args, **kwargs)
+        
+        if pai:
+            if hasattr(pai, '_cached_tipo'):
+                del pai._cached_tipo
+            cache.delete(f'unidade_children_{pai.id}_True')
+            cache.delete(f'unidade_children_{pai.id}_False')
+    
+    def __str__(self):
+        tipo_icon = "📁" if self.e_sintetico else "🏢"
+        return f"{tipo_icon} {self.codigo_display} - {self.nome}"
+    
+    class Meta:
+        db_table = 'unidades'
+        verbose_name = 'Unidade Organizacional'
+        verbose_name_plural = 'Unidades Organizacionais'
+        ordering = ['codigo']
+        indexes = [
+            models.Index(fields=['codigo']),
+            models.Index(fields=['codigo_allstrategy']),
+            models.Index(fields=['ativa']),
+            models.Index(fields=['unidade_pai', 'ativa']),
+            models.Index(fields=['nivel']),
+            models.Index(fields=['empresa']),  # Adicione esta linha de volta
+        ]
+
+# ===== OUTROS MODELOS =====
 
 class CentroCusto(models.Model):
     """Centros de custo para controle gerencial"""
@@ -618,7 +478,6 @@ class Fornecedor(models.Model):
         verbose_name_plural = 'Fornecedores'
         ordering = ['razao_social']
 
-# Modelo para parâmetros globais do sistema
 class ParametroSistema(models.Model):
     """Parâmetros globais de configuração do sistema"""
     
@@ -717,8 +576,6 @@ class ParametroSistema(models.Model):
         verbose_name_plural = 'Parâmetros do Sistema'
         ordering = ['categoria', 'nome']
 
-# Modelo para gerenciar permissões de centro de custo por usuário
-# AGORA O CentroCusto JÁ FOI DEFINIDO ACIMA, ENTÃO PODE SER REFERENCIADO
 class UsuarioCentroCusto(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='centros_custo_permitidos')
     centro_custo = models.ForeignKey(CentroCusto, on_delete=models.CASCADE, related_name='usuarios_com_acesso')

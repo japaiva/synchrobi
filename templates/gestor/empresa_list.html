@@ -57,10 +57,8 @@
         <thead class="table-light">
           <tr>
             <th style="width: 120px;">Sigla</th>
-            <th style="width: 200px;">Razão Social</th>
-            <th style="width: 150px;">Nome Fantasia</th>
-            <th style="width: 140px;">CNPJ</th>
-            <th style="width: 120px;">Telefone</th>
+            <th style="width: 300px;">Razão Social</th>
+            <th style="width: 200px;">CNPJ</th>
             <th style="width: 80px;" class="text-center">Status</th>
             <th style="width: 100px;" class="text-end">Ações</th>
           </tr>
@@ -78,13 +76,7 @@
                 {% endif %}
               </td>
               <td>
-                {{ empresa.nome_fantasia|default:"-"|truncatechars:25 }}
-              </td>
-              <td>
                 <code class="small">{{ empresa.cnpj_formatado }}</code>
-              </td>
-              <td>
-                <span class="small">{{ empresa.telefone|default:"-" }}</span>
               </td>
               <td class="text-center">
                 {% if empresa.ativa %}
@@ -112,13 +104,11 @@
             <tr>
               <td colspan="7" class="text-center py-5 text-muted">
                 {% if search or ativa %}
-                  <i class="fas fa-search fa-2x mb-3"></i>
                   <p>Nenhuma empresa encontrada com os critérios de busca.</p>
                   <a href="{% url 'gestor:empresa_list' %}" class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-eraser me-1"></i> Limpar filtros
                   </a>
                 {% else %}
-                  <i class="fas fa-building fa-2x mb-3"></i>
                   <p>Nenhuma empresa cadastrada ainda.</p>
                   <div class="d-flex gap-2 justify-content-center">
                     <a href="{% url 'gestor:empresa_create' %}" class="btn btn-sm btn-primary">

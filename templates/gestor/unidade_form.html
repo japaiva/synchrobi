@@ -36,8 +36,9 @@
         </div>
         <div class="card-body">
           <div class="row g-3">
-            <!-- Primeira linha: Código e Código All Strategy -->
-            <div class="col-md-6">
+
+            <!-- Primeira linha: Código, Empresa e Código All Strategy -->
+            <div class="col-md-4">
               <label for="{{ form.codigo.id_for_label }}" class="form-label">
                 Código Hierárquico <span class="text-danger">*</span>
               </label>
@@ -49,7 +50,19 @@
               {% endif %}
             </div>
             
-            <div class="col-md-6">
+            <div class="col-md-4">
+              <label for="{{ form.empresa.id_for_label }}" class="form-label">
+                Empresa <span class="text-danger">*</span>
+              </label>
+              {{ form.empresa }}
+              {% if form.empresa.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.empresa.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-4">
               <label for="{{ form.codigo_allstrategy.id_for_label }}" class="form-label">
                 Código All Strategy
               </label>

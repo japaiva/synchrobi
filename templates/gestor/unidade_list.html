@@ -62,7 +62,7 @@
             <th style="width: 120px;">Código</th>
             <th style="width: 120px;">All Strategy</th>
             <th style="width: 250px;">Nome</th>
-            <th style="width: 150px;">Un. Superior</th>
+            <th style="width: 150px;">Empresa</th>
             <th style="width: 100px;" class="text-center">Tipo</th>
             <th style="width: 70px;" class="text-center">Nível</th>
             <th style="width: 120px;" class="text-end">Ações</th>
@@ -90,10 +90,10 @@
                 </div>
               </td>
               <td>
-                {% if unidade.unidade_pai %}
-                  <small class="text-muted">{{ unidade.unidade_pai.nome|truncatechars:25 }}</small>
+                {% if unidade.empresa %}
+                  <span class="badge bg-primary">{{ unidade.empresa.sigla }}</span>
                 {% else %}
-                  <span class="badge bg-warning text-dark">Raiz</span>
+                  <span class="text-muted small">-</span>
                 {% endif %}
               </td>
               <td class="text-center">
@@ -189,7 +189,7 @@
         <div class="text-center mt-2">
           <small class="text-muted">
             Mostrando {{ page_obj|length }} de {{ page_obj.paginator.count }} unidade{{ page_obj.paginator.count|pluralize }}
-            {% if search or nivel %}(filtrado{{ page_obj.paginator.count|pluralize }}){% endif %}
+            {% if search or nivel %}(filtrada{{ page_obj.paginator.count|pluralize }}){% endif %}
           </small>
         </div>
       </div>
