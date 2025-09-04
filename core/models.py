@@ -871,10 +871,6 @@ class UsuarioCentroCusto(models.Model):
 # ===== MODELO EMPRESA CENTRO CUSTO (relacionamento principal) =====
 
 class EmpresaCentroCusto(models.Model):
-    """
-    Relacionamento entre Empresa e Centro de Custo com Responsáveis
-    Uma empresa pode ter N centros de custo, cada um com seu responsável
-    """
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.CASCADE,
@@ -895,18 +891,7 @@ class EmpresaCentroCusto(models.Model):
         related_name='centros_custo_responsavel',
         verbose_name="Responsável"
     )
-    
-    # Campos adicionais
-    data_inicio = models.DateField(
-        default=timezone.now,
-        verbose_name="Data de Início"
-    )
-    
-    data_fim = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Data de Fim"
-    )
+
     
     observacoes = models.TextField(
         blank=True,
@@ -934,12 +919,7 @@ class EmpresaCentroCusto(models.Model):
         """Validação customizada"""
         super().clean()
         
-        # Não pode ter data fim menor que data início
-        if self.data_fim and self.data_inicio and self.data_fim < self.data_inicio:
-            raise ValidationError({
-                'data_fim': 'Data de fim não pode ser anterior à data de início'
-            })
-        
+    
         # Verificar se já existe relacionamento ativo para essa combinação
         if self.ativo:
             query = EmpresaCentroCusto.objects.filter(
@@ -956,15 +936,7 @@ class EmpresaCentroCusto(models.Model):
                     '__all__': f'Já existe um relacionamento ativo entre {self.empresa.sigla} e {self.centro_custo.codigo}'
                 })
     
-    @property
-    def periodo_display(self):
-        """Retorna o período formatado para exibição"""
-        inicio = self.data_inicio.strftime('%d/%m/%Y')
-        if self.data_fim:
-            fim = self.data_fim.strftime('%d/%m/%Y')
-            return f"{inicio} a {fim}"
-        return f"Desde {inicio}"
-    
+
     @property
     def status_display(self):
         """Status atual do relacionamento"""
@@ -980,40 +952,9 @@ class EmpresaCentroCusto(models.Model):
         else:
             return "Ativo"
     
-    @property
-    def esta_vigente(self):
-        """Verifica se está vigente hoje"""
-        if not self.ativo:
-            return False
-            
-        hoje = timezone.now().date()
         
-        # Deve ter começado
-        if self.data_inicio > hoje:
-            return False
-        
-        # Se tem data fim, não deve ter vencido
-        if self.data_fim and hoje > self.data_fim:
-            return False
-        
-        return True
-    
-    def desativar(self, usuario=None, motivo=None):
-        """Método para desativar o relacionamento"""
-        self.ativo = False
-        self.data_fim = timezone.now().date()
-        
-        if motivo:
-            if self.observacoes:
-                self.observacoes += f"\n\nDesativado em {timezone.now().date().strftime('%d/%m/%Y')}: {motivo}"
-            else:
-                self.observacoes = f"Desativado em {timezone.now().date().strftime('%d/%m/%Y')}: {motivo}"
-        
-        self.save()
-    
     def __str__(self):
-        status_icon = "✅" if self.esta_vigente else "❌"
-        return f"{status_icon} {self.empresa.sigla} → {self.centro_custo.codigo} ({self.responsavel.first_name})"
+        return f"{self.empresa.sigla} → {self.centro_custo.codigo} ({self.responsavel.first_name})"
     
     class Meta:
         db_table = 'empresa_centros_custo'
@@ -1025,6 +966,5 @@ class EmpresaCentroCusto(models.Model):
             models.Index(fields=['empresa', 'ativo']),
             models.Index(fields=['centro_custo', 'ativo']),
             models.Index(fields=['responsavel']),
-            models.Index(fields=['data_inicio', 'data_fim']),
             models.Index(fields=['ativo']),
         ]

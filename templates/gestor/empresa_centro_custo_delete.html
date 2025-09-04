@@ -1,197 +1,109 @@
-<!-- gestor/templates/gestor/empresa_centro_custo_multiple_form.html -->
+<!-- gestor/templates/gestor/empresa_centro_custo_delete.html -->
 {% extends 'gestor/base_gestor.html' %}
 
-{% block title %}{{ title }} | SynchroBI{% endblock %}
+{% block title %}Excluir Relacionamento | SynchroBI{% endblock %}
 
 {% block content %}
 <div class="card shadow">
   <div class="card-header bg-light d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      <i class="fas fa-plus-square me-2"></i>
-      {{ title }}
+      <i class="fas fa-trash-alt me-2 text-danger"></i>
+      Excluir Relacionamento
     </h5>
-    <a href="{% url 'gestor:empresa_centro_custo_list' empresa.sigla %}" 
+    <a href="{% url 'gestor:empresa_centro_custo_list' %}" 
        class="btn btn-outline-secondary btn-sm">
       <i class="fas fa-arrow-left me-1"></i> Voltar
     </a>
   </div>
   
   <div class="card-body">
-    <div class="alert alert-info">
-      <i class="fas fa-info-circle me-2"></i>
-      <strong>Adição Múltipla:</strong> Selecione vários centros de custo para vincular de uma vez à empresa {{ empresa.nome_display }}.
+    <div class="alert alert-danger">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>Atenção!</strong> Esta ação não pode ser desfeita.
     </div>
 
-    <form method="post" novalidate>
-      {% csrf_token %}
-
-      {% if form.non_field_errors %}
-        <div class="alert alert-danger">
-          {% for error in form.non_field_errors %}
-            <p class="mb-0">{{ error }}</p>
-          {% endfor %}
-        </div>
-      {% endif %}
-      
-      <!-- Informações da Empresa -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header bg-light">
-          <h6 class="card-title mb-0">
-            <i class="fas fa-building me-2"></i>
-            Empresa Selecionada
-          </h6>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-8">
-              <div class="form-group mb-0">
-                {{ form.empresa.label_tag }}
-                {{ form.empresa }}
-                {% if form.empresa.errors %}
-                  <div class="text-danger small mt-1">
-                    {% for error in form.empresa.errors %}{{ error }}{% endfor %}
-                  </div>
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-light">
+        <h6 class="card-title mb-0">
+          <i class="fas fa-info-circle me-2"></i>
+          Dados do Relacionamento
+        </h6>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Empresa:</label>
+              <div class="bg-light p-2 rounded">
+                <div class="fw-bold">{{ relacionamento.empresa.sigla }}</div>
+                <div class="small text-muted">{{ relacionamento.empresa.razao_social }}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Centro de Custo:</label>
+              <div class="bg-light p-2 rounded">
+                <div class="fw-bold">{{ relacionamento.centro_custo.codigo }}</div>
+                <div class="small text-muted">{{ relacionamento.centro_custo.nome }}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Responsável:</label>
+              <div class="bg-light p-2 rounded">
+                <div class="fw-bold">{{ relacionamento.responsavel.first_name }} {{ relacionamento.responsavel.last_name }}</div>
+                <div class="small text-muted">{{ relacionamento.responsavel.email }}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Status:</label>
+              <div class="bg-light p-2 rounded">
+                {% if relacionamento.ativo %}
+                  <span class="badge bg-success">Ativo</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inativo</span>
                 {% endif %}
               </div>
             </div>
-            <div class="col-md-4">
-              <div class="bg-light p-3 rounded">
-                <strong>{{ empresa.sigla }}</strong><br>
-                <small class="text-muted">{{ empresa.nome_display }}</small>
-              </div>
-            </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Configurações Gerais -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header bg-light">
-          <h6 class="card-title mb-0">
-            <i class="fas fa-cog me-2"></i>
-            Configurações Gerais
-          </h6>
-        </div>
-        <div class="card-body">
-          <div class="row g-3">
-            <!-- Responsável Padrão -->
-            <div class="col-md-6">
-              <label for="{{ form.responsavel_padrao.id_for_label }}" class="form-label">
-                {{ form.responsavel_padrao.label }} <span class="text-danger">*</span>
-              </label>
-              {{ form.responsavel_padrao }}
-              {% if form.responsavel_padrao.errors %}
-                <div class="text-danger small mt-1">
-                  {% for error in form.responsavel_padrao.errors %}{{ error }}{% endfor %}
-                </div>
-              {% endif %}
-              {% if form.responsavel_padrao.help_text %}
-                <div class="form-text">{{ form.responsavel_padrao.help_text }}</div>
-              {% endif %}
-            </div>
-            
-            <!-- Data de Início -->
-            <div class="col-md-6">
-              <label for="{{ form.data_inicio.id_for_label }}" class="form-label">
-                {{ form.data_inicio.label }} <span class="text-danger">*</span>
-              </label>
-              {{ form.data_inicio }}
-              {% if form.data_inicio.errors %}
-                <div class="text-danger small mt-1">
-                  {% for error in form.data_inicio.errors %}{{ error }}{% endfor %}
-                </div>
-              {% endif %}
-            </div>
-            
-            <!-- Observações -->
-            <div class="col-md-12">
-              <label for="{{ form.observacoes.id_for_label }}" class="form-label">
-                {{ form.observacoes.label }}
-              </label>
-              {{ form.observacoes }}
-              {% if form.observacoes.errors %}
-                <div class="text-danger small mt-1">
-                  {% for error in form.observacoes.errors %}{{ error }}{% endfor %}
-                </div>
-              {% endif %}
-              {% if form.observacoes.help_text %}
-                <div class="form-text">{{ form.observacoes.help_text }}</div>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Seleção de Centros de Custo -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-          <h6 class="card-title mb-0">
-            <i class="fas fa-sitemap me-2"></i>
-            Centros de Custo Disponíveis
-          </h6>
-          <div>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="selectAll">
-              Marcar Todos
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectNone">
-              Desmarcar Todos
-            </button>
-          </div>
-        </div>
-        <div class="card-body">
-          {% if form.centros_custo.errors %}
-            <div class="alert alert-danger">
-              {% for error in form.centros_custo.errors %}{{ error }}{% endfor %}
-            </div>
-          {% endif %}
           
-          <div class="row">
-            {% for choice in form.centros_custo %}
-              <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card h-100 centro-custo-card">
-                  <div class="card-body">
-                    <div class="form-check">
-                      {{ choice.tag }}
-                      <label class="form-check-label" for="{{ choice.id_for_label }}">
-                        <div class="fw-bold">{{ choice.choice_label }}</div>
-                        <div class="small text-muted">
-                          Centro {{ choice.choice_value }}
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
+          {% if relacionamento.observacoes %}
+          <div class="col-md-12">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Observações:</label>
+              <div class="bg-light p-2 rounded">
+                {{ relacionamento.observacoes }}
               </div>
-            {% empty %}
-              <div class="col-12">
-                <div class="alert alert-warning">
-                  <i class="fas fa-exclamation-triangle me-2"></i>
-                  Não há centros de custo disponíveis para vincular a esta empresa.
-                  Todos os centros já estão vinculados ou não há centros cadastrados.
-                </div>
-              </div>
-            {% endfor %}
+            </div>
           </div>
+          {% endif %}
         </div>
       </div>
+    </div>
 
-      <!-- Botões de ação -->
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <span class="text-muted small">
-            <i class="fas fa-info-circle me-1"></i>
-            Serão criados relacionamentos individuais para cada centro selecionado
-          </span>
-        </div>
-        <div>
-          <a href="{% url 'gestor:empresa_centro_custo_list' empresa.sigla %}" 
-             class="btn btn-outline-secondary me-2">
-            <i class="fas fa-times me-1"></i> Cancelar
-          </a>
-          <button type="submit" class="btn btn-success" id="btnSubmit" disabled>
-            <i class="fas fa-plus-square me-1"></i> Criar Relacionamentos
-          </button>
-        </div>
+
+    <form method="post" class="d-flex justify-content-between align-items-center">
+      {% csrf_token %}
+      
+      <div>
+        <a href="{% url 'gestor:empresa_centro_custo_list' %}" 
+           class="btn btn-outline-secondary me-2">
+          <i class="fas fa-times me-1"></i> Cancelar
+        </a>
+      </div>
+      
+      <div>
+        <button type="submit" class="btn btn-danger">
+          <i class="fas fa-trash-alt me-1"></i> 
+          Confirmar Exclusão
+        </button>
       </div>
     </form>
   </div>
@@ -199,83 +111,44 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const checkboxes = document.querySelectorAll('input[name="centros_custo"]');
-    const btnSubmit = document.getElementById('btnSubmit');
-    const btnSelectAll = document.getElementById('selectAll');
-    const btnSelectNone = document.getElementById('selectNone');
+    // Confirmação adicional antes de submeter
+    const form = document.querySelector('form[method="post"]');
+    const submitBtn = form.querySelector('button[type="submit"]');
     
-    // Função para atualizar estado do botão
-    function updateSubmitButton() {
-        const checkedCount = document.querySelectorAll('input[name="centros_custo"]:checked').length;
-        btnSubmit.disabled = checkedCount === 0;
-        btnSubmit.innerHTML = checkedCount > 0 
-            ? `<i class="fas fa-plus-square me-1"></i> Criar ${checkedCount} Relacionamento${checkedCount > 1 ? 's' : ''}`
-            : '<i class="fas fa-plus-square me-1"></i> Criar Relacionamentos';
-    }
-    
-    // Marcar/desmarcar todos
-    btnSelectAll.addEventListener('click', function() {
-        checkboxes.forEach(cb => cb.checked = true);
-        updateSubmitButton();
-    });
-    
-    btnSelectNone.addEventListener('click', function() {
-        checkboxes.forEach(cb => cb.checked = false);
-        updateSubmitButton();
-    });
-    
-    // Atualizar botão quando checkboxes mudarem
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', updateSubmitButton);
-    });
-    
-    // Estado inicial
-    updateSubmitButton();
-    
-    // Efeito visual nos cards
-    document.querySelectorAll('.centro-custo-card').forEach(card => {
-        const checkbox = card.querySelector('input[type="checkbox"]');
+    form.addEventListener('submit', function(e) {
+        const confirmText = 'Tem certeza que deseja excluir este relacionamento?\n\n' +
+                          'Empresa: {{ relacionamento.empresa.sigla }}\n' +
+                          'Centro de Custo: {{ relacionamento.centro_custo.codigo }}\n\n' +
+                          'Esta ação NÃO pode ser desfeita!';
         
-        function updateCardStyle() {
-            if (checkbox.checked) {
-                card.classList.add('border-success', 'bg-light');
-            } else {
-                card.classList.remove('border-success', 'bg-light');
-            }
+        if (!confirm(confirmText)) {
+            e.preventDefault();
         }
-        
-        checkbox.addEventListener('change', updateCardStyle);
-        updateCardStyle(); // Estado inicial
-        
-        // Click no card seleciona o checkbox
-        card.addEventListener('click', function(e) {
-            if (e.target.tagName !== 'INPUT') {
-                checkbox.checked = !checkbox.checked;
-                checkbox.dispatchEvent(new Event('change'));
-            }
-        });
+    });
+    
+    // Efeito visual no botão
+    submitBtn.addEventListener('mouseenter', function() {
+        this.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> EXCLUIR PERMANENTEMENTE';
+    });
+    
+    submitBtn.addEventListener('mouseleave', function() {
+        this.innerHTML = '<i class="fas fa-trash-alt me-1"></i> Confirmar Exclusão';
     });
 });
 </script>
 
 <style>
-.centro-custo-card {
-    cursor: pointer;
-    transition: all 0.2s;
+.btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
 }
 
-.centro-custo-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+.card-header.bg-warning {
+    border-left: 4px solid #ffc107;
 }
 
-.centro-custo-card .form-check {
-    margin-bottom: 0;
-}
-
-.centro-custo-card .form-check-label {
-    cursor: pointer;
-    width: 100%;
+.alert-danger {
+    border-left: 4px solid #dc3545;
 }
 </style>
 {% endblock %}

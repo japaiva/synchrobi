@@ -527,145 +527,13 @@ class ContaContabilForm(forms.ModelForm):
 # core/forms.py - Adicionar ao final do arquivo
 
 class EmpresaCentroCustoForm(forms.ModelForm):
-    """Formulário para relacionar empresas com centros de custo e responsáveis"""
-    
-    class Meta:
-        model = EmpresaCentroCusto
-        fields = [
-            'empresa', 'centro_custo', 'responsavel',
-            'data_inicio', 'data_fim', 'observacoes', 'ativo'
-        ]
-        widgets = {
-            'empresa': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'centro_custo': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'responsavel': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'data_inicio': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
-            }),
-            'data_fim': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
-            }),
-            'observacoes': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 3
-            }),
-            'ativo': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-        }
-        
-        labels = {
-            'empresa': 'Empresa',
-            'centro_custo': 'Centro de Custo',
-            'responsavel': 'Responsável',
-            'data_inicio': 'Data de Início',
-            'data_fim': 'Data de Fim (opcional)',
-            'observacoes': 'Observações',
-            'ativo': 'Ativo'
-        }
-    
-    def __init__(self, *args, **kwargs):
-        empresa_pk = kwargs.pop('empresa_pk', None)
-        super().__init__(*args, **kwargs)
-        
-        # Filtrar apenas empresas ativas
-        self.fields['empresa'].queryset = Empresa.objects.filter(ativa=True).order_by('sigla')
-        
-        # Filtrar apenas centros de custo ativos e analíticos
-        self.fields['centro_custo'].queryset = CentroCusto.objects.filter(
-            ativo=True
-        ).select_related().order_by('codigo')
-        
-        # Filtrar apenas usuários ativos
-        self.fields['responsavel'].queryset = Usuario.objects.filter(
-            is_active=True
-        ).order_by('first_name')
-        
-        # Se empresa específica foi passada, pré-selecionar
-        if empresa_pk:
-            try:
-                empresa = Empresa.objects.get(pk=empresa_pk)
-                self.fields['empresa'].initial = empresa
-                self.fields['empresa'].widget.attrs['readonly'] = True
-            except Empresa.DoesNotExist:
-                pass
-        
-        # Se editando, desabilitar campos chave
-        if self.instance.pk:
-            self.fields['empresa'].widget.attrs['readonly'] = True
-            self.fields['centro_custo'].widget.attrs['readonly'] = True
-            
-            # Informação adicional
-            self.fields['empresa'].help_text = "Para alterar empresa ou centro de custo, crie um novo relacionamento"
-            self.fields['centro_custo'].help_text = "Para alterar empresa ou centro de custo, crie um novo relacionamento"
-    
-    def clean(self):
-        """Validação customizada do formulário"""
-        cleaned_data = super().clean()
-        empresa = cleaned_data.get('empresa')
-        centro_custo = cleaned_data.get('centro_custo')
-        data_inicio = cleaned_data.get('data_inicio')
-        data_fim = cleaned_data.get('data_fim')
-        ativo = cleaned_data.get('ativo')
-        
-        # Validar datas
-        if data_fim and data_inicio and data_fim < data_inicio:
-            self.add_error('data_fim', 'Data de fim não pode ser anterior à data de início')
-        
-        # Validar se já existe relacionamento ativo (apenas para novos registros)
-        if empresa and centro_custo and ativo and not self.instance.pk:
-            existe = EmpresaCentroCusto.objects.filter(
-                empresa=empresa,
-                centro_custo=centro_custo,
-                ativo=True
-            ).exists()
-            
-            if existe:
-                raise forms.ValidationError(
-                    f'Já existe um relacionamento ativo entre {empresa.sigla} e {centro_custo.codigo}. '
-                    'Desative o relacionamento anterior antes de criar um novo.'
-                )
-        
-        return cleaned_data
-    
-    def save(self, commit=True):
-        """Override do save para adicionar informações extras"""
-        instance = super().save(commit=False)
-        
-        # Se não tem data de início, usar hoje
-        if not instance.data_inicio:
-            instance.data_inicio = timezone.now().date()
-        
-        if commit:
-            instance.save()
-        
-        return instance
-# core/forms.py - Formulários simplificados para empresa centro custo
-
-from django import forms
-from django.utils import timezone
-from core.models import Empresa, CentroCusto, Usuario, EmpresaCentroCusto
-
-# ... outros formulários existentes mantidos ...
-
-# ===== FORMULÁRIO EMPRESA CENTRO CUSTO (SIMPLIFICADO) =====
-
-class EmpresaCentroCustoForm(forms.ModelForm):
     """Formulário simplificado para relacionar empresas com centros de custo"""
     
     class Meta:
         model = EmpresaCentroCusto
         fields = [
             'empresa', 'centro_custo', 'responsavel',
-            'data_inicio', 'data_fim', 'observacoes', 'ativo'
+            'observacoes', 'ativo'
         ]
         widgets = {
             'empresa': forms.Select(attrs={
@@ -676,14 +544,6 @@ class EmpresaCentroCustoForm(forms.ModelForm):
             }),
             'responsavel': forms.Select(attrs={
                 'class': 'form-select'
-            }),
-            'data_inicio': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
-            }),
-            'data_fim': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
             }),
             'observacoes': forms.Textarea(attrs={
                 'class': 'form-control',
@@ -698,8 +558,6 @@ class EmpresaCentroCustoForm(forms.ModelForm):
             'empresa': 'Empresa',
             'centro_custo': 'Centro de Custo',
             'responsavel': 'Responsável',
-            'data_inicio': 'Data de Início',
-            'data_fim': 'Data de Fim (opcional)',
             'observacoes': 'Observações',
             'ativo': 'Ativo'
         }
@@ -744,13 +602,7 @@ class EmpresaCentroCustoForm(forms.ModelForm):
         cleaned_data = super().clean()
         empresa = cleaned_data.get('empresa')
         centro_custo = cleaned_data.get('centro_custo')
-        data_inicio = cleaned_data.get('data_inicio')
-        data_fim = cleaned_data.get('data_fim')
         ativo = cleaned_data.get('ativo')
-        
-        # Validar datas
-        if data_fim and data_inicio and data_fim < data_inicio:
-            self.add_error('data_fim', 'Data de fim não pode ser anterior à data de início')
         
         # Validar se já existe relacionamento ativo (apenas para novos registros)
         if empresa and centro_custo and ativo and not self.instance.pk:
@@ -772,10 +624,7 @@ class EmpresaCentroCustoForm(forms.ModelForm):
         """Override do save para adicionar informações extras"""
         instance = super().save(commit=False)
         
-        # Se não tem data de início, usar hoje
-        if not instance.data_inicio:
-            instance.data_inicio = timezone.now().date()
-        
+
         if commit:
             instance.save()
         

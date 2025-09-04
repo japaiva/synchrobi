@@ -1,4 +1,4 @@
-# gestor/views/empresa_centro_custo.py - Versão Simplificada
+# gestor/views/empresa_centro_custo.py - Versão Corrigida
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -106,6 +106,7 @@ def empresa_centro_custo_create(request, sigla_empresa=None):
                         f'por {request.user}'
                     )
                     
+                    # Redirect correto baseado no contexto
                     if empresa:
                         return redirect('gestor:empresa_centro_custo_list', sigla_empresa=empresa.sigla)
                     else:
@@ -137,8 +138,6 @@ def empresa_centro_custo_update(request, pk):
     # Guardar valores originais para log
     valores_originais = {
         'responsavel': relacionamento.responsavel.first_name,
-        'data_inicio': relacionamento.data_inicio,
-        'data_fim': relacionamento.data_fim,
         'ativo': relacionamento.ativo,
         'observacoes': relacionamento.observacoes
     }
@@ -211,6 +210,8 @@ def empresa_centro_custo_delete(request, pk):
                 f'Relacionamento excluído: {empresa_sigla} → {centro_custo_codigo} por {request.user}'
             )
             
+            # CORREÇÃO: Sempre redirecionar para a lista geral
+            # Se quiser manter o contexto da empresa, pode modificar aqui
             return redirect('gestor:empresa_centro_custo_list')
             
         except Exception as e:
@@ -252,7 +253,7 @@ def api_empresa_centros_custo(request, sigla_empresa):
                         'id': rel.responsavel.pk,
                         'nome': str(rel.responsavel),
                     },
-                    'periodo': rel.periodo_display,
+                    'status': rel.status_display,
                     'ativo': rel.ativo,
                 }
                 for rel in relacionamentos
@@ -293,7 +294,7 @@ def api_centro_custo_empresas(request, codigo_centro):
                         'id': rel.responsavel.pk,
                         'nome': str(rel.responsavel),
                     },
-                    'periodo': rel.periodo_display,
+                    'status': rel.status_display,
                     'ativo': rel.ativo,
                 }
                 for rel in relacionamentos

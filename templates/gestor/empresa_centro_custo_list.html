@@ -1,4 +1,4 @@
-<!-- gestor/templates/gestor/empresa_centro_custo_list.html - Versão Simplificada -->
+<!-- gestor/templates/gestor/empresa_centro_custo_list.html - Versão Sem Ícones -->
 {% extends 'gestor/base_gestor.html' %}
 
 {% block title %}
@@ -46,8 +46,6 @@
   <!-- Filtros -->
   <div class="card-header bg-white">
     <form method="get" class="row g-3 align-items-end">
-
-      
       {% if not empresa_filtro %}
       <div class="col-md-3">
         {{ form_filtro.empresa.label_tag }}
@@ -92,7 +90,6 @@
             <th style="width: 150px;">Centro Custo</th>
             <th style="width: 150px;">Nome do Centro</th>
             <th style="width: 150px;">Responsável</th>
-
             <th style="width: 120px;" class="text-end">Ações</th>
           </tr>
         </thead>
@@ -105,7 +102,7 @@
               </td>
               {% endif %}
               <td>
-                <code class="fw-bold">{{ rel.centro_custo.codigo }}</code>
+                <span class="fw-bold">{{ rel.centro_custo.codigo }}</span>
               </td>
               <td>
                 <div class="fw-bold">{{ rel.centro_custo.nome|truncatechars:30 }}</div>
