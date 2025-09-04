@@ -21,9 +21,7 @@ class Usuario(AbstractUser):
     """
     NIVEL_CHOICES = [
         ('admin', 'Administrador'),
-        ('gestor', 'Gestor Financeiro'),
-        ('analista', 'Analista Financeiro'),
-        ('contador', 'Contador'),
+        ('gestor', 'Gestor'),
         ('diretor', 'Diretor'),
     ]
 

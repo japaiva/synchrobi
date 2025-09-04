@@ -103,15 +103,11 @@
             
             <div class="row g-3">
               <!-- Nome e Sobrenome -->
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <label for="first_name" class="form-label">Nome</label>
                 <input type="text" class="form-control" id="first_name" name="first_name" value="{{ usuario.first_name }}">
               </div>
               
-              <div class="col-md-6">
-                <label for="last_name" class="form-label">Sobrenome</label>
-                <input type="text" class="form-control" id="last_name" name="last_name" value="{{ usuario.last_name }}">
-              </div>
               
               <!-- Email e Telefone -->
               <div class="col-md-6">
@@ -124,18 +120,6 @@
                 <input type="text" class="form-control" id="telefone" name="telefone" value="{{ usuario.telefone|default:'' }}" data-mask="(00) 00000-0000">
               </div>
               
-              <!-- Campos específicos do SynchroBI -->
-              <div class="col-md-6">
-                <label for="centro_custo" class="form-label">Centro de Custo</label>
-                <input type="text" class="form-control" id="centro_custo" name="centro_custo" value="{{ usuario.centro_custo|default:'' }}" readonly>
-                <div class="form-text small">Definido pelo administrador do sistema.</div>
-              </div>
-              
-              <div class="col-md-6">
-                <label for="unidade_negocio" class="form-label">Unidade de Negócio</label>
-                <input type="text" class="form-control" id="unidade_negocio" name="unidade_negocio" value="{{ usuario.unidade_negocio|default:'' }}" readonly>
-                <div class="form-text small">Definido pelo administrador do sistema.</div>
-              </div>
               
               <!-- Senha -->
               <div class="col-12">

@@ -244,20 +244,16 @@ class UsuarioForm(forms.ModelForm):
         ]
         widgets = {
             'username': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Código do usuário'
+                'class': 'form-control'
             }),
             'first_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Nome completo do usuário'
+                'class': 'form-control'
             }),
             'email': forms.EmailInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'email@exemplo.com'
+                'class': 'form-control'
             }),
             'telefone': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': '(11) 99999-9999',
                 'data-mask': '(00) 00000-0000'
             }),
             'nivel': forms.Select(attrs={'class': 'form-select'}),
@@ -295,9 +291,7 @@ class UsuarioForm(forms.ModelForm):
         self.fields['nivel'].choices = [
             ('', '--- Selecione ---'),
             ('admin', 'Administrador'),
-            ('gestor', 'Gestor Financeiro'), 
-            ('analista', 'Analista Financeiro'),
-            ('contador', 'Contador'),
+            ('gestor', 'Gestor'), 
             ('diretor', 'Diretor'),
         ]
     

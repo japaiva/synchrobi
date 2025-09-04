@@ -46,7 +46,6 @@
                     <i class="fas fa-exclamation-triangle me-1"></i>{{ form.username.errors.0 }}
                   </div>
                 {% endif %}
-                <div class="form-text">Nome de usuário para acesso ao sistema</div>
               </div>
               
               <!-- NOME -->
@@ -141,14 +140,6 @@
                   </div>
                 {% endif %}
                 <div class="form-text">
-                  <small>
-                    <strong>Admin:</strong> Acesso total • 
-                    <strong>Gestor:</strong> Gestão financeira • 
-                    <strong>Analista:</strong> Análises • 
-                    <strong>Contador:</strong> Contabilidade •
-                    <strong>Diretor:</strong> Visão executiva
-                  </small>
-                </div>
               </div>
               
               <!-- STATUS -->
@@ -156,7 +147,7 @@
                 <div class="form-check form-switch">
                   {{ form.is_active }}
                   <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">
-                    <i class="fas fa-toggle-on me-1"></i>Usuário Ativo
+                    Usuário Ativo
                   </label>
                 </div>
                 {% if form.is_active.errors %}
@@ -164,7 +155,6 @@
                     <i class="fas fa-exclamation-triangle me-1"></i>{{ form.is_active.errors.0 }}
                   </div>
                 {% endif %}
-                <div class="form-text">Usuários inativos não podem acessar o sistema</div>
               </div>
             </div>
           </div>
@@ -182,18 +172,6 @@
               <i class="fas fa-save me-1"></i> 
               {% if form.instance.pk %}Atualizar{% else %}Criar{% endif %} Usuário
             </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- NOTA SOBRE CAMPOS OBRIGATÓRIOS -->
-      <div class="row mt-3">
-        <div class="col-12">
-          <div class="alert alert-light border">
-            <small class="text-muted">
-              <i class="fas fa-info-circle me-1"></i>
-              <strong>Campos obrigatórios:</strong> Os campos marcados com (*) são obrigatórios.
-            </small>
           </div>
         </div>
       </div>

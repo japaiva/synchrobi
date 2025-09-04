@@ -19,33 +19,61 @@
   </div>
   
   <div class="card-body">
+    <!-- FILTROS DE BUSCA -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <form method="get" class="row g-3">
+          <div class="col-md-4">
+            <input type="text" name="search" class="form-control" 
+                   placeholder="Buscar por nome, código ou email..." 
+                   value="{{ search }}">
+          </div>
+          <div class="col-md-3">
+            <select name="nivel" class="form-select">
+              <option value="">Todos os níveis</option>
+              {% for key, value in niveis_disponiveis %}
+                <option value="{{ key }}" {% if nivel == key %}selected{% endif %}>
+                  {{ value }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <select name="ativo" class="form-select">
+              <option value="">Todos os status</option>
+              <option value="true" {% if ativo == 'true' %}selected{% endif %}>Ativos</option>
+              <option value="false" {% if ativo == 'false' %}selected{% endif %}>Inativos</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-outline-primary w-100">
+              <i class="fas fa-search me-1"></i> Buscar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="table-responsive">
       <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
             <th style="width: 150px;">Código</th>
             <th>Nome</th>
-            <th style="width: 120px;" class="text-center">Nível</th>
-            <th style="width: 100px;" class="text-center">Status</th>
+            <th style="width: 150px;" class="text-center">Nível</th>
+            <th style="width: 150px;" class="text-center">Status</th>
             <th style="width: 120px;" class="text-end">Ações</th>
           </tr>
         </thead>
         <tbody>
-          {% for usuario in usuarios %}
+          <!-- CORREÇÃO: Usar page_obj.object_list ao invés de 'usuarios' -->
+          {% for usuario in page_obj.object_list %}
             <tr>
               <td>
                 <div class="fw-semibold">{{ usuario.username }}</div>
-                {% if usuario.email %}
-                  <small class="text-muted">{{ usuario.email }}</small>
-                {% endif %}
               </td>
               <td>
-                <div class="fw-medium">{{ usuario.first_name }}</div>
-                {% if usuario.telefone %}
-                  <small class="text-muted">
-                    <i class="fas fa-phone fa-xs me-1"></i>{{ usuario.telefone }}
-                  </small>
-                {% endif %}
+                <div class="fw-medium">{{ usuario.first_name|default:usuario.username }}</div>
               </td>
               <td class="text-center">
                 <span class="badge bg-{% if usuario.nivel == 'admin' %}danger{% elif usuario.nivel == 'gestor' %}warning{% elif usuario.nivel == 'diretor' %}primary{% elif usuario.nivel == 'contador' %}success{% else %}info{% endif %}">
@@ -66,7 +94,8 @@
                   </a>
                   <a href="{% url 'gestor:usuario_delete' usuario.pk %}" 
                      class="btn btn-sm btn-outline-danger" 
-                     title="Excluir">
+                     title="Excluir"
+                     onclick="return confirm('Tem certeza que deseja excluir o usuário {{ usuario.username }}?')">
                     <i class="fas fa-trash-alt"></i>
                   </a>
                 </div>
@@ -76,10 +105,17 @@
             <tr>
               <td colspan="5" class="text-center py-5">
                 <div class="text-muted">
-                  <h6>Nenhum usuário cadastrado</h6>
-                  <p class="mb-3">Comece criando o primeiro usuário do sistema.</p>
+                  <h6>Nenhum usuário encontrado</h6>
+                  {% if search or nivel or ativo %}
+                    <p class="mb-3">Tente ajustar os filtros de busca.</p>
+                    <a href="{% url 'gestor:usuario_list' %}" class="btn btn-outline-secondary me-2">
+                      <i class="fas fa-times me-1"></i> Limpar Filtros
+                    </a>
+                  {% else %}
+                    <p class="mb-3">Comece criando o primeiro usuário do sistema.</p>
+                  {% endif %}
                   <a href="{% url 'gestor:usuario_create' %}" class="btn btn-primary">
-                    <i class="fas fa-plus me-1"></i> Criar Primeiro Usuário
+                    <i class="fas fa-plus me-1"></i> {% if search or nivel or ativo %}Novo Usuário{% else %}Criar Primeiro Usuário{% endif %}
                   </a>
                 </div>
               </td>
@@ -89,26 +125,77 @@
       </table>
     </div>
     
-    <!-- FOOTER COM ESTATÍSTICAS -->
-    {% if usuarios %}
-    <div class="row mt-3 pt-3 border-top">
-      <div class="col-md-6">
-        <small class="text-muted">
-          <strong>Total:</strong> {{ usuarios|length }} usuário{{ usuarios|length|pluralize:"s" }}
-        </small>
-      </div>
-      <div class="col-md-6 text-end">
-        <small class="text-muted">
-          {% with ativos=usuarios|length %}
-            {% with total=usuarios|length %}
-              <i class="fas fa-chart-pie me-1"></i>
-              {{ usuarios|length }} cadastrado{{ usuarios|length|pluralize:"s" }}
-            {% endwith %}
-          {% endwith %}
-        </small>
-      </div>
-    </div>
+    <!-- PAGINAÇÃO -->
+    {% if page_obj.has_other_pages %}
+      <nav aria-label="Navegação de páginas" class="mt-4">
+        <ul class="pagination justify-content-center">
+          {% if page_obj.has_previous %}
+            <li class="page-item">
+              <a class="page-link" href="?{% if search %}search={{ search }}&{% endif %}{% if nivel %}nivel={{ nivel }}&{% endif %}{% if ativo %}ativo={{ ativo }}&{% endif %}page=1">
+                <i class="fas fa-angle-double-left"></i>
+              </a>
+            </li>
+            <li class="page-item">
+              <a class="page-link" href="?{% if search %}search={{ search }}&{% endif %}{% if nivel %}nivel={{ nivel }}&{% endif %}{% if ativo %}ativo={{ ativo }}&{% endif %}page={{ page_obj.previous_page_number }}">
+                <i class="fas fa-angle-left"></i>
+              </a>
+            </li>
+          {% endif %}
+
+          {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+              <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+              </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+              <li class="page-item">
+                <a class="page-link" href="?{% if search %}search={{ search }}&{% endif %}{% if nivel %}nivel={{ nivel }}&{% endif %}{% if ativo %}ativo={{ ativo }}&{% endif %}page={{ num }}">
+                  {{ num }}
+                </a>
+              </li>
+            {% endif %}
+          {% endfor %}
+
+          {% if page_obj.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="?{% if search %}search={{ search }}&{% endif %}{% if nivel %}nivel={{ nivel }}&{% endif %}{% if ativo %}ativo={{ ativo }}&{% endif %}page={{ page_obj.next_page_number }}">
+                <i class="fas fa-angle-right"></i>
+              </a>
+            </li>
+            <li class="page-item">
+              <a class="page-link" href="?{% if search %}search={{ search }}&{% endif %}{% if nivel %}nivel={{ nivel }}&{% endif %}{% if ativo %}ativo={{ ativo }}&{% endif %}page={{ page_obj.paginator.num_pages }}">
+                <i class="fas fa-angle-double-right"></i>
+              </a>
+            </li>
+          {% endif %}
+        </ul>
+      </nav>
     {% endif %}
+    
+
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit no filtro quando mudar
+    const nivelSelect = document.querySelector('select[name="nivel"]');
+    const ativoSelect = document.querySelector('select[name="ativo"]');
+    
+    if (nivelSelect) {
+        nivelSelect.addEventListener('change', function() {
+            this.form.submit();
+        });
+    }
+    
+    if (ativoSelect) {
+        ativoSelect.addEventListener('change', function() {
+            this.form.submit();
+        });
+    }
+    
+    console.log('✅ Lista de usuários carregada!');
+});
+</script>
+
 {% endblock %}
