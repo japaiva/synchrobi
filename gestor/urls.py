@@ -10,6 +10,18 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('home/', views.home, name='home'),
     
+   # Empresas
+    path('empresas/', views.empresa_list, name='empresa_list'),
+    path('empresas/criar/', views.empresa_create, name='empresa_create'),
+    path('empresas/<str:sigla>/editar/', views.empresa_update, name='empresa_update'),
+    path('empresas/<str:sigla>/excluir/', views.empresa_delete, name='empresa_delete'),
+    
+    # APIs para Empresas
+    path('api/validar-sigla-empresa/', views.api_validar_sigla_empresa, name='api_validar_sigla_empresa'),
+    path('api/validar-cnpj-empresa/', views.api_validar_cnpj_empresa, name='api_validar_cnpj_empresa'),
+    path('api/empresa/<str:sigla>/info/', views.api_empresa_info, name='api_empresa_info'),
+
+
     # Unidades
     path('unidades/', views.unidade_list, name='unidade_list'),
     path('unidades/criar/', views.unidade_create, name='unidade_create'),

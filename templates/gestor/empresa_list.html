@@ -1,0 +1,183 @@
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}Empresas | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas fa-building me-2"></i> Empresas
+    </h5>
+    <div>
+      <a href="{% url 'gestor:empresa_create' %}" class="btn btn-primary btn-sm">
+        <i class="fas fa-plus me-1"></i> Nova Empresa
+      </a>
+      <a href="{% url 'gestor:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+  </div>
+  
+  <!-- Filtros -->
+  <div class="card-header bg-white">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-6">
+        <label for="search" class="form-label small">Buscar</label>
+        <input type="text" name="search" id="search" class="form-control form-control-sm" 
+               placeholder="Sigla, razão social, nome fantasia ou CNPJ..." value="{{ search|default:'' }}">
+      </div>
+      
+      <div class="col-md-2">
+        <label for="ativa" class="form-label small">Status</label>
+        <select name="ativa" id="ativa" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          <option value="true" {% if ativa == 'true' %}selected{% endif %}>Ativas</option>
+          <option value="false" {% if ativa == 'false' %}selected{% endif %}>Inativas</option>
+        </select>
+      </div>
+      
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-sm btn-primary w-100">
+          <i class="fas fa-search me-1"></i> Buscar
+        </button>
+      </div>
+      
+      <div class="col-md-2">
+        <a href="{% url 'gestor:empresa_list' %}" class="btn btn-sm btn-outline-secondary w-100">
+          <i class="fas fa-eraser me-1"></i> Limpar
+        </a>
+      </div>
+    </form>
+  </div>
+  
+  <!-- Tabela -->
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 120px;">Sigla</th>
+            <th style="width: 200px;">Razão Social</th>
+            <th style="width: 150px;">Nome Fantasia</th>
+            <th style="width: 140px;">CNPJ</th>
+            <th style="width: 120px;">Telefone</th>
+            <th style="width: 80px;" class="text-center">Status</th>
+            <th style="width: 100px;" class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for empresa in page_obj %}
+            <tr {% if not empresa.ativa %}class="table-light text-muted"{% endif %}>
+              <td>
+                <code class="small fw-bold">{{ empresa.sigla }}</code>
+              </td>
+              <td>
+                <div class="fw-bold">{{ empresa.razao_social|truncatechars:30 }}</div>
+                {% if empresa.endereco_resumido %}
+                  <div class="small text-muted">{{ empresa.endereco_resumido }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {{ empresa.nome_fantasia|default:"-"|truncatechars:25 }}
+              </td>
+              <td>
+                <code class="small">{{ empresa.cnpj_formatado }}</code>
+              </td>
+              <td>
+                <span class="small">{{ empresa.telefone|default:"-" }}</span>
+              </td>
+              <td class="text-center">
+                {% if empresa.ativa %}
+                  <span class="badge bg-success">Ativa</span>
+                {% else %}
+                  <span class="badge bg-danger">Inativa</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="btn-group" role="group" aria-label="Ações">
+                  <a href="{% url 'gestor:empresa_update' empresa.sigla %}" 
+                     class="btn btn-sm btn-outline-primary" 
+                     title="Editar">
+                    <i class="fas fa-edit"></i>
+                  </a>
+                  <a href="{% url 'gestor:empresa_delete' empresa.sigla %}" 
+                     class="btn btn-sm btn-outline-danger" 
+                     title="Excluir">
+                    <i class="fas fa-trash-alt"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="text-center py-5 text-muted">
+                {% if search or ativa %}
+                  <i class="fas fa-search fa-2x mb-3"></i>
+                  <p>Nenhuma empresa encontrada com os critérios de busca.</p>
+                  <a href="{% url 'gestor:empresa_list' %}" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-eraser me-1"></i> Limpar filtros
+                  </a>
+                {% else %}
+                  <i class="fas fa-building fa-2x mb-3"></i>
+                  <p>Nenhuma empresa cadastrada ainda.</p>
+                  <div class="d-flex gap-2 justify-content-center">
+                    <a href="{% url 'gestor:empresa_create' %}" class="btn btn-sm btn-primary">
+                      <i class="fas fa-plus me-1"></i> Criar primeira empresa
+                    </a>
+                  </div>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Paginação -->
+    {% if page_obj.has_other_pages %}
+      <div class="card-footer bg-white">
+        <nav aria-label="Paginação">
+          <ul class="pagination pagination-sm justify-content-center mb-0">
+            {% if page_obj.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                  <i class="fas fa-angle-double-left"></i>
+                </a>
+              </li>
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                  <i class="fas fa-angle-left"></i>
+                </a>
+              </li>
+            {% endif %}
+            
+            <li class="page-item active">
+              <span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            
+            {% if page_obj.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                  <i class="fas fa-angle-right"></i>
+                </a>
+              </li>
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                  <i class="fas fa-angle-double-right"></i>
+                </a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+        
+        <div class="text-center mt-2">
+          <small class="text-muted">
+            Mostrando {{ page_obj|length }} de {{ page_obj.paginator.count }} empresa{{ page_obj.paginator.count|pluralize }}
+            {% if search or ativa %}(filtrada{{ page_obj.paginator.count|pluralize }}){% endif %}
+          </small>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

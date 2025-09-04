@@ -1,0 +1,305 @@
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}{% if form.instance.sigla %}Editar{% else %}Nova{% endif %} Empresa | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas {% if form.instance.sigla %}fa-edit{% else %}fa-plus-circle{% endif %} me-2"></i>
+      {% if form.instance.sigla %}Editar{% else %}Nova{% endif %} Empresa
+    </h5>
+    <a href="{% url 'gestor:empresa_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+  
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p class="mb-0">{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+      
+      <!-- Informações Principais -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-info-circle me-2"></i>
+            Identificação da Empresa
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Primeira linha: Sigla e Status -->
+            <div class="col-md-6">
+              <label for="{{ form.sigla.id_for_label }}" class="form-label">
+                Sigla <span class="text-danger">*</span>
+              </label>
+              {{ form.sigla }}
+              {% if form.sigla.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.sigla.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-3">
+              <div class="mt-4">
+                <div class="form-check form-switch">
+                  {{ form.ativa }}
+                  <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
+                    Empresa Ativa
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            <div class="col-md-3">
+              <label class="form-label">Status</label>
+              <div class="form-control bg-light" style="height: 38px; padding-top: 8px;">
+                {% if form.instance.sigla %}
+                  {% if form.instance.ativa %}
+                    <span class="badge bg-success">Ativa</span>
+                  {% else %}
+                    <span class="badge bg-danger">Inativa</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-info">Nova Empresa</span>
+                {% endif %}
+              </div>
+            </div>
+            
+            <!-- Segunda linha: Razão Social -->
+            <div class="col-md-12">
+              <label for="{{ form.razao_social.id_for_label }}" class="form-label">
+                Razão Social <span class="text-danger">*</span>
+              </label>
+              {{ form.razao_social }}
+              {% if form.razao_social.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.razao_social.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <!-- Terceira linha: Nome Fantasia -->
+            <div class="col-md-12">
+              <label for="{{ form.nome_fantasia.id_for_label }}" class="form-label">
+                Nome Fantasia
+              </label>
+              {{ form.nome_fantasia }}
+              {% if form.nome_fantasia.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.nome_fantasia.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Documentos Fiscais -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-file-alt me-2"></i>
+            Documentos Fiscais
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.cnpj.id_for_label }}" class="form-label">
+                CNPJ <span class="text-danger">*</span>
+              </label>
+              {{ form.cnpj }}
+              {% if form.cnpj.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.cnpj.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-3">
+              <label for="{{ form.inscricao_estadual.id_for_label }}" class="form-label">
+                Inscrição Estadual
+              </label>
+              {{ form.inscricao_estadual }}
+              {% if form.inscricao_estadual.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.inscricao_estadual.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-3">
+              <label for="{{ form.inscricao_municipal.id_for_label }}" class="form-label">
+                Inscrição Municipal
+              </label>
+              {{ form.inscricao_municipal }}
+              {% if form.inscricao_municipal.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.inscricao_municipal.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Informações de Contato -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-address-card me-2"></i>
+            Informações de Contato
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Endereço -->
+            <div class="col-12">
+              <label for="{{ form.endereco.id_for_label }}" class="form-label">
+                Endereço
+              </label>
+              {{ form.endereco }}
+              {% if form.endereco.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.endereco.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <!-- Telefone e Email -->
+            <div class="col-md-6">
+              <label for="{{ form.telefone.id_for_label }}" class="form-label">
+                Telefone
+              </label>
+              {{ form.telefone }}
+              {% if form.telefone.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.telefone.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-6">
+              <label for="{{ form.email.id_for_label }}" class="form-label">
+                E-mail
+              </label>
+              {{ form.email }}
+              {% if form.email.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.email.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botões de ação -->
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if form.instance.sigla %}
+          <a href="{% url 'gestor:empresa_delete' form.instance.sigla %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i> Excluir
+          </a>
+          {% endif %}
+        </div>
+        <div>
+          <a href="{% url 'gestor:empresa_list' %}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-times me-1"></i> Cancelar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> {% if form.instance.sigla %}Salvar Alterações{% else %}Criar Empresa{% endif %}
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Máscaras para campos
+    $('.cnpj-mask').mask('00.000.000/0000-00');
+    $('.telefone-mask').mask('(00) 00000-0000');
+    
+    // Validação em tempo real da sigla
+    const siglaInput = document.getElementById('{{ form.sigla.id_for_label }}');
+    if (siglaInput) {
+        siglaInput.addEventListener('blur', function() {
+            const sigla = this.value.trim();
+            if (sigla && sigla.length <= 15) {
+                fetch(`{% url 'gestor:api_validar_sigla_empresa' %}?sigla=${sigla}&atual={{ form.instance.sigla|default:'' }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const feedbackDiv = this.parentElement.querySelector('.validation-feedback') || 
+                                           document.createElement('div');
+                        feedbackDiv.className = 'validation-feedback small mt-1';
+                        
+                        if (data.valid) {
+                            feedbackDiv.className += ' text-success';
+                            feedbackDiv.textContent = data.message || 'Sigla válida';
+                            if (data.sigla_formatada && data.sigla_formatada !== sigla) {
+                                this.value = data.sigla_formatada;
+                            }
+                        } else {
+                            feedbackDiv.className += ' text-danger';
+                            feedbackDiv.textContent = data.error;
+                        }
+                        
+                        if (!this.parentElement.querySelector('.validation-feedback')) {
+                            this.parentElement.appendChild(feedbackDiv);
+                        }
+                    })
+                    .catch(error => console.error('Erro ao validar sigla:', error));
+            }
+        });
+    }
+    
+    // Validação em tempo real do CNPJ
+    const cnpjInput = document.querySelector('.cnpj-mask');
+    if (cnpjInput) {
+        cnpjInput.addEventListener('blur', function() {
+            const cnpj = this.value.trim();
+            if (cnpj && cnpj.length >= 14) {
+                fetch(`{% url 'gestor:api_validar_cnpj_empresa' %}?cnpj=${encodeURIComponent(cnpj)}&atual={{ form.instance.sigla|default:'' }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const feedbackDiv = this.parentElement.querySelector('.validation-feedback') || 
+                                           document.createElement('div');
+                        feedbackDiv.className = 'validation-feedback small mt-1';
+                        
+                        if (data.valid) {
+                            feedbackDiv.className += ' text-success';
+                            feedbackDiv.textContent = data.message || 'CNPJ válido';
+                            if (data.cnpj_formatado) {
+                                this.value = data.cnpj_formatado;
+                            }
+                        } else {
+                            feedbackDiv.className += ' text-danger';
+                            feedbackDiv.textContent = data.error;
+                        }
+                        
+                        if (!this.parentElement.querySelector('.validation-feedback')) {
+                            this.parentElement.appendChild(feedbackDiv);
+                        }
+                    })
+                    .catch(error => console.error('Erro ao validar CNPJ:', error));
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

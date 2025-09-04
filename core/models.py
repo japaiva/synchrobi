@@ -1,4 +1,4 @@
-# core/models.py - Modelos base do SynchroBI
+# core/models.py - Modelos base do SynchroBI - ORDEM CORRIGIDA
 
 import logging
 from django.db import models
@@ -12,11 +12,84 @@ import re
 
 logger = logging.getLogger('synchrobi')
 
-# core/models.py - Modelo Unidade corrigido
+# ===== MODELO USUARIO (deve vir antes dos outros) =====
 
-import re
-from django.db import models
-from django.core.exceptions import ValidationError
+class Usuario(AbstractUser):
+    """
+    Modelo de usuário customizado para o SynchroBI
+    Baseado no portalcomercial com foco em gestão financeira
+    """
+    NIVEL_CHOICES = [
+        ('admin', 'Administrador'),
+        ('gestor', 'Gestor Financeiro'),
+        ('analista', 'Analista Financeiro'),
+        ('contador', 'Contador'),
+        ('diretor', 'Diretor'),
+    ]
+
+    # Desabilitar relacionamentos explicitamente
+    groups = None  # Remove o relacionamento com grupos
+    user_permissions = None  # Remove o relacionamento com permissões individuais
+    
+    nivel = models.CharField(max_length=20, choices=NIVEL_CHOICES, default='analista')
+    is_superuser = models.BooleanField(default=False)
+    last_name = models.CharField(max_length=150, blank=True)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    date_joined = models.DateTimeField(default=timezone.now)
+    telefone = models.CharField(max_length=20, blank=True, null=True)
+    
+    # Campos específicos para controle financeiro
+    centro_custo = models.CharField(max_length=20, blank=True, null=True,
+                                   help_text="Centro de custo do usuário")
+    unidade_negocio = models.CharField(max_length=50, blank=True, null=True,
+                                      help_text="Unidade de negócio")
+    
+    def __str__(self):
+        nome_completo = f"{self.first_name} {self.last_name}".strip()
+        return nome_completo or self.username
+    
+    def get_centros_custo_permitidos(self):
+        """
+        Retorna queryset dos centros de custo que este usuário pode visualizar
+        """
+        # Admin e Diretor veem todos
+        if self.nivel in ['admin', 'diretor']:
+            return CentroCusto.objects.filter(ativo=True).order_by('codigo')
+        
+        # Gestor vê centros de custo da sua unidade + os que tem acesso específico
+        if self.nivel == 'gestor':
+            return CentroCusto.objects.filter(
+                models.Q(unidade_negocio=self.unidade_negocio) |
+                models.Q(usuarios_com_acesso__usuario=self),
+                ativo=True
+            ).distinct().order_by('codigo')
+        
+        # Outros usuários veem apenas os permitidos especificamente
+        try:
+            return CentroCusto.objects.filter(
+                usuarios_com_acesso__usuario=self,
+                usuarios_com_acesso__ativo=True,
+                ativo=True
+            ).distinct().order_by('codigo')
+        except:
+            return CentroCusto.objects.none()
+    
+    def pode_visualizar_centro_custo(self, centro_custo_codigo):
+        """
+        Verifica se o usuário pode visualizar um centro de custo específico
+        """
+        if self.nivel in ['admin', 'diretor']:
+            return True
+        
+        return self.get_centros_custo_permitidos().filter(
+            codigo=centro_custo_codigo
+        ).exists()
+    
+    class Meta:
+        db_table = 'usuarios'
+        verbose_name = 'Usuário'
+        verbose_name_plural = 'Usuários'
 
 class Unidade(models.Model):
     """
@@ -293,105 +366,157 @@ class Unidade(models.Model):
             models.Index(fields=['unidade_pai', 'ativa']),
             models.Index(fields=['nivel']),
         ]
-class Usuario(AbstractUser):
-    """
-    Modelo de usuário customizado para o SynchroBI
-    Baseado no portalcomercial com foco em gestão financeira
-    """
-    NIVEL_CHOICES = [
-        ('admin', 'Administrador'),
-        ('gestor', 'Gestor Financeiro'),
-        ('analista', 'Analista Financeiro'),
-        ('contador', 'Contador'),
-        ('diretor', 'Diretor'),
-    ]
-
-    # Desabilitar relacionamentos explicitamente
-    groups = None  # Remove o relacionamento com grupos
-    user_permissions = None  # Remove o relacionamento com permissões individuais
-    
-    nivel = models.CharField(max_length=20, choices=NIVEL_CHOICES, default='analista')
-    is_superuser = models.BooleanField(default=False)
-    last_name = models.CharField(max_length=150, blank=True)
-    is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
-    date_joined = models.DateTimeField(default=timezone.now)
-    telefone = models.CharField(max_length=20, blank=True, null=True)
-    
-    # Campos específicos para controle financeiro
-    centro_custo = models.CharField(max_length=20, blank=True, null=True,
-                                   help_text="Centro de custo do usuário")
-    unidade_negocio = models.CharField(max_length=50, blank=True, null=True,
-                                      help_text="Unidade de negócio")
-    
-    def __str__(self):
-        nome_completo = f"{self.first_name} {self.last_name}".strip()
-        return nome_completo or self.username
-    
-    def get_centros_custo_permitidos(self):
-        """
-        Retorna queryset dos centros de custo que este usuário pode visualizar
-        """
-        # Admin e Diretor veem todos
-        if self.nivel in ['admin', 'diretor']:
-            return CentroCusto.objects.filter(ativo=True).order_by('codigo')
-        
-        # Gestor vê centros de custo da sua unidade + os que tem acesso específico
-        if self.nivel == 'gestor':
-            return CentroCusto.objects.filter(
-                models.Q(unidade_negocio=self.unidade_negocio) |
-                models.Q(usuarios_com_acesso__usuario=self),
-                ativo=True
-            ).distinct().order_by('codigo')
-        
-        # Outros usuários veem apenas os permitidos especificamente
-        try:
-            return CentroCusto.objects.filter(
-                usuarios_com_acesso__usuario=self,
-                usuarios_com_acesso__ativo=True,
-                ativo=True
-            ).distinct().order_by('codigo')
-        except:
-            return CentroCusto.objects.none()
-    
-    def pode_visualizar_centro_custo(self, centro_custo_codigo):
-        """
-        Verifica se o usuário pode visualizar um centro de custo específico
-        """
-        if self.nivel in ['admin', 'diretor']:
-            return True
-        
-        return self.get_centros_custo_permitidos().filter(
-            codigo=centro_custo_codigo
-        ).exists()
-    
-    class Meta:
-        db_table = 'usuarios'
-        verbose_name = 'Usuário'
-        verbose_name_plural = 'Usuários'
-
-# ===== MODELOS DE ESTRUTURA ORGANIZACIONAL =====
 
 class Empresa(models.Model):
-    """Dados da empresa para cabeçalhos de relatórios"""
-    codigo = models.CharField(max_length=10, primary_key=True)
-    razao_social = models.CharField(max_length=255)
-    nome_fantasia = models.CharField(max_length=255, blank=True)
-    cnpj = models.CharField(max_length=18, unique=True)
-    inscricao_estadual = models.CharField(max_length=30, blank=True)
-    endereco = models.TextField(blank=True)
-    telefone = models.CharField(max_length=20, blank=True)
-    email = models.EmailField(blank=True)
-    logo = models.ImageField(upload_to='logos/', blank=True)
-    ativa = models.BooleanField(default=True)
+    """Modelo para cadastro de empresas do grupo"""
+    
+    # ===== CAMPOS PRINCIPAIS =====
+    sigla = models.CharField(
+        max_length=15, 
+        primary_key=True,
+        verbose_name="Sigla"
+    )
+    
+    razao_social = models.CharField(
+        max_length=255,
+        verbose_name="Razão Social"
+    )
+    
+    nome_fantasia = models.CharField(
+        max_length=255, 
+        blank=True,
+        verbose_name="Nome Fantasia"
+    )
+    
+    # ===== IDENTIFICAÇÃO FISCAL =====
+    cnpj = models.CharField(
+        max_length=18, 
+        unique=True,
+        verbose_name="CNPJ"
+    )
+    
+    inscricao_estadual = models.CharField(
+        max_length=30, 
+        blank=True,
+        verbose_name="Inscrição Estadual"
+    )
+    
+    inscricao_municipal = models.CharField(
+        max_length=30, 
+        blank=True,
+        verbose_name="Inscrição Municipal"
+    )
+    
+    # ===== CONTATOS =====
+    endereco = models.TextField(
+        blank=True,
+        verbose_name="Endereço"
+    )
+    
+    telefone = models.CharField(
+        max_length=20, 
+        blank=True,
+        verbose_name="Telefone"
+    )
+    
+    email = models.EmailField(
+        blank=True,
+        verbose_name="E-mail"
+    )
+    
+    # ===== CONFIGURAÇÕES =====
+    ativa = models.BooleanField(
+        default=True,
+        verbose_name="Ativa"
+    )
+    
+    # ===== CAMPOS DE CONTROLE =====
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    
+    # ===== METADADOS ALL STRATEGY =====
+    sincronizado_allstrategy = models.BooleanField(
+        default=False,
+        verbose_name="Sincronizado All Strategy"
+    )
+    
+    data_ultima_sincronizacao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Última Sincronização"
+    )
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Validar CNPJ (formato básico)
+        import re
+        cnpj_limpo = re.sub(r'[^\d]', '', self.cnpj)
+        if len(cnpj_limpo) != 14:
+            raise ValidationError({
+                'cnpj': 'CNPJ deve conter 14 dígitos'
+            })
+    
+    def save(self, *args, **kwargs):
+        """Override do save para formatação automática"""
+        
+        # Formatar CNPJ automaticamente
+        if self.cnpj:
+            import re
+            cnpj_limpo = re.sub(r'[^\d]', '', self.cnpj)
+            if len(cnpj_limpo) == 14:
+                self.cnpj = f"{cnpj_limpo[:2]}.{cnpj_limpo[2:5]}.{cnpj_limpo[5:8]}/{cnpj_limpo[8:12]}-{cnpj_limpo[12:14]}"
+        
+        # Validar antes de salvar
+        self.full_clean()
+        
+        super().save(*args, **kwargs)
+        
+        # Log da operação
+        logger.info(f'Empresa {"atualizada" if self.pk else "criada"}: {self.sigla} - {self.razao_social}')
+    
+    @property
+    def nome_display(self):
+        """Nome para exibição (nome fantasia se houver, senão razão social)"""
+        return self.nome_fantasia or self.razao_social
+    
+    @property
+    def cnpj_formatado(self):
+        """CNPJ já formatado para exibição"""
+        return self.cnpj
+    
+    @property
+    def cnpj_limpo(self):
+        """CNPJ apenas com números"""
+        import re
+        return re.sub(r'[^\d]', '', self.cnpj)
+    
+    @property
+    def endereco_resumido(self):
+        """Endereço resumido para listas"""
+        if not self.endereco:
+            return ""
+        return self.endereco[:50] + "..." if len(self.endereco) > 50 else self.endereco
+    
+    def get_unidades_vinculadas(self):
+        """Retorna unidades vinculadas a esta empresa (se houver relacionamento futuro)"""
+        # Placeholder para futuras integrações
+        return []
     
     def __str__(self):
-        return self.nome_fantasia or self.razao_social
+        return f"{self.sigla} - {self.nome_display}"
     
     class Meta:
         db_table = 'empresas'
         verbose_name = 'Empresa'
         verbose_name_plural = 'Empresas'
+        ordering = ['sigla']
+        indexes = [
+            models.Index(fields=['sigla']),
+            models.Index(fields=['cnpj']),
+            models.Index(fields=['ativa']),
+        ]
 
 class CentroCusto(models.Model):
     """Centros de custo para controle gerencial"""
@@ -593,6 +718,7 @@ class ParametroSistema(models.Model):
         ordering = ['categoria', 'nome']
 
 # Modelo para gerenciar permissões de centro de custo por usuário
+# AGORA O CentroCusto JÁ FOI DEFINIDO ACIMA, ENTÃO PODE SER REFERENCIADO
 class UsuarioCentroCusto(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='centros_custo_permitidos')
     centro_custo = models.ForeignKey(CentroCusto, on_delete=models.CASCADE, related_name='usuarios_com_acesso')
