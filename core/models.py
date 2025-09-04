@@ -129,6 +129,35 @@ class Empresa(models.Model):
         """Retorna unidades vinculadas a esta empresa"""
         return self.unidades.filter(ativa=True)
     
+    # MÉTODOS PARA CENTROS DE CUSTO (integrados na classe principal)
+    def get_centros_custo_ativos(self):
+        """Retorna centros de custo ativos desta empresa"""
+        return self.centros_custo_empresa.filter(ativo=True).select_related(
+            'centro_custo', 'responsavel'
+        )
+    
+    def get_centros_custo_vigentes(self):
+        """Retorna apenas centros de custo vigentes hoje"""
+        hoje = timezone.now().date()
+        return self.centros_custo_empresa.filter(
+            ativo=True,
+            data_inicio__lte=hoje
+        ).filter(
+            models.Q(data_fim__isnull=True) | models.Q(data_fim__gte=hoje)
+        ).select_related('centro_custo', 'responsavel')
+    
+    def get_responsaveis_centros_custo(self):
+        """Retorna lista de responsáveis pelos centros de custo desta empresa"""
+        return Usuario.objects.filter(
+            centros_custo_responsavel__empresa=self,
+            centros_custo_responsavel__ativo=True
+        ).distinct()
+    
+    @property
+    def total_centros_custo(self):
+        """Total de centros de custo ativos"""
+        return self.centros_custo_empresa.filter(ativo=True).count()
+    
     def __str__(self):
         return f"{self.sigla} - {self.nome_display}"
     
@@ -374,8 +403,8 @@ class Unidade(models.Model):
             models.Index(fields=['empresa']),
         ]
 
-# ===== NOVO: MODELO CENTRO DE CUSTO =====
-\
+# ===== MODELO CENTRO DE CUSTO =====
+
 class CentroCusto(models.Model):
     """Modelo para centros de custo hierárquicos"""
     
@@ -499,6 +528,23 @@ class CentroCusto(models.Model):
         
         return caminho
     
+    # MÉTODOS PARA EMPRESAS VINCULADAS (integrados na classe principal)
+    def get_empresas_vinculadas(self):
+        """Retorna empresas vinculadas a este centro de custo"""
+        return self.empresas_vinculadas.filter(ativo=True).select_related('empresa', 'responsavel')
+    
+    def get_responsaveis(self):
+        """Retorna responsáveis por este centro de custo"""
+        return Usuario.objects.filter(
+            centros_custo_responsavel__centro_custo=self,
+            centros_custo_responsavel__ativo=True
+        ).distinct()
+    
+    @property
+    def empresas_ativas_count(self):
+        """Quantidade de empresas ativas vinculadas"""
+        return self.empresas_vinculadas.filter(ativo=True).count()
+    
     def delete(self, *args, **kwargs):
         """Override do delete para limpar cache do pai"""
         pai = self.centro_pai
@@ -523,7 +569,7 @@ class CentroCusto(models.Model):
             models.Index(fields=['nivel']),
         ]
 
-# ===== NOVO: MODELO CONTA CONTÁBIL =====
+# ===== MODELO CONTA CONTÁBIL =====
 
 class ContaContabil(models.Model):
     """Modelo para plano de contas contábil hierárquico simplificado"""
@@ -676,6 +722,7 @@ class ContaContabil(models.Model):
             models.Index(fields=['conta_pai', 'ativa']),
             models.Index(fields=['nivel']),
         ]
+
 # ===== MODELO FORNECEDOR (mantido como estava) =====
 
 class Fornecedor(models.Model):
@@ -807,7 +854,7 @@ class ParametroSistema(models.Model):
         verbose_name_plural = 'Parâmetros do Sistema'
         ordering = ['categoria', 'nome']
 
-# ===== MODELO USUÁRIO CENTRO CUSTO (atualizado) =====
+# ===== MODELO USUÁRIO CENTRO CUSTO =====
 
 class UsuarioCentroCusto(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='centros_custo_permitidos')
@@ -820,3 +867,164 @@ class UsuarioCentroCusto(models.Model):
         unique_together = ['usuario', 'centro_custo']
         verbose_name = 'Permissão Centro de Custo'
         verbose_name_plural = 'Permissões Centros de Custo'
+
+# ===== MODELO EMPRESA CENTRO CUSTO (relacionamento principal) =====
+
+class EmpresaCentroCusto(models.Model):
+    """
+    Relacionamento entre Empresa e Centro de Custo com Responsáveis
+    Uma empresa pode ter N centros de custo, cada um com seu responsável
+    """
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.CASCADE,
+        related_name='centros_custo_empresa',
+        verbose_name="Empresa"
+    )
+    
+    centro_custo = models.ForeignKey(
+        CentroCusto,
+        on_delete=models.CASCADE,
+        related_name='empresas_vinculadas',
+        verbose_name="Centro de Custo"
+    )
+    
+    responsavel = models.ForeignKey(
+        Usuario,
+        on_delete=models.PROTECT,
+        related_name='centros_custo_responsavel',
+        verbose_name="Responsável"
+    )
+    
+    # Campos adicionais
+    data_inicio = models.DateField(
+        default=timezone.now,
+        verbose_name="Data de Início"
+    )
+    
+    data_fim = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Data de Fim"
+    )
+    
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name="Observações"
+    )
+    
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name="Ativo"
+    )
+    
+    # Campos de controle
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    usuario_criacao = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='empresa_centro_custo_criados',
+        verbose_name="Criado por"
+    )
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Não pode ter data fim menor que data início
+        if self.data_fim and self.data_inicio and self.data_fim < self.data_inicio:
+            raise ValidationError({
+                'data_fim': 'Data de fim não pode ser anterior à data de início'
+            })
+        
+        # Verificar se já existe relacionamento ativo para essa combinação
+        if self.ativo:
+            query = EmpresaCentroCusto.objects.filter(
+                empresa=self.empresa,
+                centro_custo=self.centro_custo,
+                ativo=True
+            )
+            
+            if self.pk:
+                query = query.exclude(pk=self.pk)
+            
+            if query.exists():
+                raise ValidationError({
+                    '__all__': f'Já existe um relacionamento ativo entre {self.empresa.sigla} e {self.centro_custo.codigo}'
+                })
+    
+    @property
+    def periodo_display(self):
+        """Retorna o período formatado para exibição"""
+        inicio = self.data_inicio.strftime('%d/%m/%Y')
+        if self.data_fim:
+            fim = self.data_fim.strftime('%d/%m/%Y')
+            return f"{inicio} a {fim}"
+        return f"Desde {inicio}"
+    
+    @property
+    def status_display(self):
+        """Status atual do relacionamento"""
+        if not self.ativo:
+            return "Inativo"
+        
+        hoje = timezone.now().date()
+        
+        if self.data_fim and hoje > self.data_fim:
+            return "Vencido"
+        elif self.data_inicio > hoje:
+            return "Futuro"
+        else:
+            return "Ativo"
+    
+    @property
+    def esta_vigente(self):
+        """Verifica se está vigente hoje"""
+        if not self.ativo:
+            return False
+            
+        hoje = timezone.now().date()
+        
+        # Deve ter começado
+        if self.data_inicio > hoje:
+            return False
+        
+        # Se tem data fim, não deve ter vencido
+        if self.data_fim and hoje > self.data_fim:
+            return False
+        
+        return True
+    
+    def desativar(self, usuario=None, motivo=None):
+        """Método para desativar o relacionamento"""
+        self.ativo = False
+        self.data_fim = timezone.now().date()
+        
+        if motivo:
+            if self.observacoes:
+                self.observacoes += f"\n\nDesativado em {timezone.now().date().strftime('%d/%m/%Y')}: {motivo}"
+            else:
+                self.observacoes = f"Desativado em {timezone.now().date().strftime('%d/%m/%Y')}: {motivo}"
+        
+        self.save()
+    
+    def __str__(self):
+        status_icon = "✅" if self.esta_vigente else "❌"
+        return f"{status_icon} {self.empresa.sigla} → {self.centro_custo.codigo} ({self.responsavel.first_name})"
+    
+    class Meta:
+        db_table = 'empresa_centros_custo'
+        verbose_name = 'Centro de Custo da Empresa'
+        verbose_name_plural = 'Centros de Custo das Empresas'
+        ordering = ['empresa__sigla', 'centro_custo__codigo']
+        unique_together = ['empresa', 'centro_custo', 'ativo']  # Evita duplicatas ativas
+        indexes = [
+            models.Index(fields=['empresa', 'ativo']),
+            models.Index(fields=['centro_custo', 'ativo']),
+            models.Index(fields=['responsavel']),
+            models.Index(fields=['data_inicio', 'data_fim']),
+            models.Index(fields=['ativo']),
+        ]

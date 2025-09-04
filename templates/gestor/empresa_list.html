@@ -56,11 +56,12 @@
       <table class="table table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
-            <th style="width: 120px;">Sigla</th>
-            <th style="width: 300px;">Razão Social</th>
-            <th style="width: 200px;">CNPJ</th>
-            <th style="width: 80px;" class="text-center">Status</th>
-            <th style="width: 100px;" class="text-end">Ações</th>
+            <th style="width: 150px;">Sigla</th>
+            <th style="width: 300px;">Empresa</th>
+            <th style="width: 180px;">CNPJ</th>
+            <th style="width: 40px;" class="text-center">Sts</th>
+            <th style="width: 40px;" class="text-center">CCs</th>
+            <th style="width: 150px;" class="text-end">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -71,6 +72,9 @@
               </td>
               <td>
                 <div class="fw-bold">{{ empresa.razao_social|truncatechars:30 }}</div>
+                {% if empresa.nome_fantasia %}
+                  <div class="small text-muted">{{ empresa.nome_fantasia|truncatechars:25 }}</div>
+                {% endif %}
                 {% if empresa.endereco_resumido %}
                   <div class="small text-muted">{{ empresa.endereco_resumido }}</div>
                 {% endif %}
@@ -85,8 +89,16 @@
                   <span class="badge bg-danger">Inativa</span>
                 {% endif %}
               </td>
+              <td class="text-center">
+                <span class="badge bg-info">{{ empresa.total_centros_custo|default:0 }}</span>
+              </td>
               <td class="text-end">
                 <div class="btn-group" role="group" aria-label="Ações">
+                  <a href="{% url 'gestor:empresa_centro_custo_list' empresa.sigla %}" 
+                     class="btn btn-sm btn-outline-info" 
+                     title="Centros de Custo">
+                    <i class="fas fa-sitemap"></i>
+                  </a>
                   <a href="{% url 'gestor:empresa_update' empresa.sigla %}" 
                      class="btn btn-sm btn-outline-primary" 
                      title="Editar">
@@ -102,7 +114,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="7" class="text-center py-5 text-muted">
+              <td colspan="6" class="text-center py-5 text-muted">
                 {% if search or ativa %}
                   <p>Nenhuma empresa encontrada com os critérios de busca.</p>
                   <a href="{% url 'gestor:empresa_list' %}" class="btn btn-sm btn-outline-primary">
