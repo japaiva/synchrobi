@@ -427,38 +427,23 @@ class CentroCustoForm(forms.ModelForm):
 # ===== FORMULÁRIO CONTA CONTÁBIL =====
 
 class ContaContabilForm(forms.ModelForm):
-    """Formulário para criar/editar contas contábeis"""
+    """Formulário para criar/editar contas contábeis simplificado"""
     
     class Meta:
         model = ContaContabil
         fields = [
-            'codigo', 'nome', 'descricao', 'tipo_conta', 
-            'categoria_dre', 'subcategoria_dre', 'ativa'
+            'codigo', 'nome', 'descricao', 'ativa'
         ]
         widgets = {
             'codigo': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Ex: 010.010.01'
+                'class': 'form-control'
             }),
             'nome': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Nome da conta contábil'
+                'class': 'form-control'
             }),
             'descricao': forms.Textarea(attrs={
                 'class': 'form-control', 
-                'rows': 3,
-                'placeholder': 'Descrição da conta...'
-            }),
-            'tipo_conta': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'categoria_dre': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Ex: Receita Bruta, CMV, Despesas Operacionais'
-            }),
-            'subcategoria_dre': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Ex: Vendas, Material, Pessoal'
+                'rows': 3
             }),
             'ativa': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
@@ -486,16 +471,3 @@ class ContaContabilForm(forms.ModelForm):
             raise forms.ValidationError("Já existe uma conta contábil com este código.")
         
         return codigo
-    
-    def clean(self):
-        """Validação geral do formulário"""
-        cleaned_data = super().clean()
-        tipo_conta = cleaned_data.get('tipo_conta')
-        categoria_dre = cleaned_data.get('categoria_dre', '').strip()
-        
-        # Se é conta de resultado (receita, custo, despesa), categoria DRE é recomendada
-        if tipo_conta in ['receita', 'custo', 'despesa'] and not categoria_dre:
-            self.add_error('categoria_dre', 
-                'Categoria DRE é recomendada para contas de resultado.')
-        
-        return cleaned_data

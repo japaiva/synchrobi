@@ -860,8 +860,6 @@ def api_empresa_info(request, sigla):
 
 # ===== NOVAS VIEWS: CENTRO DE CUSTO =====
 
-# ===== NOVAS VIEWS: CENTRO DE CUSTO =====
-
 @login_required
 def centrocusto_list(request):
     """Lista de centros de custo com filtros"""
@@ -992,165 +990,6 @@ def centrocusto_delete(request, codigo):
     }
     return render(request, 'gestor/centrocusto_delete.html', context)
 
-# ===== NOVAS VIEWS: CONTA CONTÁBIL =====
-
-@login_required
-def contacontabil_list(request):
-    """Lista de contas contábeis com filtros"""
-    search = request.GET.get('search', '')
-    nivel = request.GET.get('nivel', '')
-    tipo_conta = request.GET.get('tipo_conta', '')
-    ativa = request.GET.get('ativa', '')
-    
-    contas = ContaContabil.objects.select_related('conta_pai').filter(ativa=True)
-    
-    if search:
-        contas = contas.filter(
-            Q(codigo__icontains=search) |
-            Q(nome__icontains=search) |
-            Q(descricao__icontains=search) |
-            Q(categoria_dre__icontains=search)
-        )
-    
-    if nivel:
-        contas = contas.filter(nivel=nivel)
-    
-    if tipo_conta:
-        contas = contas.filter(tipo_conta=tipo_conta)
-    
-    if ativa:
-        contas = contas.filter(ativa=(ativa == 'true'))
-    
-    # Ordenar por código para manter hierarquia
-    contas = contas.order_by('codigo')
-    
-    # Paginação
-    paginator = Paginator(contas, 20)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    
-    # Opções para filtros
-    niveis_disponiveis = sorted(set(ContaContabil.objects.values_list('nivel', flat=True)))
-    tipos_conta = ContaContabil._meta.get_field('tipo_conta').choices
-    
-    context = {
-        'page_obj': page_obj,
-        'search': search,
-        'nivel': nivel,
-        'tipo_conta': tipo_conta,
-        'ativa': ativa,
-        'niveis_disponiveis': niveis_disponiveis,
-        'tipos_conta': tipos_conta,
-    }
-    return render(request, 'gestor/contacontabil_list.html', context)
-
-@login_required
-def contacontabil_create(request):
-    """Criar nova conta contábil"""
-    if request.method == 'POST':
-        form = ContaContabilForm(request.POST)
-        if form.is_valid():
-            try:
-                conta = form.save()
-                messages.success(request, f'Conta contábil "{conta.nome}" criada com sucesso!')
-                logger.info(f'Conta contábil criada: {conta.codigo} - {conta.nome} por {request.user}')
-                return redirect('gestor:contacontabil_detail', codigo=conta.codigo)
-            except Exception as e:
-                messages.error(request, f'Erro ao criar conta contábil: {str(e)}')
-                logger.error(f'Erro ao criar conta contábil: {str(e)}')
-        else:
-            messages.error(request, 'Erro ao criar conta contábil. Verifique os dados.')
-    else:
-        form = ContaContabilForm()
-    
-    context = {
-        'form': form, 
-        'title': 'Nova Conta Contábil',
-        'is_create': True
-    }
-    return render(request, 'gestor/contacontabil_form.html', context)
-
-@login_required
-def contacontabil_detail(request, codigo):
-    """Detalhes da conta contábil"""
-    conta = get_object_or_404(ContaContabil, codigo=codigo)
-    
-    # Buscar subcontas diretas
-    subcontas = conta.subcontas.filter(ativa=True).order_by('codigo')
-    
-    # Caminho hierárquico
-    caminho = conta.caminho_hierarquico
-    
-    context = {
-        'conta': conta,
-        'subcontas': subcontas,
-        'caminho': caminho,
-    }
-    return render(request, 'gestor/contacontabil_detail.html', context)
-
-@login_required
-def contacontabil_update(request, codigo):
-    """Editar conta contábil"""
-    conta = get_object_or_404(ContaContabil, codigo=codigo)
-    
-    if request.method == 'POST':
-        form = ContaContabilForm(request.POST, instance=conta)
-        if form.is_valid():
-            try:
-                conta_atualizada = form.save()
-                messages.success(request, f'Conta contábil "{conta_atualizada.nome}" atualizada com sucesso!')
-                return redirect('gestor:contacontabil_detail', codigo=conta_atualizada.codigo)
-            except Exception as e:
-                messages.error(request, f'Erro ao atualizar conta contábil: {str(e)}')
-                logger.error(f'Erro ao atualizar conta contábil {conta.codigo}: {str(e)}')
-        else:
-            messages.error(request, 'Erro ao atualizar conta contábil. Verifique os dados.')
-    else:
-        form = ContaContabilForm(instance=conta)
-    
-    context = {
-        'form': form, 
-        'title': 'Editar Conta Contábil', 
-        'conta': conta,
-        'is_create': False
-    }
-    return render(request, 'gestor/contacontabil_form.html', context)
-
-@login_required
-def contacontabil_delete(request, codigo):
-    """Deletar conta contábil"""
-    conta = get_object_or_404(ContaContabil, codigo=codigo)
-    
-    # Verificar se tem subcontas
-    tem_subcontas = conta.tem_subcontas
-    
-    if request.method == 'POST':
-        if tem_subcontas:
-            messages.error(request, 
-                f'Não é possível excluir a conta contábil "{conta.nome}" pois ela possui subcontas.')
-            return redirect('gestor:contacontabil_detail', codigo=codigo)
-        
-        nome = conta.nome
-        codigo_conta = conta.codigo
-        
-        try:
-            conta.delete()
-            messages.success(request, f'Conta contábil "{nome}" (código: {codigo_conta}) excluída com sucesso!')
-            logger.info(f'Conta contábil excluída: {codigo_conta} - {nome} por {request.user}')
-            return redirect('gestor:contacontabil_list')
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir conta contábil: {str(e)}')
-            logger.error(f'Erro ao excluir conta contábil {codigo_conta}: {str(e)}')
-            return redirect('gestor:contacontabil_detail', codigo=codigo)
-    
-    context = {
-        'conta': conta,
-        'tem_subcontas': tem_subcontas,
-    }
-    return render(request, 'gestor/contacontabil_delete.html', context)
-
-# ===== API ENDPOINTS PARA CENTRO DE CUSTO E CONTA CONTÁBIL =====
-
 @login_required
 def api_validar_codigo_centrocusto(request):
     """API para validar código de centro de custo em tempo real"""
@@ -1199,6 +1038,188 @@ def api_validar_codigo_centrocusto(request):
     
     return JsonResponse(info)
 
+
+# ===== VIEWS CONTA CONTÁBIL SIMPLIFICADAS =====
+
+@login_required
+def contacontabil_list(request):
+    """Lista de contas contábeis com filtros"""
+    search = request.GET.get('search', '')
+    nivel = request.GET.get('nivel', '')
+    ativa = request.GET.get('ativa', '')
+    
+    contas = ContaContabil.objects.select_related('conta_pai').filter(ativa=True)
+    
+    if search:
+        contas = contas.filter(
+            Q(codigo__icontains=search) |
+            Q(nome__icontains=search) |
+            Q(descricao__icontains=search)
+        )
+    
+    if nivel:
+        contas = contas.filter(nivel=nivel)
+    
+    if ativa:
+        contas = contas.filter(ativa=(ativa == 'true'))
+    
+    # Ordenar por código para manter hierarquia
+    contas = contas.order_by('codigo')
+    
+    # Paginação
+    paginator = Paginator(contas, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Opções para filtros
+    niveis_disponiveis = sorted(set(ContaContabil.objects.values_list('nivel', flat=True)))
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'nivel': nivel,
+        'ativa': ativa,
+        'niveis_disponiveis': niveis_disponiveis,
+    }
+    return render(request, 'gestor/contacontabil_list.html', context)
+
+@login_required
+def contacontabil_create(request):
+    """Criar nova conta contábil"""
+    if request.method == 'POST':
+        form = ContaContabilForm(request.POST)
+        if form.is_valid():
+            try:
+                conta = form.save()
+                messages.success(request, f'Conta contábil "{conta.nome}" criada com sucesso!')
+                
+                # Informar sobre o tipo determinado automaticamente
+                tipo_msg = "Sintética (agrupadora)" if conta.e_sintetico else "Analítica (operacional)"
+                messages.info(request, f'Tipo determinado automaticamente: {tipo_msg}')
+                
+                logger.info(f'Conta contábil criada: {conta.codigo} - {conta.nome} por {request.user}')
+                return redirect('gestor:contacontabil_list')
+            except Exception as e:
+                messages.error(request, f'Erro ao criar conta contábil: {str(e)}')
+                logger.error(f'Erro ao criar conta contábil: {str(e)}')
+        else:
+            messages.error(request, 'Erro ao criar conta contábil. Verifique os dados.')
+    else:
+        form = ContaContabilForm()
+    
+    context = {
+        'form': form, 
+        'title': 'Nova Conta Contábil',
+        'is_create': True
+    }
+    return render(request, 'gestor/contacontabil_form.html', context)
+
+@login_required
+def contacontabil_update(request, codigo):
+    """Editar conta contábil"""
+    conta = get_object_or_404(ContaContabil, codigo=codigo)
+    
+    # Guardar valores originais para log
+    valores_originais = {
+        'codigo': conta.codigo,
+        'nome': conta.nome,
+        'tipo': conta.get_tipo_display(),
+        'ativa': conta.ativa
+    }
+    
+    if request.method == 'POST':
+        form = ContaContabilForm(request.POST, instance=conta)
+        if form.is_valid():
+            try:
+                conta_atualizada = form.save()
+                
+                # Log de alterações
+                alteracoes = []
+                for campo, valor_original in valores_originais.items():
+                    if campo == 'tipo':
+                        valor_novo = conta_atualizada.get_tipo_display()
+                    else:
+                        valor_novo = getattr(conta_atualizada, campo)
+                    
+                    if valor_original != valor_novo:
+                        alteracoes.append(f"{campo}: {valor_original} → {valor_novo}")
+                
+                if alteracoes:
+                    logger.info(f'Conta contábil {conta.codigo} alterada por {request.user}: {", ".join(alteracoes)}')
+                
+                messages.success(request, f'Conta contábil "{conta_atualizada.nome}" atualizada com sucesso!')
+                
+                # Se o tipo mudou, informar
+                if valores_originais['tipo'] != conta_atualizada.get_tipo_display():
+                    messages.info(request, 
+                        f'Tipo alterado automaticamente de {valores_originais["tipo"]} '
+                        f'para {conta_atualizada.get_tipo_display()}')
+                
+                return redirect('gestor:contacontabil_list')
+            except Exception as e:
+                messages.error(request, f'Erro ao atualizar conta contábil: {str(e)}')
+                logger.error(f'Erro ao atualizar conta contábil {conta.codigo}: {str(e)}')
+        else:
+            messages.error(request, 'Erro ao atualizar conta contábil. Verifique os dados.')
+    else:
+        form = ContaContabilForm(instance=conta)
+    
+    context = {
+        'form': form, 
+        'title': 'Editar Conta Contábil', 
+        'conta': conta,
+        'is_create': False
+    }
+    return render(request, 'gestor/contacontabil_form.html', context)
+
+@login_required
+def contacontabil_delete(request, codigo):
+    """Deletar conta contábil"""
+    conta = get_object_or_404(ContaContabil, codigo=codigo)
+    
+    # Verificar se tem subcontas
+    tem_subcontas = conta.tem_subcontas
+    
+    if request.method == 'POST':
+        if tem_subcontas:
+            messages.error(request, 
+                f'Não é possível excluir a conta contábil "{conta.nome}" pois ela possui {conta.subcontas.count()} subconta(s).')
+            return redirect('gestor:contacontabil_list')
+        
+        nome = conta.nome
+        codigo_conta = conta.codigo
+        tipo = conta.get_tipo_display()
+        
+        # Se tem pai, ele pode mudar de sintético para analítico
+        conta_pai = conta.conta_pai
+        
+        try:
+            conta.delete()
+            messages.success(request, f'Conta contábil "{nome}" (código: {codigo_conta}, tipo: {tipo}) excluída com sucesso!')
+            
+            # Verificar se o pai mudou de tipo
+            if conta_pai:
+                conta_pai.refresh_from_db()
+                if conta_pai.e_analitico:
+                    messages.info(request, 
+                        f'A conta pai "{conta_pai.nome}" foi automaticamente '
+                        f'alterada para Analítica por não ter mais subcontas.')
+            
+            logger.info(f'Conta contábil excluída: {codigo_conta} - {nome} por {request.user}')
+            return redirect('gestor:contacontabil_list')
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir conta contábil: {str(e)}')
+            logger.error(f'Erro ao excluir conta contábil {codigo_conta}: {str(e)}')
+            return redirect('gestor:contacontabil_list')
+    
+    context = {
+        'conta': conta,
+        'tem_subcontas': tem_subcontas,
+    }
+    return render(request, 'gestor/contacontabil_delete.html', context)
+
+# ===== API ENDPOINT PARA CONTA CONTÁBIL =====
+
 @login_required
 def api_validar_codigo_contacontabil(request):
     """API para validar código de conta contábil em tempo real"""
@@ -1246,3 +1267,4 @@ def api_validar_codigo_contacontabil(request):
     info['nivel'] = codigo.count('.') + 1
     
     return JsonResponse(info)
+

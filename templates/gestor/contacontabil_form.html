@@ -2,6 +2,52 @@
 
 {% block title %}{% if form.instance.pk %}Editar{% else %}Nova{% endif %} Conta Contábil | SynchroBI{% endblock %}
 
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const codigoInput = document.getElementById('{{ form.codigo.id_for_label }}');
+    const contaPaiInfo = document.getElementById('conta-pai-info');
+    const tipoDisplay = document.getElementById('tipo-display');
+    
+    function atualizarInfoHierarquia() {
+        const codigo = codigoInput.value.trim();
+        
+        if (!codigo) {
+            contaPaiInfo.innerHTML = '<span class="text-muted">Digite o código para ver</span>';
+            return;
+        }
+        
+        // Determinar código da conta pai
+        if (codigo.includes('.')) {
+            const partes = codigo.split('.');
+            const codigoPai = partes.slice(0, -1).join('.');
+            contaPaiInfo.innerHTML = `Código pai: <strong>${codigoPai}</strong>`;
+        } else {
+            contaPaiInfo.innerHTML = '<span class="badge bg-warning text-dark">Conta Raiz</span>';
+        }
+        
+        // Atualizar tipo (se não está editando)
+        {% if not form.instance.pk %}
+        tipoDisplay.innerHTML = `
+            <span class="badge bg-info">
+                <i class="fas fa-info-circle me-1"></i>
+                Será determinado após salvar
+            </span>
+        `;
+        {% endif %}
+    }
+    
+    // Eventos
+    codigoInput.addEventListener('input', function() {
+        atualizarInfoHierarquia();
+    });
+    
+    // Inicializar
+    atualizarInfoHierarquia();
+});
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="card shadow">
   <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -27,98 +73,107 @@
       {% endif %}
       
       <!-- Informações Principais -->
-      <div class="row g-3 mb-4">
-        <!-- Primeira linha: Código e Nome -->
-        <div class="col-md-4">
-          <label for="{{ form.codigo.id_for_label }}" class="form-label">
-            Código <span class="text-danger">*</span>
-          </label>
-          {{ form.codigo }}
-          {% if form.codigo.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.codigo.errors %}{{ error }}{% endfor %}
-            </div>
-          {% endif %}
-          <div class="form-text">Ex: 010.010.01</div>
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-info-circle me-2"></i>
+            Informações Principais
+          </h6>
         </div>
-        
-        <div class="col-md-8">
-          <label for="{{ form.nome.id_for_label }}" class="form-label">
-            Nome da Conta <span class="text-danger">*</span>
-          </label>
-          {{ form.nome }}
-          {% if form.nome.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.nome.errors %}{{ error }}{% endfor %}
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Primeira linha: Código -->
+            <div class="col-md-4">
+              <label for="{{ form.codigo.id_for_label }}" class="form-label">
+                Código Hierárquico <span class="text-danger">*</span>
+              </label>
+              {{ form.codigo }}
+              {% if form.codigo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.codigo.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
             </div>
-          {% endif %}
-        </div>
-        
-        <!-- Segunda linha: Tipo de Conta e Status -->
-        <div class="col-md-6">
-          <label for="{{ form.tipo_conta.id_for_label }}" class="form-label">
-            Tipo da Conta <span class="text-danger">*</span>
-          </label>
-          {{ form.tipo_conta }}
-          {% if form.tipo_conta.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.tipo_conta.errors %}{{ error }}{% endfor %}
+            
+            <!-- Segunda linha: Informação da Hierarquia -->
+            <div class="col-md-6">
+              <label class="form-label">Conta Contábil Superior</label>
+              <div class="form-control bg-light" id="conta-pai-info">
+                {% if form.instance.pk and form.instance.conta_pai %}
+                  {{ form.instance.conta_pai.codigo }} - {{ form.instance.conta_pai.nome }}
+                {% elif form.instance.pk %}
+                  Conta Raiz (sem superior)
+                {% else %}
+                  <span class="text-muted">Será determinado pelo código</span>
+                {% endif %}
+              </div>
             </div>
-          {% endif %}
-        </div>
-        
-        <div class="col-md-6">
-          <div class="form-check form-switch mt-4">
-            {{ form.ativa }}
-            <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
-              Conta Ativa
-            </label>
+            
+            <div class="col-md-2">
+              <label class="form-label">Tipo</label>
+              <div class="form-control bg-light" id="tipo-display">
+                {% if form.instance.pk %}
+                  <span class="badge {% if form.instance.e_sintetico %}bg-primary{% else %}bg-success{% endif %}">
+                    {{ form.instance.get_tipo_display }}
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary">Automático</span>
+                {% endif %}
+              </div>
+            </div>
+            
+            <!-- Terceira linha: Nome e Status -->
+            <div class="col-md-10">
+              <label for="{{ form.nome.id_for_label }}" class="form-label">
+                Nome da Conta Contábil <span class="text-danger">*</span>
+              </label>
+              {{ form.nome }}
+              {% if form.nome.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.nome.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-2">
+              <div class="form-check form-switch mt-4">
+                {{ form.ativa }}
+                <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
+                  Conta Ativa
+                </label>
+              </div>
+              {% if form.ativa.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.ativa.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
           </div>
-          {% if form.ativa.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.ativa.errors %}{{ error }}{% endfor %}
-            </div>
-          {% endif %}
         </div>
-        
-        <!-- Terceira linha: Categorias DRE -->
-        <div class="col-md-6">
-          <label for="{{ form.categoria_dre.id_for_label }}" class="form-label">
-            Categoria DRE
-          </label>
-          {{ form.categoria_dre }}
-          {% if form.categoria_dre.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.categoria_dre.errors %}{{ error }}{% endfor %}
-            </div>
-          {% endif %}
-          <div class="form-text">Ex: Receita Bruta, CMV, Despesas Operacionais</div>
+      </div>
+
+      <!-- Descrição -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-file-alt me-2"></i>
+            Descrição
+          </h6>
         </div>
-        
-        <div class="col-md-6">
-          <label for="{{ form.subcategoria_dre.id_for_label }}" class="form-label">
-            Subcategoria DRE
-          </label>
-          {{ form.subcategoria_dre }}
-          {% if form.subcategoria_dre.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.subcategoria_dre.errors %}{{ error }}{% endfor %}
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label for="{{ form.descricao.id_for_label }}" class="form-label">
+                Descrição (opcional)
+              </label>
+              {{ form.descricao }}
+              {% if form.descricao.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.descricao.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
             </div>
-          {% endif %}
-          <div class="form-text">Ex: Vendas, Material, Pessoal</div>
-        </div>
-        
-        <!-- Descrição -->
-        <div class="col-12">
-          <label for="{{ form.descricao.id_for_label }}" class="form-label">
-            Descrição (opcional)
-          </label>
-          {{ form.descricao }}
-          {% if form.descricao.errors %}
-            <div class="text-danger small mt-1">
-              {% for error in form.descricao.errors %}{{ error }}{% endfor %}
-            </div>
-          {% endif %}
+          </div>
         </div>
       </div>
 

@@ -6,7 +6,7 @@
 <div class="card shadow">
   <div class="card-header bg-light d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      <i class="fas fa-chart-bar me-2"></i> Contas Contábeis
+      <i class="fas fa-chart-line me-2"></i> Contas Contábeis
     </h5>
     <div>
       <a href="{% url 'gestor:contacontabil_create' %}" class="btn btn-primary btn-sm">
@@ -24,7 +24,7 @@
       <div class="col-md-4">
         <label for="search" class="form-label small">Buscar</label>
         <input type="text" name="search" id="search" class="form-control form-control-sm" 
-               placeholder="Código, nome, categoria..." value="{{ search|default:'' }}">
+               placeholder="Código, nome..." value="{{ search|default:'' }}">
       </div>
       
       <div class="col-md-2">
@@ -40,14 +40,11 @@
       </div>
       
       <div class="col-md-2">
-        <label for="tipo_conta" class="form-label small">Tipo</label>
-        <select name="tipo_conta" id="tipo_conta" class="form-select form-select-sm">
+        <label for="ativa" class="form-label small">Status</label>
+        <select name="ativa" id="ativa" class="form-select form-select-sm">
           <option value="">Todos</option>
-          {% for key, label in tipos_conta %}
-            <option value="{{ key }}" {% if tipo_conta == key %}selected{% endif %}>
-              {{ label }}
-            </option>
-          {% endfor %}
+          <option value="true" {% if ativa == 'true' %}selected{% endif %}>Ativas</option>
+          <option value="false" {% if ativa == 'false' %}selected{% endif %}>Inativas</option>
         </select>
       </div>
       
@@ -71,10 +68,10 @@
       <table class="table table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
-            <th style="width: 120px;">Código</th>
+            <th style="width: 150px;">Código</th>
             <th>Nome</th>
-            <th style="width: 120px;" class="text-center">Tipo</th>
-            <th style="width: 120px;" class="text-end">Ações</th>
+            <th style="width: 250px;" class="text-center">Tipo</th>
+            <th style="width: 150px;" class="text-end">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -86,10 +83,8 @@
               <td>
                 <div>
                   <div class="fw-bold">{{ conta.nome }}</div>
-                  {% if conta.categoria_dre %}
-                    <small class="text-muted">{{ conta.get_tipo_conta_display }} - {{ conta.categoria_dre }}</small>
-                  {% else %}
-                    <small class="text-muted">{{ conta.get_tipo_conta_display }}</small>
+                  {% if conta.descricao %}
+                    <small class="text-muted">{{ conta.descricao|truncatechars:50 }}</small>
                   {% endif %}
                 </div>
               </td>
@@ -114,14 +109,12 @@
           {% empty %}
             <tr>
               <td colspan="4" class="text-center py-5 text-muted">
-                {% if search or nivel or tipo_conta %}
-                  <i class="fas fa-search fa-2x mb-3"></i>
+                {% if search or nivel or ativa %}
                   <p>Nenhuma conta contábil encontrada.</p>
                   <a href="{% url 'gestor:contacontabil_list' %}" class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-eraser me-1"></i> Limpar filtros
                   </a>
                 {% else %}
-                  <i class="fas fa-inbox fa-2x mb-3"></i>
                   <p>Nenhuma conta contábil cadastrada.</p>
                   <a href="{% url 'gestor:contacontabil_create' %}" class="btn btn-sm btn-primary">
                     <i class="fas fa-plus me-1"></i> Criar primeira conta
@@ -141,12 +134,12 @@
           <ul class="pagination pagination-sm justify-content-center mb-0">
             {% if page_obj.has_previous %}
               <li class="page-item">
-                <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if tipo_conta %}&tipo_conta={{ tipo_conta }}{% endif %}">
+                <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
                   <i class="fas fa-angle-double-left"></i>
                 </a>
               </li>
               <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if tipo_conta %}&tipo_conta={{ tipo_conta }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
                   <i class="fas fa-angle-left"></i>
                 </a>
               </li>
@@ -158,12 +151,12 @@
             
             {% if page_obj.has_next %}
               <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if tipo_conta %}&tipo_conta={{ tipo_conta }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
                   <i class="fas fa-angle-right"></i>
                 </a>
               </li>
               <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if tipo_conta %}&tipo_conta={{ tipo_conta }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if nivel %}&nivel={{ nivel }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
                   <i class="fas fa-angle-double-right"></i>
                 </a>
               </li>

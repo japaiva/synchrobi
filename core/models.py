@@ -528,7 +528,7 @@ class CentroCusto(models.Model):
 # ===== NOVO: MODELO CONTA CONTÁBIL =====
 
 class ContaContabil(models.Model):
-    """Modelo para plano de contas contábil hierárquico"""
+    """Modelo para plano de contas contábil hierárquico simplificado"""
     
     codigo = models.CharField(max_length=20, primary_key=True, verbose_name="Código")
     nome = models.CharField(max_length=255, verbose_name="Nome da Conta")
@@ -545,31 +545,6 @@ class ContaContabil(models.Model):
     )
     
     nivel = models.IntegerField(verbose_name="Nível Hierárquico")
-    
-    # Classificação DRE
-    tipo_conta = models.CharField(max_length=50, choices=[
-        ('receita', 'Receita'),
-        ('custo', 'Custo'),
-        ('despesa', 'Despesa'),
-        ('ativo', 'Ativo'),
-        ('passivo', 'Passivo'),
-        ('patrimonio', 'Patrimônio Líquido'),
-    ], verbose_name="Tipo da Conta")
-    
-    # Classificação para relatórios gerenciais
-    categoria_dre = models.CharField(
-        max_length=100, 
-        blank=True, 
-        verbose_name="Categoria DRE",
-        help_text="Ex: Receita Bruta, CMV, Despesas Operacionais"
-    )
-    subcategoria_dre = models.CharField(
-        max_length=100, 
-        blank=True, 
-        verbose_name="Subcategoria DRE",
-        help_text="Ex: Vendas, Material, Pessoal"
-    )
-    
     ativa = models.BooleanField(default=True, verbose_name="Ativa")
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
@@ -702,9 +677,7 @@ class ContaContabil(models.Model):
             models.Index(fields=['ativa']),
             models.Index(fields=['conta_pai', 'ativa']),
             models.Index(fields=['nivel']),
-            models.Index(fields=['tipo_conta']),
         ]
-
 # ===== MODELO FORNECEDOR (mantido como estava) =====
 
 class Fornecedor(models.Model):
