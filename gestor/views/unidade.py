@@ -1,4 +1,4 @@
-# gestor/views/unidade.py - CRUD de Unidades Organizacionais
+# gestor/views/unidade.py - CRUD de Unidades Organizacionais CORRIGIDO
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -19,8 +19,9 @@ def unidade_list(request):
     search = request.GET.get('search', '')
     nivel = request.GET.get('nivel', '')
     
-    # Buscar todas as unidades com hierarquia
-    unidades = Unidade.objects.select_related('unidade_pai').prefetch_related('sub_unidades').filter(ativa=True)
+    # CORRIGIDO: Removido select_related('unidade_pai') e prefetch_related('sub_unidades')
+    # pois esses relacionamentos agora são dinâmicos
+    unidades = Unidade.objects.select_related('empresa').filter(ativa=True)
     
     if search:
         unidades = unidades.filter(
@@ -76,16 +77,31 @@ def unidade_create(request):
     else:
         form = UnidadeForm()
         
-        # Se veio de uma unidade pai, pré-preencher
-        unidade_pai_id = request.GET.get('unidade_pai')
-        if unidade_pai_id:
+        # CORRIGIDO: Se veio de uma unidade pai, pré-preencher usando hierarquia dinâmica
+        codigo_pai = request.GET.get('codigo_pai')
+        sugestao_codigo = request.GET.get('sugestao')
+        
+        if codigo_pai:
             try:
-                unidade_pai = Unidade.objects.get(id=unidade_pai_id)
-                # Sugerir código baseado no pai
-                proxima_sequencia = unidade_pai.sub_unidades.count() + 1
-                codigo_sugerido = f"{unidade_pai.codigo}.{proxima_sequencia:02d}"
-                form.initial['codigo'] = codigo_sugerido
-                form.initial['unidade_pai_display'] = f"{unidade_pai.codigo} - {unidade_pai.nome}"
+                # Buscar unidade pai pelo código
+                unidade_pai = Unidade.objects.get(codigo=codigo_pai)
+                
+                # Se há sugestão de código, usar
+                if sugestao_codigo:
+                    form.initial['codigo'] = sugestao_codigo
+                else:
+                    # Calcular próxima sequência baseada nos filhos diretos
+                    filhos_diretos = unidade_pai.get_filhos_diretos()
+                    proxima_sequencia = filhos_diretos.count() + 1
+                    codigo_sugerido = f"{unidade_pai.codigo}.{proxima_sequencia:02d}"
+                    form.initial['codigo'] = codigo_sugerido
+                
+                # Informação visual sobre o pai (para o template)
+                form.pai_info = {
+                    'codigo': unidade_pai.codigo,
+                    'nome': unidade_pai.nome
+                }
+                
             except Unidade.DoesNotExist:
                 pass
     
@@ -101,14 +117,15 @@ def unidade_detail(request, pk):
     """Detalhes da unidade"""
     unidade = get_object_or_404(Unidade, pk=pk)
     
-    # Buscar sub-unidades diretas (prefetch para evitar N+1)
-    sub_unidades = unidade.sub_unidades.filter(ativa=True).prefetch_related('sub_unidades').order_by('codigo')
+    # CORRIGIDO: Usar hierarquia dinâmica
+    # Buscar sub-unidades diretas
+    sub_unidades = unidade.get_filhos_diretos().order_by('codigo')
     
     # Caminho hierárquico
-    caminho = unidade.caminho_hierarquico
+    caminho = unidade.get_caminho_hierarquico()
     
     # Estatísticas
-    total_sub_unidades = unidade.get_todas_sub_unidades(include_self=False)
+    total_sub_unidades = unidade.get_todos_filhos_recursivo(include_self=False)
     unidades_operacionais = unidade.get_unidades_operacionais()
     
     context = {
@@ -183,33 +200,35 @@ def unidade_delete(request, pk):
     """Deletar unidade"""
     unidade = get_object_or_404(Unidade, pk=pk)
     
-    # Verificar se tem sub-unidades
-    tem_sub_unidades = unidade.tem_sub_unidades
+    # CORRIGIDO: Verificar se tem sub-unidades usando hierarquia dinâmica
+    tem_sub_unidades = unidade.tem_filhos
+    filhos_count = unidade.get_filhos_diretos().count()
     
     if request.method == 'POST':
         if tem_sub_unidades:
             messages.error(request, 
-                f'Não é possível excluir a unidade "{unidade.nome}" pois ela possui {unidade.sub_unidades.count()} sub-unidade(s).')
+                f'Não é possível excluir a unidade "{unidade.nome}" pois ela possui {filhos_count} sub-unidade(s).')
             return redirect('gestor:unidade_detail', pk=pk)
         
         nome = unidade.nome
         codigo = unidade.codigo
         tipo = unidade.get_tipo_display()
         
-        # Se tem pai, ele pode mudar de sintético para analítico
-        unidade_pai = unidade.unidade_pai
+        # CORRIGIDO: Se tem pai, ele pode mudar de sintético para analítico
+        unidade_pai = unidade.pai  # Usando propriedade dinâmica
         
         try:
             unidade.delete()
             messages.success(request, f'Unidade "{nome}" (código: {codigo}, tipo: {tipo}) excluída com sucesso!')
             
-            # Verificar se o pai mudou de tipo
+            # Verificar se o pai mudou de tipo (nota: pode precisar de lógica adicional)
             if unidade_pai:
-                unidade_pai.refresh_from_db()
-                if unidade_pai.e_analitico:
+                # Como a hierarquia é dinâmica, precisaríamos verificar se o pai ainda tem filhos
+                filhos_pai_restantes = unidade_pai.get_filhos_diretos().count()
+                if filhos_pai_restantes == 0:
                     messages.info(request, 
-                        f'A unidade pai "{unidade_pai.nome}" foi automaticamente '
-                        f'alterada para Analítica por não ter mais sub-unidades.')
+                        f'A unidade pai "{unidade_pai.nome}" pode precisar ter seu tipo reavaliado '
+                        f'por não ter mais sub-unidades.')
             
             logger.info(f'Unidade excluída: {codigo} - {nome} por {request.user}')
             return redirect('gestor:unidade_list')
@@ -221,33 +240,60 @@ def unidade_delete(request, pk):
     context = {
         'unidade': unidade,
         'tem_sub_unidades': tem_sub_unidades,
+        'filhos_count': filhos_count,
     }
     return render(request, 'gestor/unidade_delete.html', context)
 
 @login_required
 def unidade_arvore(request):
     """View para exibir árvore hierárquica de unidades"""
-    unidades = Unidade.objects.filter(ativa=True).prefetch_related('sub_unidades').order_by('codigo')
+    # CORRIGIDO: Não usar prefetch_related, pois relacionamentos são dinâmicos
+    unidades = Unidade.objects.filter(ativa=True).select_related('empresa').order_by('codigo')
     
-    # Construir estrutura de árvore
-    def construir_arvore(unidade_pai=None, nivel=0):
+    # Construir estrutura de árvore usando hierarquia dinâmica
+    def construir_arvore(nivel=1):
         arvore = []
-        unidades_nivel = [u for u in unidades if u.unidade_pai == unidade_pai]
+        # Buscar unidades de nível específico
+        unidades_nivel = [u for u in unidades if u.nivel == nivel]
         
         for unidade in unidades_nivel:
-            arvore.append({
-                'unidade': unidade,
-                'nivel': nivel,
-                'sub_arvore': construir_arvore(unidade, nivel + 1)
-            })
+            # Verificar se esta unidade tem um pai
+            if nivel == 1 or unidade.pai:
+                arvore.append({
+                    'unidade': unidade,
+                    'nivel': nivel,
+                    'sub_arvore': construir_sub_arvore(unidade)
+                })
         
         return arvore
     
-    arvore_completa = construir_arvore()
+    def construir_sub_arvore(unidade_pai):
+        sub_arvore = []
+        filhos = unidade_pai.get_filhos_diretos()
+        
+        for filho in filhos:
+            sub_arvore.append({
+                'unidade': filho,
+                'nivel': filho.nivel,
+                'sub_arvore': construir_sub_arvore(filho)
+            })
+        
+        return sub_arvore
+    
+    # Construir apenas as raízes (nível 1) e suas sub-árvores
+    arvore_completa = []
+    unidades_raiz = [u for u in unidades if u.nivel == 1]
+    
+    for unidade_raiz in unidades_raiz:
+        arvore_completa.append({
+            'unidade': unidade_raiz,
+            'nivel': 1,
+            'sub_arvore': construir_sub_arvore(unidade_raiz)
+        })
     
     # Contar tipos
     unidades_list = list(unidades)
-    unidades_sinteticas = sum(1 for u in unidades_list if u.tem_sub_unidades)
+    unidades_sinteticas = sum(1 for u in unidades_list if u.tem_filhos)
     unidades_analiticas = len(unidades_list) - unidades_sinteticas
     
     context = {
@@ -265,7 +311,8 @@ def api_unidade_filhas(request, pk):
     """API para buscar sub-unidades de uma unidade"""
     try:
         unidade = Unidade.objects.get(pk=pk)
-        sub_unidades = unidade.sub_unidades.filter(ativa=True).order_by('codigo')
+        # CORRIGIDO: Usar hierarquia dinâmica
+        sub_unidades = unidade.get_filhos_diretos().order_by('codigo')
         
         data = {
             'success': True,
@@ -281,7 +328,7 @@ def api_unidade_filhas(request, pk):
                     'codigo_allstrategy': sub.codigo_allstrategy,
                     'nome': sub.nome,
                     'tipo_display': sub.get_tipo_display(),
-                    'tem_filhas': sub.tem_sub_unidades
+                    'tem_filhas': sub.tem_filhos
                 }
                 for sub in sub_unidades
             ]
@@ -317,28 +364,28 @@ def api_validar_codigo(request):
     if query.exists():
         return JsonResponse({'valid': False, 'error': 'Já existe uma unidade com este código'})
     
-    # Verificar hierarquia
+    # Verificar hierarquia usando método dinâmico
     info = {'valid': True}
     
     if '.' in codigo:
-        partes = codigo.split('.')
-        codigo_pai = '.'.join(partes[:-1])
+        # Criar instância temporária para testar hierarquia
+        temp_unidade = Unidade(codigo=codigo)
+        pai = temp_unidade.encontrar_pai_hierarquico()
         
-        try:
-            unidade_pai = Unidade.objects.get(codigo=codigo_pai)
+        if pai:
             info['pai'] = {
-                'id': unidade_pai.id,
-                'codigo': unidade_pai.codigo,
-                'nome': unidade_pai.nome,
-                'tipo_display': unidade_pai.get_tipo_display()
+                'id': pai.id,
+                'codigo': pai.codigo,
+                'nome': pai.nome,
+                'tipo_display': pai.get_tipo_display()
             }
-                
-        except Unidade.DoesNotExist:
+        else:
+            partes = codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
             info['valid'] = False
             info['error'] = f'Unidade pai com código "{codigo_pai}" não existe'
     else:
         info['pai'] = None
-        info['nivel'] = 1
     
     # Calcular nível
     info['nivel'] = codigo.count('.') + 1

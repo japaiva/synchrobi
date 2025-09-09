@@ -1,30 +1,20 @@
-# core/forms.py - Forms atualizados com Centro de Custo e Conta Contábil
+# core/forms.py - Forms simplificados para hierarquia dinâmica
 
 from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from core.models import Usuario, Unidade, CentroCusto, ContaContabil, ParametroSistema, Empresa, EmpresaCentroCusto
 
-# ===== FORMULÁRIOS EXISTENTES (mantidos) =====
+# ===== FORMULÁRIO UNIDADE SIMPLIFICADO =====
 
 class UnidadeForm(forms.ModelForm):
-    """Formulário para criar/editar unidades organizacionais"""
-    
-    # Campo para exibir unidade pai (somente leitura, calculado automaticamente)
-    unidade_pai_display = forms.CharField(
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'readonly': True
-        }),
-        label="Unidade Superior"
-    )
+    """Formulário para criar/editar unidades organizacionais com hierarquia dinâmica"""
     
     class Meta:
         model = Unidade
         fields = [
             'codigo', 'codigo_allstrategy', 'nome', 
-             'tipo', 'empresa','descricao', 'ativa'
+            'tipo', 'empresa', 'descricao', 'ativa'
         ]
 
         widgets = {
@@ -35,7 +25,8 @@ class UnidadeForm(forms.ModelForm):
                 'class': 'form-control'
             }),
             'tipo': forms.Select(attrs={
-                'class': 'form-select'}),
+                'class': 'form-select'
+            }),
             'nome': forms.TextInput(attrs={
                 'class': 'form-control'
             }),
@@ -55,11 +46,9 @@ class UnidadeForm(forms.ModelForm):
         # Popular lista de empresas ativas
         self.fields['empresa'].queryset = Empresa.objects.filter(ativa=True).order_by('sigla')
         
-        # Se está editando, mostrar a unidade pai atual
-        if self.instance.pk and self.instance.unidade_pai:
-            self.fields['unidade_pai_display'].initial = f"{self.instance.unidade_pai.codigo} - {self.instance.unidade_pai.nome}"
-        elif self.instance.pk:
-            self.fields['unidade_pai_display'].initial = "Unidade Raiz (sem superior)"
+        # Adicionar help texts
+        self.fields['codigo'].help_text = "Use pontos para separar níveis (ex: 1.2.01.30.00.110)"
+        self.fields['tipo'].help_text = "S=Sintético (agrupador), A=Analítico (operacional)"
     
     def clean_codigo(self):
         """Validação específica para código principal"""
@@ -98,8 +87,26 @@ class UnidadeForm(forms.ModelForm):
         
         return codigo_allstrategy
     
+    def clean(self):
+        """Validação customizada simplificada"""
+        cleaned_data = super().clean()
+        codigo = cleaned_data.get('codigo')
+        
+        # Verificar se pai existe (apenas para códigos com pontos)
+        if codigo and '.' in codigo:
+            temp_instance = Unidade(codigo=codigo)
+            pai = temp_instance.encontrar_pai_hierarquico()
+            
+            if not pai:
+                raise forms.ValidationError({
+                    'codigo': f'Nenhuma unidade pai foi encontrada para o código "{codigo}". '
+                             f'Certifique-se de que existe pelo menos uma unidade superior.'
+                })
+        
+        return cleaned_data
+    
     def save(self, commit=True):
-        """Override do save - o modelo cuida da hierarquia automaticamente"""
+        """Save simplificado - modelo cuida da hierarquia"""
         unidade = super().save(commit=False)
         
         # Se não tem código All Strategy, sugerir baseado no código
@@ -113,6 +120,184 @@ class UnidadeForm(forms.ModelForm):
             unidade.save()
         
         return unidade
+
+# ===== FORMULÁRIO CENTRO DE CUSTO SIMPLIFICADO =====
+
+class CentroCustoForm(forms.ModelForm):
+    """Formulário para criar/editar centros de custo com hierarquia dinâmica"""
+    
+    class Meta:
+        model = CentroCusto
+        fields = [
+            'codigo', 'nome', 'tipo', 'descricao', 'ativo'
+        ]
+        widgets = {
+            'codigo': forms.TextInput(attrs={
+                'class': 'form-control'
+            }),
+            'nome': forms.TextInput(attrs={
+                'class': 'form-control'
+            }),
+            'tipo': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'descricao': forms.Textarea(attrs={
+                'class': 'form-control', 
+                'rows': 3
+            }),
+            'ativo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Help texts
+        self.fields['codigo'].help_text = "Use pontos para separar níveis (ex: 1.1.01)"
+        self.fields['tipo'].help_text = "S=Sintético (agrupador), A=Analítico (operacional)"
+        
+        # Se estiver editando um centro existente
+        if self.instance.pk:
+            # Desabilitar o campo tipo se já tem sub-centros
+            if self.instance.tem_sub_centros:
+                self.fields['tipo'].widget.attrs['disabled'] = True
+                self.fields['tipo'].help_text = "Tipo não pode ser alterado pois o centro possui sub-centros"
+    
+    def clean_codigo(self):
+        """Validação específica para código do centro de custo"""
+        codigo = self.cleaned_data.get('codigo', '').strip()
+        
+        if not codigo:
+            raise forms.ValidationError("Código é obrigatório.")
+        
+        # Validar formato (números e pontos apenas)
+        import re
+        if not re.match(r'^[\d\.]+$', codigo):
+            raise forms.ValidationError("Código deve conter apenas números e pontos.")
+        
+        # Verificar se já existe OUTRO registro com este código
+        queryset = CentroCusto.objects.filter(codigo=codigo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Já existe um centro de custo com este código.")
+        
+        return codigo
+    
+    def clean(self):
+        """Validação customizada simplificada"""
+        cleaned_data = super().clean()
+        codigo = cleaned_data.get('codigo')
+        tipo = cleaned_data.get('tipo')
+        
+        # Se estiver editando e tentar mudar tipo quando tem filhos
+        if self.instance.pk and self.instance.tem_sub_centros and tipo != self.instance.tipo:
+            raise forms.ValidationError("Não é possível alterar o tipo de um centro que possui sub-centros.")
+        
+        # Verificar se pai existe (apenas para códigos com pontos)
+        if codigo and '.' in codigo:
+            temp_instance = CentroCusto(codigo=codigo)
+            pai = temp_instance.encontrar_pai_hierarquico()
+            
+            if not pai:
+                raise forms.ValidationError({
+                    'codigo': f'Nenhum centro pai foi encontrado para o código "{codigo}". '
+                             f'Certifique-se de que existe pelo menos um centro superior.'
+                })
+        
+        return cleaned_data
+
+# ===== FORMULÁRIO CONTA CONTÁBIL SIMPLIFICADO =====
+
+class ContaContabilForm(forms.ModelForm):
+    """Formulário para criar/editar contas contábeis com hierarquia dinâmica"""
+    
+    class Meta:
+        model = ContaContabil
+        fields = [
+            'codigo', 'nome', 'tipo', 'descricao', 'ativa'
+        ]
+        widgets = {
+            'codigo': forms.TextInput(attrs={
+                'class': 'form-control'
+            }),
+            'nome': forms.TextInput(attrs={
+                'class': 'form-control'
+            }),
+            'tipo': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'descricao': forms.Textarea(attrs={
+                'class': 'form-control', 
+                'rows': 3
+            }),
+            'ativa': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Help texts
+        self.fields['codigo'].help_text = "Use pontos para separar níveis (ex: 1.1.01.001)"
+        self.fields['tipo'].help_text = "S=Sintético (agrupador), A=Analítico (aceita lançamentos)"
+        
+        # Se estiver editando uma conta existente
+        if self.instance.pk:
+            # Desabilitar o campo tipo se já tem subcontas
+            if self.instance.tem_subcontas:
+                self.fields['tipo'].widget.attrs['disabled'] = True
+                self.fields['tipo'].help_text = "Tipo não pode ser alterado pois a conta possui subcontas"
+    
+    def clean_codigo(self):
+        """Validação específica para código da conta contábil"""
+        codigo = self.cleaned_data.get('codigo', '').strip()
+        
+        if not codigo:
+            raise forms.ValidationError("Código é obrigatório.")
+        
+        # Validar formato (números e pontos apenas)
+        import re
+        if not re.match(r'^[\d\.]+$', codigo):
+            raise forms.ValidationError("Código deve conter apenas números e pontos.")
+        
+        # Verificar se já existe OUTRO registro com este código
+        queryset = ContaContabil.objects.filter(codigo=codigo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Já existe uma conta contábil com este código.")
+        
+        return codigo
+    
+    def clean(self):
+        """Validação customizada simplificada"""
+        cleaned_data = super().clean()
+        codigo = cleaned_data.get('codigo')
+        tipo = cleaned_data.get('tipo')
+        
+        # Se estiver editando e tentar mudar tipo quando tem filhos
+        if self.instance.pk and self.instance.tem_subcontas and tipo != self.instance.tipo:
+            raise forms.ValidationError("Não é possível alterar o tipo de uma conta que possui subcontas.")
+        
+        # Verificar se pai existe (apenas para códigos com pontos)
+        if codigo and '.' in codigo:
+            temp_instance = ContaContabil(codigo=codigo)
+            pai = temp_instance.encontrar_pai_hierarquico()
+            
+            if not pai:
+                raise forms.ValidationError({
+                    'codigo': f'Nenhuma conta pai foi encontrada para o código "{codigo}". '
+                             f'Certifique-se de que existe pelo menos uma conta superior.'
+                })
+        
+        return cleaned_data
+
+# ===== FORMULÁRIOS MANTIDOS IGUAIS =====
 
 class EmpresaForm(forms.ModelForm):
     """Formulário para criar/editar empresas"""
@@ -213,17 +398,9 @@ class EmpresaForm(forms.ModelForm):
         
         return empresa
 
-# core/forms.py - UsuarioForm Simplificado para seu modelo atual
-
-from django import forms
-from core.models import Usuario
-from django.contrib.auth.hashers import make_password
-
 class UsuarioForm(forms.ModelForm):
-    """
-    Formulário simplificado para usuários SynchroBI
-    Compatível com o modelo atual, mas usando apenas campos essenciais
-    """
+    """Formulário simplificado para usuários SynchroBI"""
+    
     confirm_password = forms.CharField(
         widget=forms.PasswordInput(attrs={'class': 'form-control'}), 
         required=False,
@@ -238,23 +415,13 @@ class UsuarioForm(forms.ModelForm):
     class Meta:
         model = Usuario
         fields = [
-            'username',     # código
-            'first_name',   # nome (sem last_name para ser maior)
-            'email', 
-            'telefone',
-            'nivel',        # admin/gestor/analista/contador/diretor  
-            'is_active'     # status
+            'username', 'first_name', 'email', 'telefone',
+            'nivel', 'is_active'
         ]
         widgets = {
-            'username': forms.TextInput(attrs={
-                'class': 'form-control'
-            }),
-            'first_name': forms.TextInput(attrs={
-                'class': 'form-control'
-            }),
-            'email': forms.EmailInput(attrs={
-                'class': 'form-control'
-            }),
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'telefone': forms.TextInput(attrs={
                 'class': 'form-control',
                 'data-mask': '(00) 00000-0000'
@@ -289,8 +456,7 @@ class UsuarioForm(forms.ModelForm):
         self.fields['first_name'].required = True
         self.fields['nivel'].required = True
         
-        # Ajustar choices do nível conforme seu modelo atual
-        # admin/gestor/analista/contador/diretor
+        # Choices do nível
         self.fields['nivel'].choices = [
             ('', '--- Selecione ---'),
             ('admin', 'Administrador'),
@@ -316,8 +482,7 @@ class UsuarioForm(forms.ModelForm):
         if password:
             usuario.password = make_password(password)
         
-        # Limpar campos não utilizados (opcional, para não interferir)
-        # Manter os campos do modelo, mas não exibir no form
+        # Limpar campos não utilizados
         if not usuario.centro_custo:
             usuario.centro_custo = ''
         if not usuario.unidade_negocio:
@@ -329,7 +494,6 @@ class UsuarioForm(forms.ModelForm):
             usuario.save()
         
         return usuario
-
 
 class ParametroSistemaForm(forms.ModelForm):
     """Formulário para criar/editar parâmetros do sistema"""
@@ -431,104 +595,6 @@ class ParametroSistemaForm(forms.ModelForm):
         
         return valor
 
-# ===== FORMULÁRIO CENTRO DE CUSTO (SIMPLIFICADO) =====
-
-class CentroCustoForm(forms.ModelForm):
-    """Formulário para criar/editar centros de custo"""
-    
-    class Meta:
-        model = CentroCusto
-        fields = [
-            'codigo', 'nome', 'descricao', 'ativo'
-        ]
-        widgets = {
-            'codigo': forms.TextInput(attrs={
-                'class': 'form-control'
-            }),
-            'nome': forms.TextInput(attrs={
-                'class': 'form-control'
-            }),
-            'descricao': forms.Textarea(attrs={
-                'class': 'form-control', 
-                'rows': 3
-            }),
-            'ativo': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-        }
-    
-    def clean_codigo(self):
-        """Validação específica para código do centro de custo"""
-        codigo = self.cleaned_data.get('codigo', '').strip()
-        
-        if not codigo:
-            raise forms.ValidationError("Código é obrigatório.")
-        
-        # Validar formato (números e pontos apenas)
-        import re
-        if not re.match(r'^[\d\.]+$', codigo):
-            raise forms.ValidationError("Código deve conter apenas números e pontos.")
-        
-        # Verificar se já existe OUTRO registro com este código
-        queryset = CentroCusto.objects.filter(codigo=codigo)
-        if self.instance.pk:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        
-        if queryset.exists():
-            raise forms.ValidationError("Já existe um centro de custo com este código.")
-        
-        return codigo
-
-# ===== FORMULÁRIO CONTA CONTÁBIL =====
-
-class ContaContabilForm(forms.ModelForm):
-    """Formulário para criar/editar contas contábeis simplificado"""
-    
-    class Meta:
-        model = ContaContabil
-        fields = [
-            'codigo', 'nome', 'descricao', 'ativa'
-        ]
-        widgets = {
-            'codigo': forms.TextInput(attrs={
-                'class': 'form-control'
-            }),
-            'nome': forms.TextInput(attrs={
-                'class': 'form-control'
-            }),
-            'descricao': forms.Textarea(attrs={
-                'class': 'form-control', 
-                'rows': 3
-            }),
-            'ativa': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-        }
-    
-    def clean_codigo(self):
-        """Validação específica para código da conta contábil"""
-        codigo = self.cleaned_data.get('codigo', '').strip()
-        
-        if not codigo:
-            raise forms.ValidationError("Código é obrigatório.")
-        
-        # Validar formato (números e pontos apenas)
-        import re
-        if not re.match(r'^[\d\.]+$', codigo):
-            raise forms.ValidationError("Código deve conter apenas números e pontos.")
-        
-        # Verificar se já existe OUTRO registro com este código
-        queryset = ContaContabil.objects.filter(codigo=codigo)
-        if self.instance.pk:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        
-        if queryset.exists():
-            raise forms.ValidationError("Já existe uma conta contábil com este código.")
-        
-        return codigo
-    
-# core/forms.py - Adicionar ao final do arquivo
-
 class EmpresaCentroCustoForm(forms.ModelForm):
     """Formulário simplificado para relacionar empresas com centros de custo"""
     
@@ -539,22 +605,11 @@ class EmpresaCentroCustoForm(forms.ModelForm):
             'observacoes', 'ativo'
         ]
         widgets = {
-            'empresa': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'centro_custo': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'responsavel': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'observacoes': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 3
-            }),
-            'ativo': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
+            'empresa': forms.Select(attrs={'class': 'form-select'}),
+            'centro_custo': forms.Select(attrs={'class': 'form-select'}),
+            'responsavel': forms.Select(attrs={'class': 'form-select'}),
+            'observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
         
         labels = {
@@ -569,18 +624,10 @@ class EmpresaCentroCustoForm(forms.ModelForm):
         empresa_pk = kwargs.pop('empresa_pk', None)
         super().__init__(*args, **kwargs)
         
-        # Filtrar apenas empresas ativas
+        # Filtrar apenas registros ativos
         self.fields['empresa'].queryset = Empresa.objects.filter(ativa=True).order_by('sigla')
-        
-        # Filtrar apenas centros de custo ativos
-        self.fields['centro_custo'].queryset = CentroCusto.objects.filter(
-            ativo=True
-        ).order_by('codigo')
-        
-        # Filtrar apenas usuários ativos
-        self.fields['responsavel'].queryset = Usuario.objects.filter(
-            is_active=True
-        ).order_by('first_name')
+        self.fields['centro_custo'].queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
+        self.fields['responsavel'].queryset = Usuario.objects.filter(is_active=True).order_by('first_name')
         
         # Se empresa específica foi passada, pré-selecionar
         if empresa_pk:
@@ -595,8 +642,6 @@ class EmpresaCentroCustoForm(forms.ModelForm):
         if self.instance.pk:
             self.fields['empresa'].widget.attrs['readonly'] = True
             self.fields['centro_custo'].widget.attrs['readonly'] = True
-            
-            # Informação adicional
             self.fields['empresa'].help_text = "Para alterar empresa ou centro de custo, crie um novo relacionamento"
             self.fields['centro_custo'].help_text = "Para alterar empresa ou centro de custo, crie um novo relacionamento"
     
@@ -622,18 +667,6 @@ class EmpresaCentroCustoForm(forms.ModelForm):
                 )
         
         return cleaned_data
-    
-    def save(self, commit=True):
-        """Override do save para adicionar informações extras"""
-        instance = super().save(commit=False)
-        
-
-        if commit:
-            instance.save()
-        
-        return instance
-
-# ===== FORMULÁRIO PARA FILTROS (SIMPLIFICADO) =====
 
 class EmpresaCentroCustoFiltroForm(forms.Form):
     """Formulário simplificado para filtrar relacionamentos empresa x centro de custo"""

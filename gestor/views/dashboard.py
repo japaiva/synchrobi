@@ -13,7 +13,7 @@ def home(request):
     """Dashboard principal do gestor"""
     
     # Estatísticas básicas
-    unidades_ativas = list(Unidade.objects.filter(ativa=True).prefetch_related('sub_unidades'))
+    unidades_ativas = list(Unidade.objects.filter(ativa=True))  # ← CORRIGIDO
     total_unidades = len(unidades_ativas)
     
     # Contar sintéticas e analíticas
