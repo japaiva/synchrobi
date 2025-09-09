@@ -1,4 +1,4 @@
-# gestor/views/contacontabil.py - CRUD de Contas Contábeis
+# gestor/views/contacontabil.py - CRUD com Modal Hierárquico
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -6,191 +6,399 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 import logging
+import json
 
 from core.models import ContaContabil
 from core.forms import ContaContabilForm
 
 logger = logging.getLogger('synchrobi')
 
-@login_required
-def contacontabil_list(request):
-    """Lista de contas contábeis com filtros"""
-    search = request.GET.get('search', '')
-    nivel = request.GET.get('nivel', '')
-    ativa = request.GET.get('ativa', '')
-    
-    contas = ContaContabil.objects.select_related('conta_pai').filter(ativa=True)
-    
-    if search:
-        contas = contas.filter(
-            Q(codigo__icontains=search) |
-            Q(nome__icontains=search) |
-            Q(descricao__icontains=search)
-        )
-    
-    if nivel:
-        contas = contas.filter(nivel=nivel)
-    
-    if ativa:
-        contas = contas.filter(ativa=(ativa == 'true'))
-    
-    # Ordenar por código para manter hierarquia
-    contas = contas.order_by('codigo')
-    
-    # Paginação
-    paginator = Paginator(contas, 20)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    
-    # Opções para filtros
-    niveis_disponiveis = sorted(set(ContaContabil.objects.values_list('nivel', flat=True)))
-    
-    context = {
-        'page_obj': page_obj,
-        'search': search,
-        'nivel': nivel,
-        'ativa': ativa,
-        'niveis_disponiveis': niveis_disponiveis,
-    }
-    return render(request, 'gestor/contacontabil_list.html', context)
+# ===== VIEW PRINCIPAL DA ÁRVORE =====
 
 @login_required
-def contacontabil_create(request):
-    """Criar nova conta contábil"""
+def contacontabil_tree_view(request):
+    """Visualização hierárquica OTIMIZADA de contas contábeis"""
+    
+    # OTIMIZAÇÃO 1: Query única otimizada
+    contas_queryset = ContaContabil.objects.filter(ativa=True).order_by('codigo')
+    
+    # OTIMIZAÇÃO 2: Usar o mapa de hierarquia
+    def construir_arvore_otimizada():
+        hierarchy_map, root_items = ContaContabil.build_hierarchy_map(contas_queryset)
+        
+        def construir_no_otimizado(conta):
+            children_data = hierarchy_map.get(conta.codigo, {}).get('children', [])
+            
+            return {
+                'codigo': conta.codigo,
+                'nome': conta.nome,
+                'tipo': conta.tipo,
+                'nivel': conta.nivel,
+                'ativa': conta.ativa,
+                'descricao': conta.descricao,
+                'tem_filhos': len(children_data) > 0,
+                'data_criacao': conta.data_criacao.isoformat() if conta.data_criacao else None,
+                'data_alteracao': conta.data_alteracao.isoformat() if conta.data_alteracao else None,
+                'filhos': [construir_no_otimizado(filho) for filho in sorted(children_data, key=lambda x: x.codigo)]
+            }
+        
+        return [construir_no_otimizado(raiz) for raiz in sorted(root_items, key=lambda x: x.codigo)]
+    
+    # OTIMIZAÇÃO 3: Calcular stats em uma passada
+    def calcular_stats_otimizado():
+        contas_list = list(contas_queryset)
+        total_contas = len(contas_list)
+        
+        stats_data = {
+            'total': total_contas,
+            'tipo_s': 0,
+            'tipo_a': 0,
+            'contas_por_nivel': {},
+            'niveis_existentes': set()
+        }
+        
+        for conta in contas_list:
+            if conta.tipo == 'S':
+                stats_data['tipo_s'] += 1
+            else:
+                stats_data['tipo_a'] += 1
+            
+            nivel = conta.nivel
+            stats_data['niveis_existentes'].add(nivel)
+            stats_data['contas_por_nivel'][str(nivel)] = stats_data['contas_por_nivel'].get(str(nivel), 0) + 1
+        
+        niveis_list = sorted(stats_data['niveis_existentes'])
+        stats_data.update({
+            'nivel_max': max(niveis_list) if niveis_list else 0,
+            'nivel_min': min(niveis_list) if niveis_list else 0,
+            'niveis_existentes': niveis_list
+        })
+        
+        return stats_data
+    
+    try:
+        tree_data = construir_arvore_otimizada()
+        stats = calcular_stats_otimizado()
+        
+        context = {
+            'tree_data_json': json.dumps(tree_data, ensure_ascii=False, indent=2),
+            'stats': stats,
+            'entity_name': 'Contas Contábeis',
+            'entity_singular': 'Conta Contábil',
+            'create_url': 'gestor:contacontabil_create_modal',
+            'update_url_base': '/gestor/contas-contabeis/',
+            'tree_url': 'gestor:contacontabil_tree',
+            'api_tree_data_url': 'gestor:api_contacontabil_tree_data',
+            'breadcrumb': 'Contas Contábeis',
+            'icon': 'fa-calculator'
+        }
+        
+        return render(request, 'gestor/contacontabil_tree_main.html', context)
+        
+    except Exception as e:
+        logger.error(f'Erro na construção da árvore de contas contábeis: {str(e)}')
+        context = {
+            'tree_data_json': '[]',
+            'stats': {'total': 0, 'tipo_s': 0, 'tipo_a': 0},
+            'error_message': 'Erro ao carregar árvore de contas contábeis',
+        }
+        return render(request, 'gestor/contacontabil_tree_main.html', context)
+
+# ===== VIEWS MODAIS =====
+
+@login_required
+def contacontabil_create_modal(request):
+    """Criar nova conta contábil via modal"""
+    
     if request.method == 'POST':
+        logger.info(f"Criando nova conta contábil")
+        logger.info(f"POST data recebido: {dict(request.POST)}")
+        
         form = ContaContabilForm(request.POST)
+        
         if form.is_valid():
+            logger.info(f"Formulário válido. Dados: {form.cleaned_data}")
+            
             try:
-                conta = form.save()
-                messages.success(request, f'Conta contábil "{conta.nome}" criada com sucesso!')
+                from django.db import transaction
                 
-                # Informar sobre o tipo determinado automaticamente
-                tipo_msg = "Sintética (agrupadora)" if conta.e_sintetico else "Analítica (aceita lançamentos)"
-                messages.info(request, f'Tipo determinado automaticamente: {tipo_msg}')
+                with transaction.atomic():
+                    conta = form.save()
+                    logger.info(f"Conta contábil criada: {conta.codigo} - {conta.nome}")
                 
-                logger.info(f'Conta contábil criada: {conta.codigo} - {conta.nome} por {request.user}')
-                return redirect('gestor:contacontabil_list')
+                conta_verificacao = ContaContabil.objects.get(codigo=conta.codigo)
+                logger.info(f"Verificação: conta criada com sucesso - {conta_verificacao.nome}")
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Conta contábil "{conta_verificacao.nome}" criada com sucesso!',
+                        'conta': {
+                            'codigo': conta_verificacao.codigo,
+                            'nome': conta_verificacao.nome,
+                            'tipo': conta_verificacao.tipo,
+                            'nivel': conta_verificacao.nivel
+                        }
+                    })
+                
+                messages.success(request, f'Conta contábil "{conta_verificacao.nome}" criada com sucesso!')
+                return redirect('gestor:contacontabil_tree')
+                
             except Exception as e:
+                logger.error(f"Erro ao criar conta contábil: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'Erro ao criar conta contábil: {str(e)}'
+                    })
+                
                 messages.error(request, f'Erro ao criar conta contábil: {str(e)}')
-                logger.error(f'Erro ao criar conta contábil: {str(e)}')
         else:
-            messages.error(request, 'Erro ao criar conta contábil. Verifique os dados.')
+            logger.error(f"Formulário inválido: {form.errors}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Dados inválidos. Verifique os campos.',
+                    'errors': form.errors
+                })
+            messages.error(request, 'Dados inválidos. Verifique os campos.')
+    
     else:
         form = ContaContabilForm()
+        
+        codigo_pai = request.GET.get('codigo_pai')
+        sugestao_codigo = request.GET.get('sugestao')
+        
+        if codigo_pai:
+            try:
+                conta_pai = ContaContabil.objects.get(codigo=codigo_pai)
+                if sugestao_codigo:
+                    form.initial['codigo'] = sugestao_codigo
+                else:
+                    filhos_diretos = conta_pai.get_filhos_diretos()
+                    proxima_sequencia = filhos_diretos.count() + 1
+                    codigo_sugerido = f"{conta_pai.codigo}.{proxima_sequencia:03d}"
+                    form.initial['codigo'] = codigo_sugerido
+                
+                form.pai_info = {
+                    'codigo': conta_pai.codigo,
+                    'nome': conta_pai.nome,
+                    'tipo_display': conta_pai.get_tipo_display()
+                }
+                logger.info(f"Criação com pai: {conta_pai.codigo} - {conta_pai.nome}")
+            except ContaContabil.DoesNotExist:
+                logger.warning(f'Conta pai não encontrada: {codigo_pai}')
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render(request, 'gestor/partials/contacontabil_form_modal.html', {
+            'form': form,
+            'title': 'Nova Conta Contábil',
+            'is_create': True
+        })
     
     context = {
-        'form': form, 
+        'form': form,
         'title': 'Nova Conta Contábil',
         'is_create': True
     }
     return render(request, 'gestor/contacontabil_form.html', context)
 
 @login_required
-def contacontabil_update(request, codigo):
-    """Editar conta contábil"""
+def contacontabil_update_modal(request, codigo):
+    """Editar conta contábil via modal"""
+    
     conta = get_object_or_404(ContaContabil, codigo=codigo)
     
-    # Guardar valores originais para log
-    valores_originais = {
-        'codigo': conta.codigo,
-        'nome': conta.nome,
-        'tipo': conta.get_tipo_display(),
-        'ativa': conta.ativa
-    }
-    
     if request.method == 'POST':
+        logger.info(f"Editando conta contábil: {conta.codigo} - {conta.nome}")
+        
         form = ContaContabilForm(request.POST, instance=conta)
+        
         if form.is_valid():
             try:
-                conta_atualizada = form.save()
+                from django.db import transaction
                 
-                # Log de alterações
-                alteracoes = []
-                for campo, valor_original in valores_originais.items():
-                    if campo == 'tipo':
-                        valor_novo = conta_atualizada.get_tipo_display()
-                    else:
-                        valor_novo = getattr(conta_atualizada, campo)
-                    
-                    if valor_original != valor_novo:
-                        alteracoes.append(f"{campo}: {valor_original} → {valor_novo}")
+                with transaction.atomic():
+                    conta_editada = form.save()
+                    logger.info(f"Conta contábil atualizada: {conta_editada.codigo} - {conta_editada.nome}")
                 
-                if alteracoes:
-                    logger.info(f'Conta contábil {conta.codigo} alterada por {request.user}: {", ".join(alteracoes)}')
+                conta_verificacao = ContaContabil.objects.get(codigo=codigo)
+                logger.info(f"Verificação final: {conta_verificacao.nome}")
                 
-                messages.success(request, f'Conta contábil "{conta_atualizada.nome}" atualizada com sucesso!')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Conta contábil "{conta_verificacao.nome}" atualizada com sucesso!',
+                        'conta': {
+                            'codigo': conta_verificacao.codigo,
+                            'nome': conta_verificacao.nome,
+                            'tipo': conta_verificacao.tipo
+                        }
+                    })
                 
-                # Se o tipo mudou, informar
-                if valores_originais['tipo'] != conta_atualizada.get_tipo_display():
-                    messages.info(request, 
-                        f'Tipo alterado automaticamente de {valores_originais["tipo"]} '
-                        f'para {conta_atualizada.get_tipo_display()}')
+                messages.success(request, f'Conta contábil "{conta_verificacao.nome}" atualizada com sucesso!')
+                return redirect('gestor:contacontabil_tree')
                 
-                return redirect('gestor:contacontabil_list')
             except Exception as e:
+                logger.error(f"Erro ao atualizar conta contábil {conta.codigo}: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'Erro ao atualizar conta contábil: {str(e)}'
+                    })
+                
                 messages.error(request, f'Erro ao atualizar conta contábil: {str(e)}')
-                logger.error(f'Erro ao atualizar conta contábil {conta.codigo}: {str(e)}')
         else:
-            messages.error(request, 'Erro ao atualizar conta contábil. Verifique os dados.')
+            logger.error(f"Formulário inválido para conta {conta.codigo}: {form.errors}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Dados inválidos. Verifique os campos.',
+                    'errors': form.errors
+                })
+            messages.error(request, 'Dados inválidos. Verifique os campos.')
+    
     else:
         form = ContaContabilForm(instance=conta)
     
-    context = {
-        'form': form, 
-        'title': 'Editar Conta Contábil', 
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render(request, 'gestor/partials/contacontabil_form_modal.html', {
+            'form': form,
+            'title': 'Editar Conta Contábil',
+            'contacontabil': conta,
+            'is_create': False
+        })
+    
+    return render(request, 'gestor/contacontabil_form.html', {
+        'form': form,
+        'title': 'Editar Conta Contábil',
         'conta': conta,
         'is_create': False
-    }
-    return render(request, 'gestor/contacontabil_form.html', context)
+    })
 
 @login_required
-def contacontabil_delete(request, codigo):
-    """Deletar conta contábil"""
+@require_POST
+def contacontabil_delete_ajax(request, codigo):
+    """Deletar conta contábil via AJAX"""
     conta = get_object_or_404(ContaContabil, codigo=codigo)
     
-    # Verificar se tem subcontas
-    tem_subcontas = conta.tem_subcontas
+    if conta.tem_filhos:
+        filhos_count = conta.get_filhos_diretos().count()
+        return JsonResponse({
+            'success': False,
+            'message': f'Não é possível excluir a conta contábil "{conta.nome}" pois ela possui {filhos_count} sub-conta(s).'
+        })
     
-    if request.method == 'POST':
-        if tem_subcontas:
-            messages.error(request, 
-                f'Não é possível excluir a conta contábil "{conta.nome}" pois ela possui {conta.subcontas.count()} subconta(s).')
-            return redirect('gestor:contacontabil_list')
-        
+    try:
         nome = conta.nome
         codigo_conta = conta.codigo
-        tipo = conta.get_tipo_display()
+        conta.delete()
         
-        # Se tem pai, ele pode mudar de sintético para analítico
-        conta_pai = conta.conta_pai
+        logger.info(f'Conta contábil excluída: {codigo_conta} - {nome} por {request.user}')
         
-        try:
-            conta.delete()
-            messages.success(request, f'Conta contábil "{nome}" (código: {codigo_conta}, tipo: {tipo}) excluída com sucesso!')
-            
-            # Verificar se o pai mudou de tipo
-            if conta_pai:
-                conta_pai.refresh_from_db()
-                if conta_pai.e_analitico:
-                    messages.info(request, 
-                        f'A conta pai "{conta_pai.nome}" foi automaticamente '
-                        f'alterada para Analítica por não ter mais subcontas.')
-            
-            logger.info(f'Conta contábil excluída: {codigo_conta} - {nome} por {request.user}')
-            return redirect('gestor:contacontabil_list')
-        except Exception as e:
-            messages.error(request, f'Erro ao excluir conta contábil: {str(e)}')
-            logger.error(f'Erro ao excluir conta contábil {codigo_conta}: {str(e)}')
-            return redirect('gestor:contacontabil_list')
-    
-    context = {
-        'conta': conta,
-        'tem_subcontas': tem_subcontas,
-    }
-    return render(request, 'gestor/contacontabil_delete.html', context)
+        return JsonResponse({
+            'success': True,
+            'message': f'Conta contábil "{nome}" (código: {codigo_conta}) excluída com sucesso!'
+        })
+        
+    except Exception as e:
+        logger.error(f'Erro ao excluir conta contábil {conta.codigo}: {str(e)}')
+        return JsonResponse({
+            'success': False,
+            'message': f'Erro ao excluir conta contábil: {str(e)}'
+        })
 
-# ===== API ENDPOINT =====
+# ===== APIs =====
+
+@login_required
+def api_contacontabil_tree_data(request):
+    """API OTIMIZADA para dados da árvore de contas contábeis"""
+    
+    try:
+        search = request.GET.get('search', '').strip()
+        nivel = request.GET.get('nivel', '')
+        tipo = request.GET.get('tipo', '')
+        ativa = request.GET.get('ativa', '')
+        
+        queryset = ContaContabil.objects.order_by('codigo')
+        
+        if ativa != '':
+            queryset = queryset.filter(ativa=ativa.lower() == 'true')
+        else:
+            queryset = queryset.filter(ativa=True)
+        
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(codigo__icontains=search) |
+                Q(nome__icontains=search) |
+                Q(descricao__icontains=search)
+            )
+        
+        if nivel:
+            queryset = queryset.filter(nivel=int(nivel))
+        
+        if tipo:
+            queryset = queryset.filter(tipo=tipo)
+        
+        hierarchy_map, root_items = ContaContabil.build_hierarchy_map(queryset)
+        
+        def construir_no_api(conta):
+            children_data = hierarchy_map.get(conta.codigo, {}).get('children', [])
+            
+            return {
+                'codigo': conta.codigo,
+                'nome': conta.nome,
+                'tipo': conta.tipo,
+                'nivel': conta.nivel,
+                'ativa': conta.ativa,
+                'descricao': conta.descricao,
+                'tem_filhos': len(children_data) > 0,
+                'filhos': [construir_no_api(filho) for filho in sorted(children_data, key=lambda x: x.codigo)]
+            }
+        
+        tree_data = [construir_no_api(raiz) for raiz in sorted(root_items, key=lambda x: x.codigo)]
+        
+        contas_filtradas = list(queryset)
+        total_filtradas = len(contas_filtradas)
+        sinteticas = sum(1 for c in contas_filtradas if c.tipo == 'S')
+        analiticas = total_filtradas - sinteticas
+        
+        stats = {
+            'total': total_filtradas,
+            'tipo_s': sinteticas,
+            'tipo_a': analiticas,
+            'nivel_max': max([c.nivel for c in contas_filtradas]) if contas_filtradas else 0,
+            'filtros_aplicados': {
+                'search': search,
+                'nivel': nivel,
+                'tipo': tipo,
+                'ativa': ativa
+            }
+        }
+        
+        return JsonResponse({
+            'success': True,
+            'tree_data': tree_data,
+            'stats': stats,
+            'total_sem_filtro': ContaContabil.objects.filter(ativa=True).count()
+        })
+        
+    except Exception as e:
+        logger.error(f'Erro na API de dados da árvore: {str(e)}')
+        return JsonResponse({
+            'success': False,
+            'error': 'Erro interno do servidor',
+            'message': str(e)
+        })
 
 @login_required
 def api_validar_codigo_contacontabil(request):
@@ -201,12 +409,10 @@ def api_validar_codigo_contacontabil(request):
     if not codigo:
         return JsonResponse({'valid': False, 'error': 'Código é obrigatório'})
     
-    # Verificar formato
     import re
     if not re.match(r'^[\d\.]+$', codigo):
         return JsonResponse({'valid': False, 'error': 'Código deve conter apenas números e pontos'})
     
-    # Verificar duplicação
     query = ContaContabil.objects.filter(codigo=codigo)
     if conta_codigo:
         query = query.exclude(codigo=conta_codigo)
@@ -214,28 +420,50 @@ def api_validar_codigo_contacontabil(request):
     if query.exists():
         return JsonResponse({'valid': False, 'error': 'Já existe uma conta contábil com este código'})
     
-    # Verificar hierarquia
     info = {'valid': True}
     
     if '.' in codigo:
-        partes = codigo.split('.')
-        codigo_pai = '.'.join(partes[:-1])
+        temp_conta = ContaContabil(codigo=codigo)
+        pai = temp_conta.encontrar_pai_hierarquico()
         
-        try:
-            conta_pai = ContaContabil.objects.get(codigo=codigo_pai)
+        if pai:
             info['pai'] = {
-                'codigo': conta_pai.codigo,
-                'nome': conta_pai.nome,
-                'tipo_display': conta_pai.get_tipo_display()
+                'codigo': pai.codigo,
+                'nome': pai.nome,
+                'tipo_display': pai.get_tipo_display()
             }
-                
-        except ContaContabil.DoesNotExist:
+        else:
+            partes = codigo.split('.')
+            codigo_pai = '.'.join(partes[:-1])
             info['valid'] = False
             info['error'] = f'Conta contábil pai com código "{codigo_pai}" não existe'
     else:
         info['pai'] = None
     
-    # Calcular nível
     info['nivel'] = codigo.count('.') + 1
     
     return JsonResponse(info)
+
+# ===== VIEWS MANTIDAS PARA COMPATIBILIDADE =====
+
+@login_required
+def contacontabil_list(request):
+    """Redirecionar para a árvore"""
+    return redirect('gestor:contacontabil_tree')
+
+@login_required
+def contacontabil_create(request):
+    """Compatibilidade"""
+    return contacontabil_create_modal(request)
+
+@login_required
+def contacontabil_update(request, codigo):
+    """Compatibilidade"""
+    return contacontabil_update_modal(request, codigo)
+
+@login_required
+def contacontabil_delete(request, codigo):
+    """Compatibilidade"""
+    if request.method == 'POST':
+        return contacontabil_delete_ajax(request, codigo)
+    return redirect('gestor:contacontabil_tree')

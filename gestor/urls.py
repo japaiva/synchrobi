@@ -72,13 +72,29 @@ urlpatterns = [
     path('centros-custo/novo/', views.centrocusto_create, name='centrocusto_create'),
     path('centros-custo/<str:codigo>/editar-old/', views.centrocusto_update, name='centrocusto_update'),
     path('centros-custo/<str:codigo>/excluir-old/', views.centrocusto_delete, name='centrocusto_delete'),
+
+
+    # === CONTA CONTÁBIL - HIERARQUIA MODAL ===
     
-    # ===== CONTAS CONTÁBEIS =====
-    path('contas-contabeis/', views.contacontabil_list, name='contacontabil_list'),
+    # View principal da árvore
+    path('contas-contabeis/', views.contacontabil_tree_view, name='contacontabil_tree'),
+    
+    # Views modais
+    path('contas-contabeis/nova/', views.contacontabil_create_modal, name='contacontabil_create_modal'),
+    path('contas-contabeis/<str:codigo>/editar/', views.contacontabil_update_modal, name='contacontabil_update_modal'),
+    path('contas-contabeis/<str:codigo>/excluir/', views.contacontabil_delete_ajax, name='contacontabil_delete_ajax'),
+    
+    # APIs
+    path('api/contas-contabeis/tree-data/',  views.api_contacontabil_tree_data, name='api_contacontabil_tree_data'),
+    path('api/contas-contabeis/validar-codigo/', views.api_validar_codigo_contacontabil, name='api_validar_codigo_contacontabil'),
+    
+    # URLs de compatibilidade (redirecionam para árvore)
+    path('contas-contabeis/lista/', views.contacontabil_list, name='contacontabil_list'),
     path('contas-contabeis/criar/', views.contacontabil_create, name='contacontabil_create'),
-    path('contas-contabeis/<str:codigo>/editar/', views.contacontabil_update, name='contacontabil_update'),
-    path('contas-contabeis/<str:codigo>/excluir/', views.contacontabil_delete, name='contacontabil_delete'),
-    
+    path('contas-contabeis/<str:codigo>/', views.contacontabil_update, name='contacontabil_update'),
+    path('contas-contabeis/<str:codigo>/deletar/', views.contacontabil_delete, name='contacontabil_delete'),
+
+
     # APIs para Contas Contábeis
     path('api/validar-codigo-contacontabil/', views.api_validar_codigo_contacontabil, name='api_validar_codigo_contacontabil'),
     

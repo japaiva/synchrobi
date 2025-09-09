@@ -65,13 +65,25 @@ from .centrocusto import (
     centrocusto_delete,              # Redireciona para AJAX
 )
 
-# Conta Contabil
+# Conta Contabil - Nova arquitetura focada na árvore
 from .contacontabil import (
-    contacontabil_list, 
-    contacontabil_create, 
-    contacontabil_update, 
-    contacontabil_delete,
-    api_validar_codigo_contacontabil
+    # Views modais CRUD
+    contacontabil_create_modal,      # Criar via modal
+    contacontabil_update_modal,      # Editar via modal
+    contacontabil_delete_ajax,       # Excluir via AJAX
+    
+    # View principal da árvore
+    contacontabil_tree_view,         # View principal da árvore (PRINCIPAL)
+    
+    # APIs para árvore
+    api_contacontabil_tree_data,     # API com filtros avançados
+    api_validar_codigo_contacontabil, # API para validação de código
+    
+    # Views mantidas para compatibilidade (redirecionam)
+    contacontabil_list,              # Redireciona para árvore
+    contacontabil_create,            # Redireciona para modal
+    contacontabil_update,            # Redireciona para modal
+    contacontabil_delete,            # Redireciona para AJAX
 )
 
 # Usuario
@@ -103,16 +115,20 @@ from .parametro import (
 # - unidade_arvore → integrada em unidade_tree_view
 # - api_unidade_filhas → api_unidade_tree_data
 #
-# CENTROS DE CUSTO (migrados nesta atualização):
+# CENTROS DE CUSTO (migrados):
 # - centrocusto_list → centrocusto_tree_view (principal) + redirect (compatibilidade)
 # - centrocusto_create → centrocusto_create_modal (principal) + redirect (compatibilidade)
 # - centrocusto_update → centrocusto_update_modal (principal) + redirect (compatibilidade)
 # - centrocusto_delete → centrocusto_delete_ajax (principal) + redirect (compatibilidade)
 # + api_centrocusto_tree_data → nova API para dados da árvore
 #
-# PRÓXIMAS MIGRAÇÕES (futuras):
-# - contas_contabeis → seguirão o mesmo padrão
-# - Outras entidades hierárquicas conforme necessário
+# CONTAS CONTÁBEIS (migradas nesta atualização):
+# - contacontabil_list → contacontabil_tree_view (principal) + redirect (compatibilidade)
+# - contacontabil_create → contacontabil_create_modal (principal) + redirect (compatibilidade)
+# - contacontabil_update → contacontabil_update_modal (principal) + redirect (compatibilidade)
+# - contacontabil_delete → contacontabil_delete_ajax (principal) + redirect (compatibilidade)
+# + api_contacontabil_tree_data → nova API para dados da árvore
+# + api_validar_codigo_contacontabil → nova API para validação
 #
 # PADRÃO DA NOVA ARQUITETURA:
 # 1. View principal única (*_tree_view) para visualização hierárquica
@@ -121,3 +137,11 @@ from .parametro import (
 # 4. APIs modernas para dados da árvore (api_*_tree_data)
 # 5. APIs de validação específicas (api_validar_codigo_*)
 # 6. Views antigas mantidas para compatibilidade com redirecionamentos
+#
+# BENEFÍCIOS DA NOVA ARQUITETURA:
+# - Interface consistente e moderna
+# - Performance otimizada com renderização em lotes
+# - Validação em tempo real
+# - Hierarquia dinâmica baseada em código
+# - Compatibilidade total com código existente
+# - Manutenibilidade aprimorada
