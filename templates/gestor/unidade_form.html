@@ -74,7 +74,7 @@
               {% endif %}
             </div>
             
-            <!-- Segunda linha: Informação da Hierarquia -->
+            <!-- Segunda linha: Informação da Hierarquia e Tipo -->
             <div class="col-md-6">
               <label class="form-label">Unidade Superior</label>
               <div class="form-control bg-light" id="unidade-pai-info">
@@ -89,16 +89,15 @@
             </div>
             
             <div class="col-md-3">
-              <label class="form-label">Tipo</label>
-              <div class="form-control bg-light" id="tipo-display">
-                {% if form.instance.pk %}
-                  <span class="badge {% if form.instance.e_sintetico %}bg-primary{% else %}bg-success{% endif %}">
-                    {{ form.instance.get_tipo_display }}
-                  </span>
-                {% else %}
-                  <span class="badge bg-secondary">Automático</span>
-                {% endif %}
-              </div>
+              <label for="{{ form.tipo.id_for_label }}" class="form-label">
+                Tipo <span class="text-danger">*</span>
+              </label>
+              {{ form.tipo }}
+              {% if form.tipo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.tipo.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
             </div>
             
             <div class="col-md-3">
@@ -155,6 +154,7 @@
           </div>
         </div>
       </div>
+      
       <!-- Botões de ação -->
       <div class="d-flex justify-content-between align-items-center">
         <div>
@@ -184,8 +184,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     const codigoInput = document.getElementById('{{ form.codigo.id_for_label }}');
     const codigoAllStrategyInput = document.getElementById('{{ form.codigo_allstrategy.id_for_label }}');
-    const unidadePaiInfo = document.getElementById('texto-pai');
-    const tipoDisplay = document.getElementById('tipo-display');
+    const unidadePaiInfo = document.getElementById('unidade-pai-info');
     
     function atualizarInfoHierarquia() {
         const codigo = codigoInput.value.trim();
@@ -203,16 +202,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             unidadePaiInfo.innerHTML = '<span class="badge bg-warning text-dark">Unidade Raiz</span>';
         }
-        
-        // Atualizar tipo (se não está editando)
-        {% if not form.instance.pk %}
-        tipoDisplay.innerHTML = `
-            <span class="badge bg-info">
-                <i class="fas fa-info-circle me-1"></i>
-                Será determinado após salvar
-            </span>
-        `;
-        {% endif %}
     }
     
     function sugerirCodigoAllStrategy() {

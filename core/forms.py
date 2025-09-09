@@ -24,8 +24,9 @@ class UnidadeForm(forms.ModelForm):
         model = Unidade
         fields = [
             'codigo', 'codigo_allstrategy', 'nome', 
-             'empresa','descricao', 'ativa'
+             'tipo', 'empresa','descricao', 'ativa'
         ]
+
         widgets = {
             'codigo': forms.TextInput(attrs={
                 'class': 'form-control'
@@ -33,6 +34,8 @@ class UnidadeForm(forms.ModelForm):
             'codigo_allstrategy': forms.TextInput(attrs={
                 'class': 'form-control'
             }),
+            'tipo': forms.Select(attrs={
+                'class': 'form-select'}),
             'nome': forms.TextInput(attrs={
                 'class': 'form-control'
             }),

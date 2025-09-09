@@ -175,13 +175,19 @@ class Empresa(models.Model):
 # ===== MODELO UNIDADE (com campo empresa) =====
 
 class Unidade(models.Model):
-    """
-    Modelo para estrutura organizacional hierárquica da empresa
-    O tipo (Sintético/Analítico) é determinado automaticamente:
-    - Sintético: tem sub-unidades
-    - Analítico: não tem sub-unidades (folha da árvore)
-    """
-    
+
+    TIPO_CHOICES = [
+        ('S', 'Sintético'),
+        ('A', 'Analítico'),
+    ]
+
+    tipo = models.CharField(
+        max_length=1, 
+        choices=TIPO_CHOICES, 
+        default='A',
+        verbose_name="Tipo"
+    )
+
     codigo = models.CharField(max_length=50, unique=True, verbose_name="Código")
     codigo_allstrategy = models.CharField(max_length=20, blank=True, verbose_name="Código All Strategy")
     nome = models.CharField(max_length=255, verbose_name="Nome da Unidade")
@@ -211,20 +217,6 @@ class Unidade(models.Model):
     data_alteracao = models.DateTimeField(auto_now=True)
     sincronizado_allstrategy = models.BooleanField(default=False, verbose_name="Sincronizado All Strategy")
     data_ultima_sincronizacao = models.DateTimeField(null=True, blank=True, verbose_name="Última Sincronização")
-    
-    @property
-    def tipo(self):
-        """
-        Tipo determinado dinamicamente:
-        - 'S' (Sintético) se tem sub-unidades
-        - 'A' (Analítico) se não tem sub-unidades
-        """
-        if not self.pk:
-            return 'A'
-        
-        if not hasattr(self, '_cached_tipo'):
-            self._cached_tipo = 'S' if self.tem_sub_unidades else 'A'
-        return self._cached_tipo
     
     def get_tipo_display(self):
         """Retorna o nome do tipo para exibição"""

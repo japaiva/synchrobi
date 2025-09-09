@@ -2,6 +2,7 @@
 
 from django.urls import path
 from . import views
+from .views.unidade_tree import unidade_tree_view, unidade_tree_data
 
 app_name = 'gestor'
 
@@ -33,14 +34,16 @@ urlpatterns = [
     path('api/empresas/<str:sigla_empresa>/centros-custo/', views.api_empresa_centros_custo, name='api_empresa_centros_custo'),
     path('api/centros-custo/<str:codigo_centro>/empresas/', views.api_centro_custo_empresas, name='api_centro_custo_empresas'),
 
+    # Unidades - Árvore Hierárquica (NOVO)
+    path('unidades/arvore/', unidade_tree_view, name='unidade_tree'),
+    path('api/unidades/tree-data/', unidade_tree_data, name='unidade_tree_data'),
 
-    # Unidades
+    # Unidades - CRUD tradicional
     path('unidades/', views.unidade_list, name='unidade_list'),
     path('unidades/criar/', views.unidade_create, name='unidade_create'),
     path('unidades/<int:pk>/', views.unidade_detail, name='unidade_detail'),
     path('unidades/<int:pk>/editar/', views.unidade_update, name='unidade_update'),
     path('unidades/<int:pk>/excluir/', views.unidade_delete, name='unidade_delete'),
-    path('unidades/arvore/', views.unidade_arvore, name='unidade_arvore'),
     
     # APIs para Unidades
     path('api/validar-codigo/', views.api_validar_codigo, name='api_validar_codigo'),

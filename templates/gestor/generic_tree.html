@@ -1,0 +1,366 @@
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}{{ entity_name }} - Visualização Hierárquica | SynchroBI{% endblock %}
+
+{% block extra_css %}
+{% include 'gestor/partials/tree_styles.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas {{ icon }} me-2"></i> {{ entity_name }}
+    </h5>
+    <div class="d-flex align-items-center gap-3">
+      <!-- Toggle de Visualização -->
+      <div class="view-toggle">
+        <a href="{% url list_url %}" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-list me-1"></i> Lista
+        </a>
+        <a href="{% url tree_url %}" class="btn btn-primary btn-sm">
+          <i class="fas fa-sitemap me-1"></i> Árvore
+        </a>
+      </div>
+      
+      <!-- Ações -->
+      <div>
+        <button class="btn btn-outline-primary btn-sm me-2" onclick="expandAll()">
+          <i class="fas fa-expand-arrows-alt me-1"></i> Expandir Tudo
+        </button>
+        <button class="btn btn-outline-secondary btn-sm me-2" onclick="collapseAll()">
+          <i class="fas fa-compress-arrows-alt me-1"></i> Recolher Tudo
+        </button>
+        <a href="{% url create_url %}" class="btn btn-success btn-sm">
+          <i class="fas fa-plus me-1"></i> Nova {{ entity_singular }}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <!-- Estatísticas -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-number" id="totalItems">{{ stats.total }}</div>
+        <div class="stat-label">Total</div>
+      </div>
+      
+      {% if stats.tipo_a %}
+      <div class="stat-card" style="border-left-color: #198754;">
+        <div class="stat-number" id="itemsAnaliticos" style="color: #198754;">{{ stats.tipo_a }}</div>
+        <div class="stat-label">Analíticos</div>
+      </div>
+      {% endif %}
+      
+      {% if stats.tipo_s %}
+      <div class="stat-card" style="border-left-color: #fd7e14;">
+        <div class="stat-number" id="itemsSinteticos" style="color: #fd7e14;">{{ stats.tipo_s }}</div>
+        <div class="stat-label">Sintéticos</div>
+      </div>
+      {% endif %}
+      
+      <div class="stat-card" style="border-left-color: #6f42c1;">
+        <div class="stat-number" id="nivelMax" style="color: #6f42c1;">{{ stats.nivel_max }}</div>
+        <div class="stat-label">Níveis Hierárquicos</div>
+      </div>
+    </div>
+
+    <!-- Toolbar de Busca -->
+    <div class="toolbar">
+      <div class="d-flex align-items-center flex-grow-1">
+        <div class="me-3">
+          <i class="fas fa-search text-muted"></i>
+        </div>
+        <input type="text" 
+               class="form-control search-input" 
+               id="searchInput"
+               placeholder="Buscar por código, nome ou descrição..."
+               onkeyup="filterTree()">
+      </div>
+      <div class="ms-3">
+        <select class="form-select" id="levelFilter" onchange="filterByLevel()">
+          <option value="">Todos os Níveis</option>
+          {% for nivel in stats.contas_por_nivel.keys %}
+            <option value="{{ nivel }}">Nível {{ nivel }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if stats.tipo_a or stats.tipo_s %}
+      <div class="ms-3">
+        <select class="form-select" id="typeFilter" onchange="filterByType()">
+          <option value="">Todos os Tipos</option>
+          <option value="A">Analíticos</option>
+          <option value="S">Sintéticos</option>
+        </select>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Árvore Hierárquica -->
+    <div class="tree-container">
+      <ul id="itemTree" class="tree-item">
+        <!-- Será preenchido via JavaScript -->
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Configurações específicas passadas pelo Django
+    const CONFIG = {
+        treeData: {{ tree_data_json|safe }},
+        entityName: '{{ entity_name }}',
+        entitySingular: '{{ entity_singular }}',
+        updateUrlBase: '{{ update_url_base }}',
+        createUrl: '{% url create_url %}',
+        hasTypes: {{ stats.tipo_a|default:0|add:stats.tipo_s|default:0|yesno:"true,false" }}
+    };
+
+    let filteredData = CONFIG.treeData;
+    let expandedNodes = new Set();
+
+    function renderTree(data, container) {
+        container.innerHTML = '';
+        if (!data || data.length === 0) {
+            container.innerHTML = `
+                <li class="tree-item">
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Nenhum item encontrado com os filtros aplicados.
+                    </div>
+                </li>
+            `;
+            return;
+        }
+        
+        data.forEach(item => {
+            const li = createTreeNode(item);
+            container.appendChild(li);
+        });
+    }
+
+    function createTreeNode(item) {
+        const li = document.createElement('li');
+        li.className = 'tree-item';
+        li.dataset.codigo = item.codigo;
+        li.dataset.tipo = item.tipo || '';
+        li.dataset.nivel = item.nivel;
+
+        const hasChildren = item.filhos && item.filhos.length > 0;
+        const isExpanded = expandedNodes.has(item.codigo);
+
+        // Determinar classe de tipo
+        let typeClass = '';
+        let typeBadge = '';
+        if (item.tipo) {
+            typeClass = item.tipo === 'A' ? 'analytic' : 'synthetic';
+            typeBadge = `
+                <span class="type-badge ${typeClass}">
+                    ${item.tipo === 'A' ? 'Analítico' : 'Sintético'}
+                </span>
+            `;
+        }
+
+        li.innerHTML = `
+            <div class="tree-node level-${item.nivel} ${typeClass}" 
+                 onclick="handleNodeClick('${item.codigo}')">
+                <div class="tree-info">
+                    <div class="tree-content">
+                        ${hasChildren ? `
+                            <button class="tree-toggle ${isExpanded ? 'expanded' : ''}" 
+                                    onclick="toggleNode(event, '${item.codigo}')">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        ` : '<span style="width: 28px; display: inline-block;"></span>'}
+                        <span class="tree-code">${item.codigo}</span>
+                        <span class="tree-name">${item.nome}</span>
+                    </div>
+                    <div class="tree-badges">
+                        ${typeBadge}
+                        <div class="tree-actions">
+                            <a href="${CONFIG.updateUrlBase}${item.id || item.pk}/editar/"
+                               class="btn-tree-action btn btn-sm btn-outline-primary" 
+                               onclick="event.stopPropagation()" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button class="btn-tree-action btn btn-sm btn-outline-success" 
+                                    onclick="addSubItem(event, '${item.codigo}')" title="Adicionar Sub-item">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ${hasChildren ? `
+                <ul class="tree-children ${isExpanded ? 'expanded' : 'collapsed'}">
+                    ${item.filhos.map(filho => createTreeNode(filho).outerHTML).join('')}
+                </ul>
+            ` : ''}
+        `;
+
+        return li;
+    }
+
+    function toggleNode(event, codigo) {
+        event.stopPropagation();
+        
+        if (expandedNodes.has(codigo)) {
+            expandedNodes.delete(codigo);
+        } else {
+            expandedNodes.add(codigo);
+        }
+        
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function handleNodeClick(codigo) {
+        console.log('Item selecionado:', codigo);
+        // Implementar lógica específica se necessário
+    }
+
+    function expandAll() {
+        function addAllCodes(data) {
+            data.forEach(item => {
+                expandedNodes.add(item.codigo);
+                if (item.filhos) {
+                    addAllCodes(item.filhos);
+                }
+            });
+        }
+        addAllCodes(CONFIG.treeData);
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function collapseAll() {
+        expandedNodes.clear();
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function filterTree() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const levelFilter = document.getElementById('levelFilter').value;
+        const typeFilter = document.getElementById('typeFilter') ? 
+                          document.getElementById('typeFilter').value : '';
+
+        if (!searchTerm && !levelFilter && !typeFilter) {
+            filteredData = CONFIG.treeData;
+        } else {
+            filteredData = filterRecursive(CONFIG.treeData, searchTerm, levelFilter, typeFilter);
+        }
+
+        // Se há busca, expandir nós relevantes
+        if (searchTerm) {
+            expandRelevantNodes(filteredData);
+        }
+
+        renderTree(filteredData, document.getElementById('itemTree'));
+        updateStats();
+    }
+
+    function filterRecursive(data, searchTerm, levelFilter, typeFilter) {
+        const result = [];
+        
+        data.forEach(item => {
+            let matches = true;
+            let hasMatchingChildren = false;
+
+            // Verificar se o item atual atende aos critérios
+            if (searchTerm) {
+                matches = matches && (
+                    item.codigo.toLowerCase().includes(searchTerm) ||
+                    item.nome.toLowerCase().includes(searchTerm) ||
+                    (item.descricao && item.descricao.toLowerCase().includes(searchTerm))
+                );
+            }
+
+            if (levelFilter) {
+                matches = matches && item.nivel === parseInt(levelFilter);
+            }
+
+            if (typeFilter && item.tipo) {
+                matches = matches && item.tipo === typeFilter;
+            }
+
+            // Verificar filhos recursivamente
+            let filteredChildren = [];
+            if (item.filhos) {
+                filteredChildren = filterRecursive(item.filhos, searchTerm, levelFilter, typeFilter);
+                hasMatchingChildren = filteredChildren.length > 0;
+            }
+
+            // Incluir se o item atual ou seus filhos atendem aos critérios
+            if (matches || hasMatchingChildren) {
+                result.push({
+                    ...item,
+                    filhos: filteredChildren
+                });
+            }
+        });
+
+        return result;
+    }
+
+    function expandRelevantNodes(data) {
+        data.forEach(item => {
+            if (item.filhos && item.filhos.length > 0) {
+                expandedNodes.add(item.codigo);
+                expandRelevantNodes(item.filhos);
+            }
+        });
+    }
+
+    function filterByLevel() {
+        filterTree();
+    }
+
+    function filterByType() {
+        filterTree();
+    }
+
+    function updateStats() {
+        let totalItems = 0;
+        let itemsAnaliticos = 0;
+        let itemsSinteticos = 0;
+
+        function countRecursive(data) {
+            data.forEach(item => {
+                totalItems++;
+                if (item.tipo === 'A') itemsAnaliticos++;
+                if (item.tipo === 'S') itemsSinteticos++;
+                
+                if (item.filhos) {
+                    countRecursive(item.filhos);
+                }
+            });
+        }
+
+        countRecursive(filteredData);
+
+        document.getElementById('totalItems').textContent = totalItems;
+        if (document.getElementById('itemsAnaliticos')) {
+            document.getElementById('itemsAnaliticos').textContent = itemsAnaliticos;
+        }
+        if (document.getElementById('itemsSinteticos')) {
+            document.getElementById('itemsSinteticos').textContent = itemsSinteticos;
+        }
+    }
+
+    function addSubItem(event, codigo) {
+        event.stopPropagation();
+        
+        // Calcular próximo código baseado no pai
+        const proximoCodigo = codigo + '.01'; // Sugestão inicial
+        
+        // Redirecionar para criação com código pré-preenchido
+        window.location.href = `${CONFIG.createUrl}?codigo_pai=${codigo}&sugestao=${proximoCodigo}`;
+    }
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', function() {
+        renderTree(CONFIG.treeData, document.getElementById('itemTree'));
+    });
+</script>
+{% endblock %}
