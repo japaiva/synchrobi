@@ -13,24 +13,10 @@
       <i class="fas {{ icon }} me-2"></i> {{ entity_name }}
     </h5>
     <div class="d-flex align-items-center gap-3">
-      <!-- Toggle de Visualização -->
-      <div class="view-toggle">
-        <a href="{% url list_url %}" class="btn btn-outline-secondary btn-sm">
-          <i class="fas fa-list me-1"></i> Lista
-        </a>
-        <a href="{% url tree_url %}" class="btn btn-primary btn-sm">
-          <i class="fas fa-sitemap me-1"></i> Árvore
-        </a>
-      </div>
-      
+
       <!-- Ações -->
       <div>
-        <button class="btn btn-outline-primary btn-sm me-2" onclick="expandAll()">
-          <i class="fas fa-expand-arrows-alt me-1"></i> Expandir Tudo
-        </button>
-        <button class="btn btn-outline-secondary btn-sm me-2" onclick="collapseAll()">
-          <i class="fas fa-compress-arrows-alt me-1"></i> Recolher Tudo
-        </button>
+
         <a href="{% url create_url %}" class="btn btn-success btn-sm">
           <i class="fas fa-plus me-1"></i> Nova {{ entity_singular }}
         </a>
@@ -38,33 +24,6 @@
     </div>
   </div>
 
-  <div class="card-body">
-    <!-- Estatísticas -->
-    <div class="stats-cards">
-      <div class="stat-card">
-        <div class="stat-number" id="totalItems">{{ stats.total }}</div>
-        <div class="stat-label">Total</div>
-      </div>
-      
-      {% if stats.tipo_a %}
-      <div class="stat-card" style="border-left-color: #198754;">
-        <div class="stat-number" id="itemsAnaliticos" style="color: #198754;">{{ stats.tipo_a }}</div>
-        <div class="stat-label">Analíticos</div>
-      </div>
-      {% endif %}
-      
-      {% if stats.tipo_s %}
-      <div class="stat-card" style="border-left-color: #fd7e14;">
-        <div class="stat-number" id="itemsSinteticos" style="color: #fd7e14;">{{ stats.tipo_s }}</div>
-        <div class="stat-label">Sintéticos</div>
-      </div>
-      {% endif %}
-      
-      <div class="stat-card" style="border-left-color: #6f42c1;">
-        <div class="stat-number" id="nivelMax" style="color: #6f42c1;">{{ stats.nivel_max }}</div>
-        <div class="stat-label">Níveis Hierárquicos</div>
-      </div>
-    </div>
 
     <!-- Toolbar de Busca -->
     <div class="toolbar">
