@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from core.models import Unidade
 import json
 import logging
+from django.utils import timezone
 
 logger = logging.getLogger('synchrobi')
 

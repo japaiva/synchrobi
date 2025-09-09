@@ -7,6 +7,7 @@ from core.models import Usuario, Unidade, CentroCusto, ContaContabil, ParametroS
 
 # ===== FORMULÁRIO UNIDADE SIMPLIFICADO =====
 
+
 class UnidadeForm(forms.ModelForm):
     """Formulário para criar/editar unidades organizacionais com hierarquia dinâmica"""
     
@@ -46,9 +47,10 @@ class UnidadeForm(forms.ModelForm):
         # Popular lista de empresas ativas
         self.fields['empresa'].queryset = Empresa.objects.filter(ativa=True).order_by('sigla')
         
-        # Adicionar help texts
+        # Adicionar help texts diferenciados por tipo
         self.fields['codigo'].help_text = "Use pontos para separar níveis (ex: 1.2.01.30.00.110)"
         self.fields['tipo'].help_text = "S=Sintético (agrupador), A=Analítico (operacional)"
+        self.fields['codigo_allstrategy'].help_text = "Obrigatório para unidades analíticas, opcional para sintéticas"
     
     def clean_codigo(self):
         """Validação específica para código principal"""
@@ -73,10 +75,22 @@ class UnidadeForm(forms.ModelForm):
         return codigo
     
     def clean_codigo_allstrategy(self):
-        """Validação para código All Strategy"""
+        """Validação para código All Strategy - ajustada para sintéticos"""
         codigo_allstrategy = self.cleaned_data.get('codigo_allstrategy', '').strip()
+        tipo = self.cleaned_data.get('tipo')
         
-        # Verificar duplicação de código all strategy (se fornecido)
+        # Para unidades sintéticas, código All Strategy é opcional
+        if tipo == 'S':
+            # Se vazio, retornar vazio (sem erro)
+            if not codigo_allstrategy:
+                return ''
+        
+        # Para unidades analíticas, código All Strategy é obrigatório
+        elif tipo == 'A':
+            if not codigo_allstrategy:
+                raise forms.ValidationError("Código All Strategy é obrigatório para unidades analíticas.")
+        
+        # Se foi fornecido um código, verificar duplicação
         if codigo_allstrategy:
             queryset = Unidade.objects.filter(codigo_allstrategy=codigo_allstrategy)
             if self.instance.pk:
@@ -88,9 +102,11 @@ class UnidadeForm(forms.ModelForm):
         return codigo_allstrategy
     
     def clean(self):
-        """Validação customizada simplificada"""
+        """Validação customizada"""
         cleaned_data = super().clean()
         codigo = cleaned_data.get('codigo')
+        tipo = cleaned_data.get('tipo')
+        codigo_allstrategy = cleaned_data.get('codigo_allstrategy')
         
         # Verificar se pai existe (apenas para códigos com pontos)
         if codigo and '.' in codigo:
@@ -103,14 +119,23 @@ class UnidadeForm(forms.ModelForm):
                              f'Certifique-se de que existe pelo menos uma unidade superior.'
                 })
         
+        # Validação adicional: unidades sintéticas não devem ter código All Strategy se não fornecido
+        if tipo == 'S' and not codigo_allstrategy:
+            # Limpar qualquer valor que possa ter sido herdado
+            cleaned_data['codigo_allstrategy'] = ''
+        
         return cleaned_data
     
     def save(self, commit=True):
-        """Save simplificado - modelo cuida da hierarquia"""
+        """Save ajustado para sintéticos"""
         unidade = super().save(commit=False)
         
-        # Se não tem código All Strategy, sugerir baseado no código
-        if not unidade.codigo_allstrategy and unidade.codigo:
+        # Para unidades sintéticas, garantir que código All Strategy fique vazio se não fornecido
+        if unidade.tipo == 'S' and not unidade.codigo_allstrategy:
+            unidade.codigo_allstrategy = ''
+        
+        # Para unidades analíticas, sugerir código All Strategy se não fornecido
+        elif unidade.tipo == 'A' and not unidade.codigo_allstrategy and unidade.codigo:
             partes = unidade.codigo.split('.')
             ultimo_segmento = partes[-1]
             if ultimo_segmento.isdigit():
