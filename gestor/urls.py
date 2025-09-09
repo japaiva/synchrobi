@@ -1,4 +1,4 @@
-# gestor/urls.py - URLs atualizadas para nova arquitetura de unidades
+# gestor/urls.py - URLs atualizadas incluindo centros de custo
 
 from django.urls import path
 from . import views
@@ -53,14 +53,25 @@ urlpatterns = [
     path('api/unidades/search/', views.unidade_tree_search, name='unidade_tree_search'),
     path('api/unidades/export/', views.unidade_tree_export, name='unidade_tree_export'),
     
-    # ===== CENTROS DE CUSTO =====
-    path('centros-custo/', views.centrocusto_list, name='centrocusto_list'),
-    path('centros-custo/criar/', views.centrocusto_create, name='centrocusto_create'),
-    path('centros-custo/<str:codigo>/editar/', views.centrocusto_update, name='centrocusto_update'),
-    path('centros-custo/<str:codigo>/excluir/', views.centrocusto_delete, name='centrocusto_delete'),
+    # ===== CENTROS DE CUSTO - NOVA ARQUITETURA FOCADA NA ÁRVORE =====
     
-    # APIs para Centros de Custo
-    path('api/validar-codigo-centrocusto/', views.api_validar_codigo_centrocusto, name='api_validar_codigo_centrocusto'),
+    # View principal (árvore hierárquica)
+    path('centros-custo/', views.centrocusto_tree_view, name='centrocusto_tree'),
+    
+    # Views modais para CRUD
+    path('centros-custo/criar/', views.centrocusto_create_modal, name='centrocusto_create_modal'),
+    path('centros-custo/<str:codigo>/editar/', views.centrocusto_update_modal, name='centrocusto_update_modal'),
+    path('centros-custo/<str:codigo>/excluir/', views.centrocusto_delete_ajax, name='centrocusto_delete_ajax'),
+    
+    # APIs para árvore de centros de custo
+    path('api/centros-custo/tree-data/', views.api_centrocusto_tree_data, name='api_centrocusto_tree_data'),
+    path('api/centros-custo/validar-codigo/', views.api_validar_codigo_centrocusto, name='api_validar_codigo_centrocusto'),
+    
+    # Views mantidas para compatibilidade (redirecionam para árvore ou modais)
+    path('centros-custo/lista/', views.centrocusto_list, name='centrocusto_list'),
+    path('centros-custo/novo/', views.centrocusto_create, name='centrocusto_create'),
+    path('centros-custo/<str:codigo>/editar-old/', views.centrocusto_update, name='centrocusto_update'),
+    path('centros-custo/<str:codigo>/excluir-old/', views.centrocusto_delete, name='centrocusto_delete'),
     
     # ===== CONTAS CONTÁBEIS =====
     path('contas-contabeis/', views.contacontabil_list, name='contacontabil_list'),
@@ -88,22 +99,22 @@ urlpatterns = [
     path('api/parametro/<str:codigo>/valor/', views.api_parametro_valor, name='api_parametro_valor'),
 ]
 
-# ===== URLS REMOVIDAS DA ARQUITETURA ANTIGA =====
+# ===== PRINCIPAIS MUDANÇAS =====
 #
-# As seguintes URLs foram removidas pois não existem mais na nova arquitetura:
-#
-# REMOVIDAS:
-# - path('unidades/arvore/', ...) → agora é a URL principal 'unidades/'
-# - path('unidades/lista/', ...) → substituída pela árvore
-# - path('unidades/<int:pk>/', ...) → substituída por modal de detalhes
-# - path('unidades/criar/', ...) → agora é modal (unidade_create_modal)
-# - path('unidades/<int:pk>/editar/', ...) → agora é modal (unidade_update_modal)
-# - path('unidades/<int:pk>/excluir/', ...) → agora é AJAX (unidade_delete_ajax)
-# - path('api/unidade/<int:pk>/filhas/', ...) → substituída por tree-data APIs
-#
-# MUDANÇAS PRINCIPAIS:
-# 1. 'unidades/' agora aponta direto para a árvore (unidade_tree_view)
+# CENTROS DE CUSTO:
+# 1. 'centros-custo/' agora aponta direto para a árvore (centrocusto_tree_view)
 # 2. URLs modais têm nomes específicos (_modal, _ajax)
-# 3. APIs organizadas entre básicas e avançadas
-# 4. Fallbacks removidos pois interface é centrada na árvore
-# 5. URLs mais RESTful e organizadas por funcionalidade
+# 3. APIs organizadas para árvore hierárquica
+# 4. URLs antigas mantidas com redirecionamento para compatibilidade
+#
+# ESTRUTURA:
+# - centros-custo/ → árvore principal
+# - centros-custo/criar/ → modal de criação
+# - centros-custo/{codigo}/editar/ → modal de edição  
+# - centros-custo/{codigo}/excluir/ → exclusão via AJAX
+# - api/centros-custo/tree-data/ → dados da árvore
+# - api/centros-custo/validar-codigo/ → validação em tempo real
+#
+# COMPATIBILIDADE:
+# - URLs antigas redirecionam para novas funcionalidades
+# - Mantém funcionalidade para sistemas que dependem das URLs antigas

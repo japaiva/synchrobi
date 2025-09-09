@@ -6,7 +6,7 @@
 <div class="card shadow">
   <div class="card-header bg-light d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      <i class="fas fa-building me-2"></i> Empresas
+      Empresas
     </h5>
     <div>
       <a href="{% url 'gestor:empresa_create' %}" class="btn btn-primary btn-sm">
@@ -94,11 +94,6 @@
               </td>
               <td class="text-end">
                 <div class="btn-group" role="group" aria-label="Ações">
-                  <a href="{% url 'gestor:empresa_centro_custo_list' empresa.sigla %}" 
-                     class="btn btn-sm btn-outline-info" 
-                     title="Centros de Custo">
-                    <i class="fas fa-sitemap"></i>
-                  </a>
                   <a href="{% url 'gestor:empresa_update' empresa.sigla %}" 
                      class="btn btn-sm btn-outline-primary" 
                      title="Editar">

@@ -147,9 +147,10 @@ class UnidadeForm(forms.ModelForm):
         return unidade
 
 # ===== FORMULÁRIO CENTRO DE CUSTO SIMPLIFICADO =====
+# Substituir em core/forms.py - Formulários corrigidos para tipo editável
 
 class CentroCustoForm(forms.ModelForm):
-    """Formulário para criar/editar centros de custo com hierarquia dinâmica"""
+    """Formulário para criar/editar centros de custo com tipo completamente editável"""
     
     class Meta:
         model = CentroCusto
@@ -158,17 +159,20 @@ class CentroCustoForm(forms.ModelForm):
         ]
         widgets = {
             'codigo': forms.TextInput(attrs={
-                'class': 'form-control'
+                'class': 'form-control',
+                'placeholder': 'Ex: 1.1.01'
             }),
             'nome': forms.TextInput(attrs={
-                'class': 'form-control'
+                'class': 'form-control',
+                'placeholder': 'Nome do centro de custo'
             }),
             'tipo': forms.Select(attrs={
                 'class': 'form-select'
             }),
             'descricao': forms.Textarea(attrs={
                 'class': 'form-control', 
-                'rows': 3
+                'rows': 3,
+                'placeholder': 'Descrição opcional do centro de custo'
             }),
             'ativo': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
@@ -180,14 +184,34 @@ class CentroCustoForm(forms.ModelForm):
         
         # Help texts
         self.fields['codigo'].help_text = "Use pontos para separar níveis (ex: 1.1.01)"
-        self.fields['tipo'].help_text = "S=Sintético (agrupador), A=Analítico (operacional)"
+        self.fields['tipo'].help_text = "S=Sintético (pode ter sub-centros), A=Analítico (não pode ter sub-centros)"
+        
+        # Configurar choices do tipo - SEMPRE EDITÁVEL
+        self.fields['tipo'].choices = [
+            ('', '--- Selecione ---'),
+            ('S', 'Sintético'),
+            ('A', 'Analítico'),
+        ]
         
         # Se estiver editando um centro existente
         if self.instance.pk:
-            # Desabilitar o campo tipo se já tem sub-centros
-            if self.instance.tem_sub_centros:
-                self.fields['tipo'].widget.attrs['disabled'] = True
-                self.fields['tipo'].help_text = "Tipo não pode ser alterado pois o centro possui sub-centros"
+            # Código não pode ser alterado após criação
+            self.fields['codigo'].widget.attrs['readonly'] = True
+            self.fields['codigo'].help_text = "Código não pode ser alterado após criação"
+            
+            # VERIFICAR se pode alterar tipo
+            if self.instance.tem_sub_centros and self.instance.tipo == 'S':
+                # Se tem filhos, avisar sobre limitação de alterar para analítico
+                self.fields['tipo'].help_text = f"⚠️ Este centro possui {self.instance.get_filhos_diretos().count()} sub-centro(s). " \
+                                               f"Não pode ser alterado para 'Analítico' enquanto tiver sub-centros."
+            else:
+                # Se não tem filhos, pode alterar livremente
+                self.fields['tipo'].help_text = "Tipo pode ser alterado livremente pois não possui sub-centros"
+        
+        # Campos obrigatórios
+        self.fields['codigo'].required = True
+        self.fields['nome'].required = True
+        self.fields['tipo'].required = True
     
     def clean_codigo(self):
         """Validação específica para código do centro de custo"""
@@ -196,48 +220,111 @@ class CentroCustoForm(forms.ModelForm):
         if not codigo:
             raise forms.ValidationError("Código é obrigatório.")
         
-        # Validar formato (números e pontos apenas)
+        # Validar formato
         import re
         if not re.match(r'^[\d\.]+$', codigo):
             raise forms.ValidationError("Código deve conter apenas números e pontos.")
         
-        # Verificar se já existe OUTRO registro com este código
+        # Validações de formato
+        if codigo.startswith('.') or codigo.endswith('.'):
+            raise forms.ValidationError("Código não pode começar ou terminar com ponto.")
+        
+        if '..' in codigo:
+            raise forms.ValidationError("Código não pode ter pontos consecutivos.")
+        
+        # Verificar duplicação
         queryset = CentroCusto.objects.filter(codigo=codigo)
         if self.instance.pk:
-            queryset = queryset.exclude(pk=self.instance.pk)
+            queryset = queryset.exclude(codigo=self.instance.codigo)
         
         if queryset.exists():
             raise forms.ValidationError("Já existe um centro de custo com este código.")
         
         return codigo
     
+    def clean_nome(self):
+        """Validação para nome"""
+        nome = self.cleaned_data.get('nome', '').strip()
+        
+        if not nome:
+            raise forms.ValidationError("Nome é obrigatório.")
+        
+        if len(nome) < 3:
+            raise forms.ValidationError("Nome deve ter pelo menos 3 caracteres.")
+        
+        return nome
+    
+    def clean_tipo(self):
+        """Validação para tipo"""
+        tipo = self.cleaned_data.get('tipo')
+        
+        if not tipo:
+            raise forms.ValidationError("Tipo é obrigatório.")
+        
+        if tipo not in ['S', 'A']:
+            raise forms.ValidationError("Tipo deve ser 'S' (Sintético) ou 'A' (Analítico).")
+        
+        # VALIDAÇÃO IMPORTANTE: se está alterando para analítico, verificar se tem filhos
+        if self.instance.pk and tipo == 'A' and self.instance.tem_sub_centros:
+            filhos_count = self.instance.get_filhos_diretos().count()
+            raise forms.ValidationError(
+                f"Não é possível alterar para 'Analítico' pois este centro possui {filhos_count} sub-centro(s). "
+                f"Remova os sub-centros primeiro ou mantenha como 'Sintético'."
+            )
+        
+        return tipo
+    
     def clean(self):
-        """Validação customizada simplificada"""
+        """Validação geral"""
         cleaned_data = super().clean()
         codigo = cleaned_data.get('codigo')
         tipo = cleaned_data.get('tipo')
         
-        # Se estiver editando e tentar mudar tipo quando tem filhos
-        if self.instance.pk and self.instance.tem_sub_centros and tipo != self.instance.tipo:
-            raise forms.ValidationError("Não é possível alterar o tipo de um centro que possui sub-centros.")
-        
-        # Verificar se pai existe (apenas para códigos com pontos)
+        # Verificar hierarquia
         if codigo and '.' in codigo:
             temp_instance = CentroCusto(codigo=codigo)
             pai = temp_instance.encontrar_pai_hierarquico()
             
             if not pai:
+                partes = codigo.split('.')
+                codigo_pai = '.'.join(partes[:-1])
                 raise forms.ValidationError({
                     'codigo': f'Nenhum centro pai foi encontrado para o código "{codigo}". '
-                             f'Certifique-se de que existe pelo menos um centro superior.'
+                             f'Certifique-se de que existe um centro com código "{codigo_pai}".'
+                })
+            
+            # VALIDAÇÃO: pai deve ser sintético para aceitar filhos
+            if pai.tipo == 'A':
+                raise forms.ValidationError({
+                    'codigo': f'O centro pai "{pai.codigo} - {pai.nome}" é analítico e não pode ter sub-centros. '
+                             f'Altere o tipo do centro pai para "Sintético" primeiro.'
                 })
         
         return cleaned_data
-
-# ===== FORMULÁRIO CONTA CONTÁBIL SIMPLIFICADO =====
+    
+    def save(self, commit=True):
+        """Save customizado"""
+        centro = super().save(commit=False)
+        
+        # Limpar dados
+        if centro.codigo:
+            centro.codigo = centro.codigo.strip()
+        if centro.nome:
+            centro.nome = centro.nome.strip()
+        
+        if commit:
+            centro.save()
+            
+            # Log
+            import logging
+            logger = logging.getLogger('synchrobi')
+            action = "atualizado" if self.instance.pk else "criado"
+            logger.info(f'Centro de custo {action}: {centro.codigo} - {centro.nome} ({centro.get_tipo_display()})')
+        
+        return centro
 
 class ContaContabilForm(forms.ModelForm):
-    """Formulário para criar/editar contas contábeis com hierarquia dinâmica"""
+    """Formulário para criar/editar contas contábeis com tipo completamente editável"""
     
     class Meta:
         model = ContaContabil
@@ -246,17 +333,20 @@ class ContaContabilForm(forms.ModelForm):
         ]
         widgets = {
             'codigo': forms.TextInput(attrs={
-                'class': 'form-control'
+                'class': 'form-control',
+                'placeholder': 'Ex: 1.1.01.001'
             }),
             'nome': forms.TextInput(attrs={
-                'class': 'form-control'
+                'class': 'form-control',
+                'placeholder': 'Nome da conta contábil'
             }),
             'tipo': forms.Select(attrs={
                 'class': 'form-select'
             }),
             'descricao': forms.Textarea(attrs={
                 'class': 'form-control', 
-                'rows': 3
+                'rows': 3,
+                'placeholder': 'Descrição opcional da conta'
             }),
             'ativa': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
@@ -268,14 +358,34 @@ class ContaContabilForm(forms.ModelForm):
         
         # Help texts
         self.fields['codigo'].help_text = "Use pontos para separar níveis (ex: 1.1.01.001)"
-        self.fields['tipo'].help_text = "S=Sintético (agrupador), A=Analítico (aceita lançamentos)"
+        self.fields['tipo'].help_text = "S=Sintético (pode ter sub-contas), A=Analítico (aceita lançamentos)"
+        
+        # Configurar choices do tipo - SEMPRE EDITÁVEL
+        self.fields['tipo'].choices = [
+            ('', '--- Selecione ---'),
+            ('S', 'Sintético'),
+            ('A', 'Analítico'),
+        ]
         
         # Se estiver editando uma conta existente
         if self.instance.pk:
-            # Desabilitar o campo tipo se já tem subcontas
-            if self.instance.tem_subcontas:
-                self.fields['tipo'].widget.attrs['disabled'] = True
-                self.fields['tipo'].help_text = "Tipo não pode ser alterado pois a conta possui subcontas"
+            # Código não pode ser alterado após criação
+            self.fields['codigo'].widget.attrs['readonly'] = True
+            self.fields['codigo'].help_text = "Código não pode ser alterado após criação"
+            
+            # VERIFICAR se pode alterar tipo
+            if self.instance.tem_subcontas and self.instance.tipo == 'S':
+                # Se tem filhos, avisar sobre limitação de alterar para analítico
+                self.fields['tipo'].help_text = f"⚠️ Esta conta possui {self.instance.get_filhos_diretos().count()} sub-conta(s). " \
+                                               f"Não pode ser alterada para 'Analítico' enquanto tiver sub-contas."
+            else:
+                # Se não tem filhos, pode alterar livremente
+                self.fields['tipo'].help_text = "Tipo pode ser alterado livremente pois não possui sub-contas"
+        
+        # Campos obrigatórios
+        self.fields['codigo'].required = True
+        self.fields['nome'].required = True
+        self.fields['tipo'].required = True
     
     def clean_codigo(self):
         """Validação específica para código da conta contábil"""
@@ -284,44 +394,109 @@ class ContaContabilForm(forms.ModelForm):
         if not codigo:
             raise forms.ValidationError("Código é obrigatório.")
         
-        # Validar formato (números e pontos apenas)
+        # Validar formato
         import re
         if not re.match(r'^[\d\.]+$', codigo):
             raise forms.ValidationError("Código deve conter apenas números e pontos.")
         
-        # Verificar se já existe OUTRO registro com este código
+        # Validações de formato
+        if codigo.startswith('.') or codigo.endswith('.'):
+            raise forms.ValidationError("Código não pode começar ou terminar com ponto.")
+        
+        if '..' in codigo:
+            raise forms.ValidationError("Código não pode ter pontos consecutivos.")
+        
+        # Verificar duplicação
         queryset = ContaContabil.objects.filter(codigo=codigo)
         if self.instance.pk:
-            queryset = queryset.exclude(pk=self.instance.pk)
+            queryset = queryset.exclude(codigo=self.instance.codigo)
         
         if queryset.exists():
             raise forms.ValidationError("Já existe uma conta contábil com este código.")
         
         return codigo
     
+    def clean_nome(self):
+        """Validação para nome"""
+        nome = self.cleaned_data.get('nome', '').strip()
+        
+        if not nome:
+            raise forms.ValidationError("Nome é obrigatório.")
+        
+        if len(nome) < 3:
+            raise forms.ValidationError("Nome deve ter pelo menos 3 caracteres.")
+        
+        return nome
+    
+    def clean_tipo(self):
+        """Validação para tipo"""
+        tipo = self.cleaned_data.get('tipo')
+        
+        if not tipo:
+            raise forms.ValidationError("Tipo é obrigatório.")
+        
+        if tipo not in ['S', 'A']:
+            raise forms.ValidationError("Tipo deve ser 'S' (Sintético) ou 'A' (Analítico).")
+        
+        # VALIDAÇÃO IMPORTANTE: se está alterando para analítico, verificar se tem filhos
+        if self.instance.pk and tipo == 'A' and self.instance.tem_subcontas:
+            filhos_count = self.instance.get_filhos_diretos().count()
+            raise forms.ValidationError(
+                f"Não é possível alterar para 'Analítico' pois esta conta possui {filhos_count} sub-conta(s). "
+                f"Remova as sub-contas primeiro ou mantenha como 'Sintético'."
+            )
+        
+        return tipo
+    
     def clean(self):
-        """Validação customizada simplificada"""
+        """Validação geral"""
         cleaned_data = super().clean()
         codigo = cleaned_data.get('codigo')
         tipo = cleaned_data.get('tipo')
         
-        # Se estiver editando e tentar mudar tipo quando tem filhos
-        if self.instance.pk and self.instance.tem_subcontas and tipo != self.instance.tipo:
-            raise forms.ValidationError("Não é possível alterar o tipo de uma conta que possui subcontas.")
-        
-        # Verificar se pai existe (apenas para códigos com pontos)
+        # Verificar hierarquia
         if codigo and '.' in codigo:
             temp_instance = ContaContabil(codigo=codigo)
             pai = temp_instance.encontrar_pai_hierarquico()
             
             if not pai:
+                partes = codigo.split('.')
+                codigo_pai = '.'.join(partes[:-1])
                 raise forms.ValidationError({
                     'codigo': f'Nenhuma conta pai foi encontrada para o código "{codigo}". '
-                             f'Certifique-se de que existe pelo menos uma conta superior.'
+                             f'Certifique-se de que existe uma conta com código "{codigo_pai}".'
+                })
+            
+            # VALIDAÇÃO: pai deve ser sintético para aceitar filhos
+            if pai.tipo == 'A':
+                raise forms.ValidationError({
+                    'codigo': f'A conta pai "{pai.codigo} - {pai.nome}" é analítica e não pode ter sub-contas. '
+                             f'Altere o tipo da conta pai para "Sintético" primeiro.'
                 })
         
         return cleaned_data
-
+    
+    def save(self, commit=True):
+        """Save customizado"""
+        conta = super().save(commit=False)
+        
+        # Limpar dados
+        if conta.codigo:
+            conta.codigo = conta.codigo.strip()
+        if conta.nome:
+            conta.nome = conta.nome.strip()
+        
+        if commit:
+            conta.save()
+            
+            # Log
+            import logging
+            logger = logging.getLogger('synchrobi')
+            action = "atualizada" if self.instance.pk else "criada"
+            logger.info(f'Conta contábil {action}: {conta.codigo} - {conta.nome} ({conta.get_tipo_display()})')
+        
+        return conta
+    
 # ===== FORMULÁRIOS MANTIDOS IGUAIS =====
 
 class EmpresaForm(forms.ModelForm):

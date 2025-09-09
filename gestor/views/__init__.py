@@ -44,13 +44,25 @@ from .unidade_tree import (
     calculate_tree_stats             # Função auxiliar (compatibilidade)
 )
 
-# Centro Custo
+# Centro Custo - Nova arquitetura focada na árvore
 from .centrocusto import (
-    centrocusto_list, 
-    centrocusto_create, 
-    centrocusto_update, 
-    centrocusto_delete,
-    api_validar_codigo_centrocusto
+    # Views modais CRUD
+    centrocusto_create_modal,        # Criar via modal
+    centrocusto_update_modal,        # Editar via modal
+    centrocusto_delete_ajax,         # Excluir via AJAX
+    
+    # View principal da árvore
+    centrocusto_tree_view,           # View principal da árvore (PRINCIPAL)
+    
+    # APIs para árvore
+    api_centrocusto_tree_data,       # API com filtros avançados
+    api_validar_codigo_centrocusto,  # API para validação de código
+    
+    # Views mantidas para compatibilidade (redirecionam)
+    centrocusto_list,                # Redireciona para árvore
+    centrocusto_create,              # Redireciona para modal
+    centrocusto_update,              # Redireciona para modal
+    centrocusto_delete,              # Redireciona para AJAX
 )
 
 # Conta Contabil
@@ -80,20 +92,32 @@ from .parametro import (
     api_parametro_valor
 )
 
-# ===== VIEWS REMOVIDAS DA ARQUITETURA ANTIGA =====
+# ===== VIEWS REMOVIDAS/ATUALIZADAS NA NOVA ARQUITETURA =====
 # 
-# As seguintes views foram removidas da arquitetura de unidades:
-# - unidade_list (substituída por unidade_tree_view)
-# - unidade_create (substituída por unidade_create_modal)
-# - unidade_detail (substituída por unidade_detail_modal)
-# - unidade_update (substituída por unidade_update_modal)
-# - unidade_delete (substituída por unidade_delete_ajax)
-# - unidade_arvore (integrada em unidade_tree_view)
-# - api_unidade_filhas (substituída por api_unidade_tree_data)
+# UNIDADES (já migradas):
+# - unidade_list → unidade_tree_view
+# - unidade_create → unidade_create_modal
+# - unidade_detail → unidade_detail_modal
+# - unidade_update → unidade_update_modal
+# - unidade_delete → unidade_delete_ajax
+# - unidade_arvore → integrada em unidade_tree_view
+# - api_unidade_filhas → api_unidade_tree_data
 #
-# A nova arquitetura usa:
-# 1. View principal única (unidade_tree_view) para visualização hierárquica
-# 2. Modais para operações CRUD (create_modal, update_modal, detail_modal)
-# 3. AJAX para exclusões (delete_ajax)
-# 4. APIs modernas para dados da árvore (api_unidade_tree_data)
-# 5. APIs especializadas (search, export) para funcionalidades avançadas
+# CENTROS DE CUSTO (migrados nesta atualização):
+# - centrocusto_list → centrocusto_tree_view (principal) + redirect (compatibilidade)
+# - centrocusto_create → centrocusto_create_modal (principal) + redirect (compatibilidade)
+# - centrocusto_update → centrocusto_update_modal (principal) + redirect (compatibilidade)
+# - centrocusto_delete → centrocusto_delete_ajax (principal) + redirect (compatibilidade)
+# + api_centrocusto_tree_data → nova API para dados da árvore
+#
+# PRÓXIMAS MIGRAÇÕES (futuras):
+# - contas_contabeis → seguirão o mesmo padrão
+# - Outras entidades hierárquicas conforme necessário
+#
+# PADRÃO DA NOVA ARQUITETURA:
+# 1. View principal única (*_tree_view) para visualização hierárquica
+# 2. Modais para operações CRUD (*_create_modal, *_update_modal, *_detail_modal*)
+# 3. AJAX para exclusões (*_delete_ajax)
+# 4. APIs modernas para dados da árvore (api_*_tree_data)
+# 5. APIs de validação específicas (api_validar_codigo_*)
+# 6. Views antigas mantidas para compatibilidade com redirecionamentos
