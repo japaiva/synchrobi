@@ -118,245 +118,68 @@ def centrocusto_tree_view(request):
 
 # ===== VIEWS MODAIS =====
 
-
-# gestor/views/centrocusto.py - View de criação com debug detalhado
+# gestor/views/centrocusto.py - View de edição corrigida (substituir apenas esta função)
 
 @login_required
-def centrocusto_create_modal(request):
-    """Criar novo centro de custo via modal - COM DEBUG"""
+def centrocusto_update_modal(request, codigo):
+    """Editar centro de custo via modal - VERSÃO CORRIGIDA"""
+    
+    centro = get_object_or_404(CentroCusto, codigo=codigo)
     
     if request.method == 'POST':
-        # Debug: logs dos dados recebidos
-        logger.info(f"=== INÍCIO DEBUG CENTRO CUSTO ===")
-        logger.info(f"POST data: {request.POST}")
-        logger.info(f"User: {request.user}")
-        logger.info(f"AJAX request: {request.headers.get('X-Requested-With')}")
+        logger.info(f"Editando centro de custo: {centro.codigo} - {centro.nome}")
         
-        form = CentroCustoForm(request.POST)
+        form = CentroCustoForm(request.POST, instance=centro)
         
-        # Debug: verificar se form é válido
-        logger.info(f"Form is_valid: {form.is_valid()}")
-        
-        if not form.is_valid():
-            logger.error(f"Form errors: {form.errors}")
-            logger.error(f"Form non_field_errors: {form.non_field_errors()}")
-            
+        if form.is_valid():
+            try:
+                # USAR TRANSACTION EXPLÍCITA
+                from django.db import transaction
+                
+                with transaction.atomic():
+                    # Save normal
+                    centro_editado = form.save()
+                    logger.info(f"Centro de custo atualizado: {centro_editado.codigo} - {centro_editado.nome}")
+                
+                # Verificação simples após transação
+                centro_verificacao = CentroCusto.objects.get(codigo=codigo)
+                logger.info(f"Verificação final: {centro_verificacao.nome}")
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Centro de custo "{centro_verificacao.nome}" atualizado com sucesso!',
+                        'centro': {
+                            'codigo': centro_verificacao.codigo,
+                            'nome': centro_verificacao.nome,
+                            'tipo': centro_verificacao.tipo
+                        }
+                    })
+                
+                messages.success(request, f'Centro de custo "{centro_verificacao.nome}" atualizado com sucesso!')
+                return redirect('gestor:centrocusto_tree')
+                
+            except Exception as e:
+                logger.error(f"Erro ao atualizar centro de custo {centro.codigo}: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'Erro ao atualizar centro de custo: {str(e)}'
+                    })
+                
+                messages.error(request, f'Erro ao atualizar centro de custo: {str(e)}')
+        else:
+            logger.error(f"Formulário inválido para centro {centro.codigo}: {form.errors}")
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': False,
                     'message': 'Dados inválidos. Verifique os campos.',
                     'errors': form.errors
                 })
-            else:
-                messages.error(request, 'Dados inválidos. Verifique os campos.')
-        else:
-            # Form é válido, tentar salvar
-            try:
-                logger.info("Form válido, tentando salvar...")
-                
-                # Debug: dados limpos
-                logger.info(f"Cleaned data: {form.cleaned_data}")
-                
-                # Salvar sem commit primeiro para debug
-                centro = form.save(commit=False)
-                logger.info(f"Centro criado em memória: {centro}")
-                logger.info(f"Centro código: {centro.codigo}")
-                logger.info(f"Centro nome: {centro.nome}")
-                logger.info(f"Centro tipo: {centro.tipo}")
-                
-                # Tentar validação manual
-                try:
-                    centro.full_clean()
-                    logger.info("Validação manual passou")
-                except Exception as validation_error:
-                    logger.error(f"Erro na validação manual: {validation_error}")
-                    raise validation_error
-                
-                # Tentar salvar
-                centro.save()
-                logger.info(f"Centro salvo com sucesso! PK: {centro.pk}")
-                
-                # Verificar se realmente foi salvo
-                centro_verificacao = CentroCusto.objects.get(codigo=centro.codigo)
-                logger.info(f"Verificação: centro encontrado no banco: {centro_verificacao}")
-                
-                # Resposta de sucesso
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'Centro de custo "{centro.nome}" criado com sucesso!',
-                        'centro': {
-                            'codigo': centro.codigo,
-                            'nome': centro.nome,
-                            'tipo': centro.tipo,
-                            'nivel': centro.nivel
-                        }
-                    })
-                
-                messages.success(request, f'Centro de custo "{centro.nome}" criado com sucesso!')
-                return redirect('gestor:centrocusto_tree')
-                
-            except Exception as e:
-                # Log detalhado do erro
-                import traceback
-                logger.error(f"=== ERRO AO SALVAR CENTRO ===")
-                logger.error(f"Erro: {str(e)}")
-                logger.error(f"Tipo do erro: {type(e)}")
-                logger.error(f"Traceback completo:")
-                logger.error(traceback.format_exc())
-                
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({
-                        'success': False,
-                        'message': f'Erro ao criar centro de custo: {str(e)}',
-                        'error_type': type(e).__name__,
-                        'traceback': traceback.format_exc()
-                    })
-                
-                messages.error(request, f'Erro ao criar centro de custo: {str(e)}')
-    
-    else:
-        # GET request
-        form = CentroCustoForm()
-        
-        # Pré-preencher se veio de um pai
-        codigo_pai = request.GET.get('codigo_pai')
-        sugestao_codigo = request.GET.get('sugestao')
-        
-        if codigo_pai:
-            try:
-                centro_pai = CentroCusto.objects.get(codigo=codigo_pai)
-                if sugestao_codigo:
-                    form.initial['codigo'] = sugestao_codigo
-                else:
-                    filhos_diretos = centro_pai.get_filhos_diretos()
-                    proxima_sequencia = filhos_diretos.count() + 1
-                    codigo_sugerido = f"{centro_pai.codigo}.{proxima_sequencia:02d}"
-                    form.initial['codigo'] = codigo_sugerido
-                
-                form.pai_info = {
-                    'codigo': centro_pai.codigo,
-                    'nome': centro_pai.nome,
-                    'tipo_display': centro_pai.get_tipo_display()
-                }
-            except CentroCusto.DoesNotExist:
-                logger.warning(f'Centro pai não encontrado: {codigo_pai}')
-    
-    # Renderizar modal
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return render(request, 'gestor/partials/centrocusto_form_modal.html', {
-            'form': form,
-            'title': 'Novo Centro de Custo',
-            'is_create': True
-        })
-    
-    # Fallback
-    context = {
-        'form': form,
-        'title': 'Novo Centro de Custo',
-        'is_create': True
-    }
-    return render(request, 'gestor/centrocusto_form.html', context)
-
-
-# gestor/views/centrocusto.py - Debug detalhado do save com transaction
-
-@login_required
-def centrocusto_update_modal(request, codigo):
-    """Editar centro de custo com debug DETALHADO do save"""
-    
-    centro = get_object_or_404(CentroCusto, codigo=codigo)
-    
-    if request.method == 'POST':
-        logger.info(f"=== DEBUG SAVE DETALHADO ===")
-        logger.info(f"Centro ANTES da edição: {centro.nome}")
-        
-        form = CentroCustoForm(request.POST, instance=centro)
-        
-        if form.is_valid():
-            logger.info(f"Cleaned data: {form.cleaned_data}")
-            
-            # VERIFICAR VALOR ANTES DO SAVE
-            centro_antes = CentroCusto.objects.get(codigo=codigo)
-            logger.info(f"ANTES DO SAVE - Nome no banco: '{centro_antes.nome}'")
-            
-            try:
-                # USAR TRANSACTION EXPLÍCITA
-                from django.db import transaction
-                
-                with transaction.atomic():
-                    logger.info("Iniciando transação...")
-                    
-                    # Save sem commit primeiro
-                    centro_editado = form.save(commit=False)
-                    logger.info(f"Save commit=False - Nome: '{centro_editado.nome}'")
-                    
-                    # Verificar se mudou
-                    if centro_antes.nome != centro_editado.nome:
-                        logger.info(f"MUDANÇA DETECTADA: '{centro_antes.nome}' → '{centro_editado.nome}'")
-                    else:
-                        logger.warning("NENHUMA MUDANÇA DETECTADA!")
-                    
-                    # Validação manual
-                    centro_editado.full_clean()
-                    logger.info("Validação passou")
-                    
-                    # SAVE COM COMMIT EXPLÍCITO
-                    centro_editado.save()
-                    logger.info(f"Save() executado - PK: {centro_editado.pk}")
-                    
-                    # VERIFICAR IMEDIATAMENTE SE SALVOU
-                    centro_verificacao_1 = CentroCusto.objects.get(codigo=codigo)
-                    logger.info(f"VERIFICAÇÃO 1 (dentro da transação): '{centro_verificacao_1.nome}'")
-                    
-                    # FORÇAR REFRESH DO OBJETO
-                    centro_editado.refresh_from_db()
-                    logger.info(f"Após refresh_from_db: '{centro_editado.nome}'")
-                    
-                    # TRANSACTION COMMIT AUTOMÁTICO AQUI
-                    logger.info("Saindo da transação (commit automático)")
-                
-                # VERIFICAR APÓS TRANSACTION
-                centro_verificacao_2 = CentroCusto.objects.get(codigo=codigo)
-                logger.info(f"VERIFICAÇÃO 2 (após transação): '{centro_verificacao_2.nome}'")
-                
-                # VERIFICAR COM SELECT FOR UPDATE
-                centro_verificacao_3 = CentroCusto.objects.select_for_update().get(codigo=codigo)
-                logger.info(f"VERIFICAÇÃO 3 (com lock): '{centro_verificacao_3.nome}'")
-                
-                # VERIFICAR TODOS OS CAMPOS
-                logger.info(f"Campos finais - Nome: '{centro_verificacao_3.nome}', Tipo: '{centro_verificacao_3.tipo}', Ativo: {centro_verificacao_3.ativo}")
-                
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'Centro atualizado: "{centro_verificacao_3.nome}"',
-                        'debug': {
-                            'nome_antes': centro_antes.nome,
-                            'nome_depois': centro_verificacao_3.nome,
-                            'mudou': centro_antes.nome != centro_verificacao_3.nome
-                        }
-                    })
-                
-            except Exception as e:
-                logger.error(f"ERRO NO SAVE: {str(e)}")
-                import traceback
-                logger.error(traceback.format_exc())
-                
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({
-                        'success': False,
-                        'message': f'Erro: {str(e)}',
-                        'traceback': traceback.format_exc()
-                    })
-        else:
-            logger.error(f"Form inválido: {form.errors}")
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({
-                    'success': False,
-                    'message': 'Form inválido',
-                    'errors': form.errors
-                })
+            messages.error(request, 'Dados inválidos. Verifique os campos.')
     
     else:
         form = CentroCustoForm(instance=centro)
@@ -375,6 +198,119 @@ def centrocusto_update_modal(request, codigo):
         'centro': centro,
         'is_create': False
     })
+
+# gestor/views/centrocusto.py - View de criação corrigida (substituir apenas esta função)
+
+@login_required
+def centrocusto_create_modal(request):
+    """Criar novo centro de custo via modal - VERSÃO CORRIGIDA"""
+    
+    if request.method == 'POST':
+        logger.info(f"Criando novo centro de custo")
+        logger.info(f"POST data recebido: {dict(request.POST)}")
+        
+        form = CentroCustoForm(request.POST)
+        
+        if form.is_valid():
+            logger.info(f"Formulário válido. Dados: {form.cleaned_data}")
+            
+            try:
+                # USAR TRANSACTION EXPLÍCITA
+                from django.db import transaction
+                
+                with transaction.atomic():
+                    # Save normal
+                    centro = form.save()
+                    logger.info(f"Centro de custo criado: {centro.codigo} - {centro.nome}")
+                
+                # Verificação simples após transação
+                centro_verificacao = CentroCusto.objects.get(codigo=centro.codigo)
+                logger.info(f"Verificação: centro criado com sucesso - {centro_verificacao.nome}")
+                
+                # Resposta de sucesso
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Centro de custo "{centro_verificacao.nome}" criado com sucesso!',
+                        'centro': {
+                            'codigo': centro_verificacao.codigo,
+                            'nome': centro_verificacao.nome,
+                            'tipo': centro_verificacao.tipo,
+                            'nivel': centro_verificacao.nivel
+                        }
+                    })
+                
+                messages.success(request, f'Centro de custo "{centro_verificacao.nome}" criado com sucesso!')
+                return redirect('gestor:centrocusto_tree')
+                
+            except Exception as e:
+                logger.error(f"Erro ao criar centro de custo: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'Erro ao criar centro de custo: {str(e)}'
+                    })
+                
+                messages.error(request, f'Erro ao criar centro de custo: {str(e)}')
+        else:
+            logger.error(f"Formulário inválido: {form.errors}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Dados inválidos. Verifique os campos.',
+                    'errors': form.errors
+                })
+            messages.error(request, 'Dados inválidos. Verifique os campos.')
+    
+    else:
+        # GET request - mostrar formulário
+        form = CentroCustoForm()
+        
+        # Pré-preencher se veio de um pai
+        codigo_pai = request.GET.get('codigo_pai')
+        sugestao_codigo = request.GET.get('sugestao')
+        
+        if codigo_pai:
+            try:
+                centro_pai = CentroCusto.objects.get(codigo=codigo_pai)
+                if sugestao_codigo:
+                    form.initial['codigo'] = sugestao_codigo
+                else:
+                    # Sugerir próximo código
+                    filhos_diretos = centro_pai.get_filhos_diretos()
+                    proxima_sequencia = filhos_diretos.count() + 1
+                    codigo_sugerido = f"{centro_pai.codigo}.{proxima_sequencia:02d}"
+                    form.initial['codigo'] = codigo_sugerido
+                
+                # Informações do pai para o template
+                form.pai_info = {
+                    'codigo': centro_pai.codigo,
+                    'nome': centro_pai.nome,
+                    'tipo_display': centro_pai.get_tipo_display()
+                }
+                logger.info(f"Criação com pai: {centro_pai.codigo} - {centro_pai.nome}")
+            except CentroCusto.DoesNotExist:
+                logger.warning(f'Centro pai não encontrado: {codigo_pai}')
+    
+    # Renderizar modal
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render(request, 'gestor/partials/centrocusto_form_modal.html', {
+            'form': form,
+            'title': 'Novo Centro de Custo',
+            'is_create': True
+        })
+    
+    # Fallback para requisições não-AJAX
+    context = {
+        'form': form,
+        'title': 'Novo Centro de Custo',
+        'is_create': True
+    }
+    return render(request, 'gestor/centrocusto_form.html', context)
+
 
 @login_required
 @require_POST

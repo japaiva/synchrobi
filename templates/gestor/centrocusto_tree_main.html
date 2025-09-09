@@ -107,12 +107,12 @@
 {% block extra_js %}
 <script>
 
-// JavaScript OTIMIZADO para centrocusto_tree_main.html
+// JavaScript COMPLETO e CORRIGIDO para centrocusto_tree_main.html
 
 const CONFIG = {
     treeData: {{ tree_data_json|safe }},
     updateUrlBase: '{{ update_url_base }}',
-    createUrl: '{% url create_url %}',
+    createUrl: '{% url "gestor:centrocusto_create_modal" %}',
     apiTreeDataUrl: '{% url "gestor:api_centrocusto_tree_data" %}',
     csrfToken: document.querySelector('[name=csrfmiddlewaretoken]').value
 };
@@ -132,7 +132,266 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 300));
 });
 
-// OTIMIZAÇÃO: Debounce para evitar renders excessivos
+// ===== FUNÇÕES PRINCIPAIS DE MODAL =====
+
+function openCreateModal(event, codigoPai = null) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    console.log('Abrindo modal de criação. Código pai:', codigoPai);
+    
+    let url = CONFIG.createUrl;
+    if (codigoPai) {
+        url += `?codigo_pai=${encodeURIComponent(codigoPai)}`;
+    }
+    
+    loadModalContent('Novo Centro de Custo', url);
+}
+
+function openEditModal(event, codigo) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    console.log('Abrindo modal de edição para código:', codigo);
+    
+    if (!codigo) {
+        console.error('Código não fornecido para edição');
+        showToast('Erro: código não fornecido', 'error');
+        return;
+    }
+    
+    const url = `${CONFIG.updateUrlBase}${codigo}/editar/`;
+    console.log('URL de edição:', url);
+    
+    loadModalContent('Editar Centro de Custo', url);
+}
+
+function loadModalContent(title, url) {
+    console.log('Carregando modal:', title, 'URL:', url);
+    
+    // Configurar modal
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary mb-3"></div>
+            <div>Carregando...</div>
+        </div>
+    `;
+    
+    // Mostrar modal
+    modal.show();
+    
+    // Carregar conteúdo
+    fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': CONFIG.csrfToken
+        }
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.text();
+    })
+    .then(html => {
+        console.log('HTML recebido, tamanho:', html.length);
+        document.getElementById('modalBody').innerHTML = html;
+        
+        // Configurar submit do formulário
+        setupModalForm();
+    })
+    .catch(error => {
+        console.error('Erro ao carregar modal:', error);
+        document.getElementById('modalBody').innerHTML = `
+            <div class="alert alert-danger">
+                <h6>Erro ao carregar formulário</h6>
+                <p>Erro: ${error.message}</p>
+                <button class="btn btn-secondary" onclick="modal.hide()">Fechar</button>
+            </div>
+        `;
+    });
+}
+
+function setupModalForm() {
+    const form = document.querySelector('#centroCustoModal form');
+    if (!form) {
+        console.error('Formulário não encontrado no modal');
+        return;
+    }
+    
+    console.log('Configurando formulário do modal');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        console.log('Submit do formulário interceptado');
+        
+        const formData = new FormData(this);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        
+        // Mostrar loading no botão
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando...';
+        submitBtn.disabled = true;
+        
+        fetch(this.action, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': CONFIG.csrfToken
+            },
+            body: formData
+        })
+        .then(response => {
+            console.log('Response do submit:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados de resposta:', data);
+            
+            if (data.success) {
+                showToast(data.message, 'success');
+                modal.hide();
+                refreshTree(); // Atualizar árvore
+            } else {
+                showToast(data.message || 'Erro ao salvar', 'error');
+                
+                // Se há erros específicos, mostrar no formulário
+                if (data.errors) {
+                    showFormErrors(data.errors);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erro no submit:', error);
+            showToast('Erro ao salvar: ' + error.message, 'error');
+        })
+        .finally(() => {
+            // Restaurar botão
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
+    });
+}
+
+function showFormErrors(errors) {
+    Object.keys(errors).forEach(field => {
+        const input = document.querySelector(`[name="${field}"]`);
+        if (input) {
+            input.classList.add('is-invalid');
+            
+            // Remover feedback anterior
+            const existingFeedback = input.parentNode.querySelector('.invalid-feedback');
+            if (existingFeedback) {
+                existingFeedback.remove();
+            }
+            
+            // Adicionar novo feedback
+            const feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback';
+            feedback.textContent = errors[field].join(', ');
+            input.parentNode.appendChild(feedback);
+        }
+    });
+}
+
+// ===== FUNÇÃO DE EXCLUSÃO =====
+
+function deleteCentroCusto(event, codigo, nome) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    if (!confirm(`Tem certeza que deseja excluir o centro de custo "${nome}"?\n\nEsta ação não pode ser desfeita.`)) {
+        return;
+    }
+    
+    console.log('Excluindo centro de custo:', codigo);
+    
+    showLoadingOverlay(true);
+    
+    fetch(`${CONFIG.updateUrlBase}${codigo}/excluir/`, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': CONFIG.csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            refreshTree();
+        } else {
+            showToast(data.message || 'Erro ao excluir', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro na exclusão:', error);
+        showToast('Erro ao excluir: ' + error.message, 'error');
+    })
+    .finally(() => {
+        showLoadingOverlay(false);
+    });
+}
+
+// ===== UTILITÁRIOS =====
+
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toastContainer');
+    const toastId = 'toast-' + Date.now();
+    
+    const bgClass = {
+        'success': 'bg-success',
+        'error': 'bg-danger',
+        'warning': 'bg-warning',
+        'info': 'bg-info'
+    }[type] || 'bg-info';
+    
+    const toastHtml = `
+        <div class="toast ${bgClass} text-white" id="${toastId}" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
+    toast.show();
+    
+    // Remover após 6 segundos
+    setTimeout(() => {
+        if (toastElement && toastElement.parentNode) {
+            toastElement.remove();
+        }
+    }, 6000);
+}
+
+function showLoadingOverlay(show) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (show) {
+        overlay.classList.add('show');
+    } else {
+        overlay.classList.remove('show');
+    }
+}
+
+// ===== FUNÇÕES DE DEBOUNCE E OTIMIZAÇÃO =====
+
 function debounce(func, wait) {
     return function executedFunction(...args) {
         const later = () => {
@@ -144,9 +403,9 @@ function debounce(func, wait) {
     };
 }
 
-// OTIMIZAÇÃO: Render com Document Fragment
+// ===== FUNÇÕES DE RENDERIZAÇÃO DA ÁRVORE =====
+
 function renderTreeOptimized(data, container) {
-    // Limpar loading anterior
     if (renderTimeout) {
         clearTimeout(renderTimeout);
     }
@@ -156,10 +415,7 @@ function renderTreeOptimized(data, container) {
         return;
     }
     
-    // Usar Document Fragment para melhor performance
     const fragment = document.createDocumentFragment();
-    
-    // Renderizar em lotes para não travar a UI
     const batchSize = 50;
     let currentIndex = 0;
     
@@ -174,20 +430,16 @@ function renderTreeOptimized(data, container) {
         currentIndex = endIndex;
         
         if (currentIndex < data.length) {
-            // Continuar no próximo frame
             requestAnimationFrame(renderBatch);
         } else {
-            // Finalizar renderização
             container.innerHTML = '';
             container.appendChild(fragment);
         }
     }
     
-    // Iniciar renderização
     requestAnimationFrame(renderBatch);
 }
 
-// OTIMIZAÇÃO: Criar nós de forma mais eficiente
 function createTreeNodeOptimized(item) {
     const li = document.createElement('li');
     li.className = 'tree-item';
@@ -196,11 +448,9 @@ function createTreeNodeOptimized(item) {
     const isExpanded = expandedNodes.has(item.codigo);
     const typeClass = item.tipo === 'A' ? 'analytic' : 'synthetic';
     
-    // Usar template string mais simples
     const nodeHTML = createNodeHTML(item, hasChildren, isExpanded, typeClass);
     li.innerHTML = nodeHTML;
     
-    // Adicionar filhos se expandido
     if (hasChildren && isExpanded) {
         const childrenUl = li.querySelector('.tree-children');
         if (childrenUl) {
@@ -254,14 +504,14 @@ function createNodeHTML(item, hasChildren, isExpanded, typeClass) {
     `;
 }
 
-// OTIMIZAÇÃO: Escape HTML para segurança
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// OTIMIZAÇÃO: Toggle com menos re-render
+// ===== FUNÇÕES DE NAVEGAÇÃO DA ÁRVORE =====
+
 function toggleNode(event, codigo) {
     event.stopPropagation();
     
@@ -270,7 +520,6 @@ function toggleNode(event, codigo) {
     const toggleBtn = nodeElement.querySelector('.tree-toggle');
     
     if (expandedNodes.has(codigo)) {
-        // Colapsar
         expandedNodes.delete(codigo);
         if (childrenUl) {
             childrenUl.classList.remove('expanded');
@@ -280,13 +529,11 @@ function toggleNode(event, codigo) {
             toggleBtn.classList.remove('expanded');
         }
     } else {
-        // Expandir
         expandedNodes.add(codigo);
         if (childrenUl) {
             childrenUl.classList.remove('collapsed');
             childrenUl.classList.add('expanded');
             
-            // Renderizar filhos se ainda não foram renderizados
             if (childrenUl.children.length === 0) {
                 const item = findItemByCode(filteredData, codigo);
                 if (item && item.filhos) {
@@ -304,7 +551,6 @@ function toggleNode(event, codigo) {
     }
 }
 
-// OTIMIZAÇÃO: Buscar item sem re-render completo
 function findItemByCode(data, codigo) {
     for (const item of data) {
         if (item.codigo === codigo) {
@@ -318,11 +564,11 @@ function findItemByCode(data, codigo) {
     return null;
 }
 
-// OTIMIZAÇÃO: Refresh com loading visual
+// ===== FUNÇÃO DE ATUALIZAÇÃO =====
+
 function refreshTree() {
     console.log('Atualizando árvore');
     
-    // Mostrar loading local na árvore
     const treeContainer = document.getElementById('itemTree');
     treeContainer.innerHTML = `
         <li class="tree-item">
@@ -373,7 +619,8 @@ function refreshTree() {
     });
 }
 
-// Manter as outras funções iguais mas otimizar filtros
+// ===== FUNÇÕES DE FILTRO =====
+
 function filterTree(searchTerm = '') {
     const levelFilter = document.getElementById('levelFilter').value;
     const typeFilter = document.getElementById('typeFilter').value;
@@ -388,14 +635,12 @@ function filterTree(searchTerm = '') {
     renderTreeOptimized(filteredData, document.getElementById('itemTree'));
 }
 
-// OTIMIZAÇÃO: Filtro mais eficiente
 function filterRecursiveOptimized(data, searchTerm, levelFilter, typeFilter) {
     const result = [];
     
     for (const item of data) {
         let matches = true;
         
-        // Aplicar filtros de forma mais eficiente
         if (searchTerm) {
             const searchLower = searchTerm.toLowerCase();
             matches = matches && (
@@ -413,13 +658,11 @@ function filterRecursiveOptimized(data, searchTerm, levelFilter, typeFilter) {
             matches = item.tipo === typeFilter;
         }
         
-        // Processar filhos
         let filteredChildren = [];
         if (item.filhos?.length > 0) {
             filteredChildren = filterRecursiveOptimized(item.filhos, searchTerm, levelFilter, typeFilter);
         }
         
-        // Incluir se match ou tem filhos que fazem match
         if (matches || filteredChildren.length > 0) {
             result.push({ ...item, filhos: filteredChildren });
         }
@@ -428,7 +671,17 @@ function filterRecursiveOptimized(data, searchTerm, levelFilter, typeFilter) {
     return result;
 }
 
-// Manter outras funções como estavam...
+function expandRelevantNodes(data) {
+    function expandRecursive(items) {
+        for (const item of items) {
+            if (item.filhos?.length > 0) {
+                expandedNodes.add(item.codigo);
+                expandRecursive(item.filhos);
+            }
+        }
+    }
+    expandRecursive(data);
+}
 
 </script>
 {% endblock %}

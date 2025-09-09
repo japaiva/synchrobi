@@ -18,7 +18,6 @@
         </h6>
         <strong>{{ form.pai_info.codigo }}</strong> - {{ form.pai_info.nome }}
         <br>
-        <small class="text-muted">{{ form.pai_info.tipo_display }}</small>
     </div>
     {% endif %}
     
@@ -43,9 +42,6 @@
                             {% for error in form.codigo.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
-                    {% if form.codigo.help_text %}
-                        <div class="form-text">{{ form.codigo.help_text }}</div>
-                    {% endif %}
                 </div>
                 
                 <div class="col-md-3">
@@ -57,9 +53,6 @@
                         <div class="invalid-feedback d-block">
                             {% for error in form.tipo.errors %}{{ error }}{% endfor %}
                         </div>
-                    {% endif %}
-                    {% if form.tipo.help_text %}
-                        <div class="form-text">{{ form.tipo.help_text }}</div>
                     {% endif %}
                 </div>
                 
