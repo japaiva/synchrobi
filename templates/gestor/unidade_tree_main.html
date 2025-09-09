@@ -1,0 +1,642 @@
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}Árvore de Unidades | SynchroBI{% endblock %}
+
+{% block extra_css %}
+{% include 'gestor/partials/tree_styles.html' %}
+<style>
+    /* Estilos específicos para modais */
+    .modal-xl {
+        max-width: 90%;
+    }
+    
+    .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-bottom: none;
+    }
+    
+    .modal-header .btn-close {
+        filter: invert(1);
+    }
+    
+    .tree-actions .btn {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .tree-node:hover .tree-actions .btn {
+        opacity: 1;
+    }
+    
+    .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .loading-overlay.show {
+        display: flex;
+    }
+    
+    .loading-spinner {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1055;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header com estatísticas -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="toolbar">
+                <div>
+                    <h4 class="mb-0">
+                        <i class="fas fa-sitemap me-2"></i>
+                        Unidades Organizacionais
+                    </h4>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-info btn-sm" onclick="refreshTree()">
+                        <i class="fas fa-sync-alt me-1"></i> Atualizar
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="openCreateModal()">
+                        <i class="fas fa-plus me-1"></i> Nova Unidade
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controles da árvore -->
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <div class="search-container">
+                <input type="text" id="tree-search" class="form-control search-input" 
+                       placeholder="🔍 Buscar unidade por código ou nome...">
+            </div>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" id="levelFilter" onchange="filterByLevel()">
+                <option value="">Todos os Níveis</option>
+                {% for nivel, count in stats.contas_por_nivel.items %}
+                    <option value="{{ nivel }}">Nível {{ nivel }} ({{ count }})</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Árvore hierárquica -->
+    <div class="tree-container" id="tree-container">
+        <ul id="itemTree" class="tree-item">
+            <!-- Será preenchido via JavaScript -->
+        </ul>
+    </div>
+</div>
+
+<!-- Modal para formulários -->
+<div class="modal fade" id="unidadeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Carregando...</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <div>Processando...</div>
+    </div>
+</div>
+
+<!-- Container para toasts -->
+<div class="toast-container" id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Configurações globais
+    const CONFIG = {
+        treeData: {{ tree_data_json|safe }},
+        updateUrlBase: '{{ update_url_base }}',
+        createUrl: '{% url create_url %}',
+        apiTreeDataUrl: '{% url "gestor:api_unidade_tree_data" %}',
+        apiValidarCodigoUrl: '{% url "gestor:api_validar_codigo" %}'
+    };
+
+    let filteredData = CONFIG.treeData;
+    let expandedNodes = new Set();
+    let unidadeModal = null;
+
+    // Inicialização
+    document.addEventListener('DOMContentLoaded', function() {
+        unidadeModal = new bootstrap.Modal(document.getElementById('unidadeModal'));
+        renderTree(CONFIG.treeData, document.getElementById('itemTree'));
+        initializeSearch();
+        initializeKeyboardShortcuts();
+        
+        console.log('✅ Árvore de unidades inicializada');
+    });
+
+    // Renderização da árvore
+    function renderTree(data, container) {
+        container.innerHTML = '';
+        if (!data || data.length === 0) {
+            container.innerHTML = `
+                <li class="tree-item">
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Nenhuma unidade encontrada. Clique em "Nova Unidade" para começar.
+                    </div>
+                </li>
+            `;
+            return;
+        }
+        
+        data.forEach(item => {
+            const li = createTreeNode(item);
+            container.appendChild(li);
+        });
+    }
+
+    function createTreeNode(item) {
+        const li = document.createElement('li');
+        li.className = 'tree-item';
+        li.dataset.codigo = item.codigo;
+        li.dataset.tipo = item.tipo || '';
+        li.dataset.nivel = item.nivel;
+        li.dataset.id = item.id;
+
+        const hasChildren = item.filhos && item.filhos.length > 0;
+        const isExpanded = expandedNodes.has(item.codigo);
+
+        // Classe de tipo
+        let typeClass = '';
+        let typeBadge = '';
+        if (item.tipo) {
+            typeClass = item.tipo === 'A' ? 'analytic' : 'synthetic';
+            typeBadge = `
+                <span class="type-badge ${typeClass}">
+                    ${item.tipo === 'A' ? 'Analítico' : 'Sintético'}
+                </span>
+            `;
+        }
+
+        li.innerHTML = `
+            <div class="tree-node level-${item.nivel} ${typeClass}" 
+                 onclick="openDetailModal(${item.id})">
+                <div class="tree-info">
+                    <div class="tree-content">
+                        ${hasChildren ? `
+                            <button class="tree-toggle ${isExpanded ? 'expanded' : ''}" 
+                                    onclick="toggleNode(event, '${item.codigo}')">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        ` : '<span style="width: 28px; display: inline-block;"></span>'}
+                        <span class="tree-code">${item.codigo}</span>
+                        <span class="tree-name">${item.nome}</span>
+                        ${item.empresa_sigla ? `<small class="text-muted ms-2">(${item.empresa_sigla})</small>` : ''}
+                    </div>
+                    <div class="tree-badges">
+                        ${typeBadge}
+                        <div class="tree-actions">
+                            <button class="btn btn-sm btn-outline-info" 
+                                    onclick="openDetailModal(event, ${item.id})" 
+                                    title="Ver detalhes">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="openEditModal(event, ${item.id})" 
+                                    title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" 
+                                    onclick="openCreateModal(event, '${item.codigo}')" 
+                                    title="Adicionar sub-unidade">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteUnidade(event, ${item.id}, '${item.nome}')" 
+                                    title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ${hasChildren ? `
+                <ul class="tree-children ${isExpanded ? 'expanded' : 'collapsed'}">
+                    ${item.filhos.map(filho => createTreeNode(filho).outerHTML).join('')}
+                </ul>
+            ` : ''}
+        `;
+
+        return li;
+    }
+
+    // Funções de modal
+    function openCreateModal(event, codigo_pai = null) {
+        if (event) event.stopPropagation();
+        
+        showLoading();
+        
+        let url = CONFIG.createUrl;
+        if (codigo_pai) {
+            url += `?codigo_pai=${codigo_pai}`;
+        }
+        
+        fetch(url, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            hideLoading();
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('modalTitle').textContent = 'Nova Unidade';
+            unidadeModal.show();
+            initializeModalForm();
+        })
+        .catch(error => {
+            hideLoading();
+            showToast('Erro ao carregar formulário', 'error');
+            console.error('Erro:', error);
+        });
+    }
+
+    function openEditModal(event, unidadeId) {
+        if (event) event.stopPropagation();
+        
+        showLoading();
+        
+        fetch(`${CONFIG.updateUrlBase}${unidadeId}/editar/`, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            hideLoading();
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('modalTitle').textContent = 'Editar Unidade';
+            unidadeModal.show();
+            initializeModalForm();
+        })
+        .catch(error => {
+            hideLoading();
+            showToast('Erro ao carregar formulário', 'error');
+            console.error('Erro:', error);
+        });
+    }
+
+    function openDetailModal(event, unidadeId) {
+        if (event) event.stopPropagation();
+        
+        showLoading();
+        
+        fetch(`${CONFIG.updateUrlBase}${unidadeId}/detalhes/`, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            hideLoading();
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('modalTitle').textContent = 'Detalhes da Unidade';
+            unidadeModal.show();
+        })
+        .catch(error => {
+            hideLoading();
+            showToast('Erro ao carregar detalhes', 'error');
+            console.error('Erro:', error);
+        });
+    }
+
+    function initializeModalForm() {
+        const form = document.querySelector('#modalBody form');
+        if (!form) return;
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            showLoading();
+            
+            const formData = new FormData(form);
+            
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    unidadeModal.hide();
+                    refreshTree(); // Atualizar árvore
+                } else {
+                    showToast(data.message, 'error');
+                    
+                    // Mostrar erros específicos nos campos
+                    if (data.errors) {
+                        Object.keys(data.errors).forEach(field => {
+                            const fieldElement = document.querySelector(`[name="${field}"]`);
+                            if (fieldElement) {
+                                fieldElement.classList.add('is-invalid');
+                                
+                                // Remover erro existente
+                                const existingError = fieldElement.parentNode.querySelector('.invalid-feedback');
+                                if (existingError) {
+                                    existingError.remove();
+                                }
+                                
+                                // Adicionar novo erro
+                                const errorDiv = document.createElement('div');
+                                errorDiv.className = 'invalid-feedback';
+                                errorDiv.textContent = data.errors[field][0];
+                                fieldElement.parentNode.appendChild(errorDiv);
+                            }
+                        });
+                    }
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showToast('Erro ao processar formulário', 'error');
+                console.error('Erro:', error);
+            });
+        });
+    }
+
+    function deleteUnidade(event, unidadeId, nome) {
+        if (event) event.stopPropagation();
+        
+        if (!confirm(`Tem certeza que deseja excluir a unidade "${nome}"?\n\nEsta ação não pode ser desfeita.`)) {
+            return;
+        }
+        
+        showLoading();
+        
+        fetch(`${CONFIG.updateUrlBase}${unidadeId}/excluir/`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCsrfToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            
+            if (data.success) {
+                showToast(data.message, 'success');
+                refreshTree();
+            } else {
+                showToast(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showToast('Erro ao excluir unidade', 'error');
+            console.error('Erro:', error);
+        });
+    }
+
+    // Funções utilitárias
+    function refreshTree() {
+        showLoading();
+        
+        fetch(CONFIG.apiTreeDataUrl)
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            
+            if (data.success) {
+                CONFIG.treeData = data.tree_data;
+                filteredData = data.tree_data;
+                
+                // Atualizar estatísticas
+                document.getElementById('totalItems').textContent = data.stats.total;
+                document.getElementById('itemsSinteticos').textContent = data.stats.tipo_s;
+                document.getElementById('itemsAnaliticos').textContent = data.stats.tipo_a;
+                
+                // Re-renderizar árvore
+                renderTree(filteredData, document.getElementById('itemTree'));
+                
+                showToast('Árvore atualizada com sucesso', 'success');
+            } else {
+                showToast('Erro ao atualizar árvore', 'error');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showToast('Erro ao carregar dados', 'error');
+            console.error('Erro:', error);
+        });
+    }
+
+    function toggleNode(event, codigo) {
+        event.stopPropagation();
+        
+        if (expandedNodes.has(codigo)) {
+            expandedNodes.delete(codigo);
+        } else {
+            expandedNodes.add(codigo);
+        }
+        
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function expandAll() {
+        function addAllCodes(data) {
+            data.forEach(item => {
+                expandedNodes.add(item.codigo);
+                if (item.filhos) {
+                    addAllCodes(item.filhos);
+                }
+            });
+        }
+        addAllCodes(CONFIG.treeData);
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function collapseAll() {
+        expandedNodes.clear();
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function initializeSearch() {
+        const searchInput = document.getElementById('tree-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                filterTree(searchTerm);
+            });
+        }
+    }
+
+    function filterTree(searchTerm = '') {
+        const levelFilter = document.getElementById('levelFilter').value;
+        
+        if (!searchTerm && !levelFilter) {
+            filteredData = CONFIG.treeData;
+        } else {
+            filteredData = filterRecursive(CONFIG.treeData, searchTerm, levelFilter);
+        }
+        
+        if (searchTerm) {
+            expandRelevantNodes(filteredData);
+        }
+        
+        renderTree(filteredData, document.getElementById('itemTree'));
+    }
+
+    function filterRecursive(data, searchTerm, levelFilter) {
+        const result = [];
+        
+        data.forEach(item => {
+            let matches = true;
+            let hasMatchingChildren = false;
+            
+            if (searchTerm) {
+                matches = matches && (
+                    item.codigo.toLowerCase().includes(searchTerm) ||
+                    item.nome.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            if (levelFilter) {
+                matches = matches && item.nivel === parseInt(levelFilter);
+            }
+            
+            let filteredChildren = [];
+            if (item.filhos) {
+                filteredChildren = filterRecursive(item.filhos, searchTerm, levelFilter);
+                hasMatchingChildren = filteredChildren.length > 0;
+            }
+            
+            if (matches || hasMatchingChildren) {
+                result.push({
+                    ...item,
+                    filhos: filteredChildren
+                });
+            }
+        });
+        
+        return result;
+    }
+
+    function expandRelevantNodes(data) {
+        data.forEach(item => {
+            if (item.filhos && item.filhos.length > 0) {
+                expandedNodes.add(item.codigo);
+                expandRelevantNodes(item.filhos);
+            }
+        });
+    }
+
+    function filterByLevel() {
+        filterTree();
+    }
+
+    function initializeKeyboardShortcuts() {
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                document.getElementById('tree-search').focus();
+            }
+            
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                openCreateModal();
+            }
+            
+            if (e.key === 'Escape') {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('unidadeModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            }
+        });
+    }
+
+    function showLoading() {
+        document.getElementById('loadingOverlay').classList.add('show');
+    }
+
+    function hideLoading() {
+        document.getElementById('loadingOverlay').classList.remove('show');
+    }
+
+    function showToast(message, type = 'info') {
+        const toastContainer = document.getElementById('toastContainer');
+        const toastId = 'toast-' + Date.now();
+        
+        const toastHtml = `
+            <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} border-0" id="${toastId}" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
+        toast.show();
+        
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            this.remove();
+        });
+    }
+
+    function getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+               document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || '';
+    }
+</script>
+{% endblock %}
