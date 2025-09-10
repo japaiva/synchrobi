@@ -1,4 +1,4 @@
-# gestor/urls.py - URLs atualizadas sem empresa_centro_custo
+# gestor/urls.py - URLs completamente corrigidas
 
 from django.urls import path
 from . import views
@@ -83,15 +83,22 @@ urlpatterns = [
 
     # ===== CONTAS CONTÁBEIS COM CÓDIGOS EXTERNOS =====
     
-    # View principal da árvore com códigos externos
-    path('contas-contabeis/arvore-externa/', views.contacontabil_tree_with_external_view, name='contacontabil_tree_with_external'),
+    # Redirecionamento simples para lista com filtro
+    path('contas-contabeis/arvore-externa/', views.contaexterna_list, name='contacontabil_tree_with_external'),
     
-    # API para dados da árvore com códigos externos
-    path('api/contas-contabeis/arvore-externa/', views.api_contacontabil_tree_with_external_data, name='api_contacontabil_tree_with_external'),
+    # API básica (redireciona para lista também)
+    path('api/contas-contabeis/arvore-externa/', views.contaexterna_list, name='api_contacontabil_tree_with_external'),
     
-    # CRUD para códigos externos
+    # ===== CRUD PARA CÓDIGOS EXTERNOS (INLINE) =====
+    
+    # Views principais para contas externas
     path('contas-externas/', views.contaexterna_list, name='contaexterna_list'),
     path('contas-externas/nova/', views.contaexterna_create, name='contaexterna_create'),
+    path('contas-externas/<int:pk>/editar/', views.contaexterna_update, name='contaexterna_update'),
+    
+    # APIs para operações inline
+    path('api/contas-externas/validar-codigo/', views.api_validar_codigo_externo, name='api_validar_codigo_externo'),
+    path('api/contas-externas/<int:pk>/delete/', views.api_contaexterna_delete, name='api_contaexterna_delete'),
 
     # ===== USUÁRIOS =====
     path('usuarios/', views.usuario_list, name='usuario_list'),

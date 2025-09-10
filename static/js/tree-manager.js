@@ -1,5 +1,5 @@
-// static/js/tree-manager.js - VERSÃO CORRIGIDA
-// JavaScript unificado para gerenciamento de árvores hierárquicas
+// static/js/tree-manager.js - VERSÃO COMPLETA
+// JavaScript unificado para gerenciamento de árvores hierárquicas com suporte a tabelas relacionadas
 
 class TreeManager {
     constructor(config) {
@@ -14,6 +14,7 @@ class TreeManager {
             hasCompanyField: config.hasCompanyField || false,
             hasDetailModal: config.hasDetailModal || false,
             useId: config.useId || false,
+            relatedTableConfig: config.relatedTableConfig || null, // NOVA FUNCIONALIDADE
             ...config
         };
         
@@ -310,6 +311,7 @@ class TreeManager {
         const identifier = this.config.useId ? item.id : item.codigo;
         let buttons = '';
         
+        // 1. Botão Detalhes (condicional)
         if (this.config.hasDetailModal) {
             buttons += `
                 <button class="btn btn-sm btn-outline-info" onclick="treeManager.openDetailModal(event, ${item.id})" title="Detalhes">
@@ -318,13 +320,39 @@ class TreeManager {
             `;
         }
         
+        // 2. Botão Editar (sempre presente)
         buttons += `
             <button class="btn btn-sm btn-outline-primary" onclick="treeManager.openEditModal(event, '${identifier}')" title="Editar">
                 <i class="fas fa-edit"></i>
             </button>
+        `;
+        
+        // 3. NOVO: Botão Genérico para Tabela Relacionada
+        if (this.config.relatedTableConfig) {
+            const config = this.config.relatedTableConfig;
+            const configKey = config.configKey;
+            const relatedConfig = window.relatedTableConfigs?.[configKey];
+            
+            if (relatedConfig) {
+                buttons += `
+                    <button class="btn btn-sm ${relatedConfig.buttonClass || 'btn-outline-warning'}" 
+                            onclick="openRelatedTableModal(event, '${item.codigo}', '${configKey}')" 
+                            title="${relatedConfig.buttonLabel || 'Itens Relacionados'}">
+                        <i class="${relatedConfig.buttonIcon || 'fas fa-list'}"></i>
+                    </button>
+                `;
+            }
+        }
+        
+        // 4. Botão Criar Sub-item (sempre presente)
+        buttons += `
             <button class="btn btn-sm btn-outline-success" onclick="treeManager.openCreateModal(event, '${item.codigo}')" title="Sub-item">
                 <i class="fas fa-plus"></i>
             </button>
+        `;
+        
+        // 5. Botão Excluir (sempre presente)
+        buttons += `
             <button class="btn btn-sm btn-outline-danger" onclick="treeManager.deleteItem(event, '${identifier}', '${this.escapeHtml(item.nome)}')" title="Excluir">
                 <i class="fas fa-trash"></i>
             </button>
@@ -508,3 +536,173 @@ class TreeManager {
         return div.innerHTML;
     }
 }
+
+// ===== SISTEMA GENÉRICO PARA TABELAS RELACIONADAS =====
+
+// FUNÇÃO GENÉRICA para abrir modal de tabela relacionada
+window.openRelatedTableModal = function(event, parentCode, configKey) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    // Buscar configuração específica
+    const configs = window.relatedTableConfigs || {};
+    const config = configs[configKey];
+    
+    if (!config) {
+        console.error(`Configuração '${configKey}' não encontrada`);
+        return;
+    }
+    
+    // Criar modal genérico se não existir
+    let modalId = `relatedTableModal_${configKey}`;
+    let modal = document.getElementById(modalId);
+    
+    if (!modal) {
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog ${config.modalSize || 'modal-lg'}">
+                    <div class="modal-content">
+                        <div class="modal-header ${config.headerClass || 'bg-primary text-white'}">
+                            <h5 class="modal-title" id="${modalId}Title">
+                                <i class="${config.buttonIcon || 'fas fa-list'} me-2"></i>${config.modalTitle || 'Itens Relacionados'}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" id="${modalId}Body">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary mb-3"></div>
+                                <div>Carregando...</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-1"></i>Fechar
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="addNewRelatedItem('${parentCode}', '${configKey}')">
+                                <i class="fas fa-plus me-1"></i> ${config.addButtonLabel || 'Novo Item'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        modal = document.getElementById(modalId);
+    }
+    
+    const title = document.getElementById(`${modalId}Title`);
+    const body = document.getElementById(`${modalId}Body`);
+    
+    title.innerHTML = `<i class="${config.buttonIcon} me-2"></i>${config.modalTitle} - ${parentCode}`;
+    body.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary mb-3"></div>
+            <div>Carregando ${config.modalTitle.toLowerCase()} de <strong>${parentCode}</strong>...</div>
+        </div>
+    `;
+    
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Montar URL com parâmetro
+    const url = `${config.listUrl}?${config.parameterName}=${encodeURIComponent(parentCode)}`;
+    
+    // Carregar dados via AJAX
+    fetch(url, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+        }
+    })
+    .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        return response.text();
+    })
+    .then(html => {
+        body.innerHTML = html;
+    })
+    .catch(error => {
+        body.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Erro ao carregar ${config.modalTitle.toLowerCase()}</h6>
+                <p class="mb-2">Erro: ${error.message}</p>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-danger" onclick="openRelatedTableModal(null, '${parentCode}', '${configKey}')">
+                        <i class="fas fa-retry me-1"></i> Tentar Novamente
+                    </button>
+                    <button class="btn btn-sm btn-success" onclick="addNewRelatedItem('${parentCode}', '${configKey}')">
+                        <i class="fas fa-plus me-1"></i> ${config.addButtonLabel || 'Criar Novo'}
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+};
+
+// FUNÇÃO GENÉRICA para adicionar novo item relacionado
+window.addNewRelatedItem = function(parentCode, configKey) {
+    const configs = window.relatedTableConfigs || {};
+    const config = configs[configKey];
+    
+    if (!config) {
+        console.error(`Configuração '${configKey}' não encontrada`);
+        return;
+    }
+    
+    const url = `${config.createUrl}?${config.parameterName}=${encodeURIComponent(parentCode)}`;
+    
+    if (config.openInNewTab) {
+        window.open(url, '_blank', 'width=900,height=700,scrollbars=yes,resizable=yes');
+    } else {
+        window.location.href = url;
+    }
+};
+
+// CONFIGURAÇÕES GLOBAIS para diferentes tipos de tabelas relacionadas
+window.relatedTableConfigs = {
+    // Códigos Externos para Contas Contábeis
+    "external_codes": {
+        buttonLabel: "Códigos Externos",
+        buttonIcon: "fas fa-link",
+        buttonClass: "btn-outline-warning",
+        modalTitle: "Códigos Externos",
+        modalSize: "modal-lg",
+        headerClass: "bg-warning text-dark",
+        listUrl: "/gestor/contas-externas/",
+        createUrl: "/gestor/contas-externas/nova/",
+        parameterName: "conta",
+        addButtonLabel: "Novo Código Externo",
+        openInNewTab: true
+    },
+    
+    // Responsáveis por Unidade
+    "unit_managers": {
+        buttonLabel: "Responsáveis",
+        buttonIcon: "fas fa-users",
+        buttonClass: "btn-outline-info",
+        modalTitle: "Responsáveis da Unidade",
+        modalSize: "modal-md",
+        headerClass: "bg-info text-white",
+        listUrl: "/gestor/unidade-responsaveis/",
+        createUrl: "/gestor/unidade-responsaveis/novo/",
+        parameterName: "unidade",
+        addButtonLabel: "Novo Responsável",
+        openInNewTab: false
+    },
+    
+    // Orçamentos por Centro de Custo
+    "cost_center_budgets": {
+        buttonLabel: "Orçamentos",
+        buttonIcon: "fas fa-chart-line",
+        buttonClass: "btn-outline-success",
+        modalTitle: "Orçamentos do Centro de Custo",
+        modalSize: "modal-xl",
+        headerClass: "bg-success text-white",
+        listUrl: "/gestor/centro-custo-orcamentos/",
+        createUrl: "/gestor/centro-custo-orcamentos/novo/",
+        parameterName: "centro_custo",
+        addButtonLabel: "Novo Orçamento",
+        openInNewTab: false
+    }
+};

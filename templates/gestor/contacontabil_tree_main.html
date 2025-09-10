@@ -1,4 +1,4 @@
-<!-- ===== 3. CONTACONTABIL_TREE_MAIN.HTML ===== -->
+<!-- gestor/templates/gestor/contacontabil_tree_main.html - CORRIGIDO -->
 {% extends 'gestor/base_gestor.html' %}
 {% load static %}
 
@@ -46,8 +46,8 @@
                 <div class="col-md-8">
                     <input type="text" id="tree-search" class="form-control" placeholder="Buscar conta contábil...">
                 </div>
-                <div class="col-md-8">
-                    <!-- Espaço vazio para manter alinhamento -->
+                <div class="col-md-4">
+
                 </div>
             </div>
         </div>
@@ -107,7 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
         entityName: 'Conta Contábil',
         hasCompanyField: false,
         hasDetailModal: false,
-        useId: false
+        useId: false,
+        // CORREÇÃO: Adicionada vírgula e fechamento correto
+        relatedTableConfig: {
+            configKey: 'external_codes'
+        }
     };
     treeManager = new TreeManager(config);
 });

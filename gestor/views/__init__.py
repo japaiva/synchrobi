@@ -76,19 +76,24 @@ from .contacontabil import (
     contacontabil_delete,            # Redireciona para AJAX
 )
 
-# Conta Contabil com Códigos Externos - Nova funcionalidade
-from .contacontabil_external import (
-    # View principal da árvore com externos
-    contacontabil_tree_with_external_view,    # View principal com códigos externos
+# Conta Contabil com Códigos Externos - Árvore especializada  
+# NOTA: As views da árvore com externos estão temporariamente comentadas
+# até serem movidas para o arquivo correto
+# from .contacontabil_external import (
+#     contacontabil_tree_with_external_view,
+#     api_contacontabil_tree_with_external_data,
+# )
+
+# Conta Externa - Edição inline moderna
+from .contaexterna_inline import (
+    # CRUD com edição inline
+    contaexterna_list,                        # Lista com edição inline
+    contaexterna_create,                      # Criar via inline/modal
+    contaexterna_update,                      # Editar inline
     
-    # API para dados da árvore com externos
-    api_contacontabil_tree_with_external_data, # API da árvore com códigos externos
-    
-    # CRUD para contas externas
-    contaexterna_list,                        # Lista de códigos externos
-    contaexterna_create,                      # Criar código externo
-    # contaexterna_update,                    # Editar código externo (implementar)
-    # contaexterna_delete,                    # Excluir código externo (implementar)
+    # APIs para operações inline
+    api_contaexterna_delete,                  # Excluir via AJAX
+    api_validar_codigo_externo,               # Validação em tempo real
 )
 
 # Usuario
@@ -109,52 +114,40 @@ from .parametro import (
     api_parametro_valor
 )
 
-# ===== VIEWS REMOVIDAS/ATUALIZADAS NA NOVA ARQUITETURA =====
+# ===== ESTRUTURA DE ARQUIVOS DA NOVA ARQUITETURA =====
 # 
-# UNIDADES (já migradas):
-# - unidade_list → unidade_tree_view
-# - unidade_create → unidade_create_modal
-# - unidade_detail → unidade_detail_modal
-# - unidade_update → unidade_update_modal
-# - unidade_delete → unidade_delete_ajax
-# - unidade_arvore → integrada em unidade_tree_view
-# - api_unidade_filhas → api_unidade_tree_data
+# ARQUIVOS DE VIEWS:
+# - dashboard.py → Dashboard e home
+# - empresa.py → Gestão de empresas
+# - unidade.py → CRUD modais para unidades
+# - unidade_tree.py → Árvore hierárquica de unidades
+# - centrocusto.py → CRUD modais e árvore de centros de custo
+# - contacontabil.py → CRUD modais e árvore de contas contábeis
+# - contacontabil_external.py → Árvore com códigos externos
+# - contaexterna_inline.py → CRUD inline para códigos externos (NOVO)
+# - usuario.py → Gestão de usuários
+# - parametro.py → Gestão de parâmetros
 #
-# CENTROS DE CUSTO (migrados):
-# - centrocusto_list → centrocusto_tree_view (principal) + redirect (compatibilidade)
-# - centrocusto_create → centrocusto_create_modal (principal) + redirect (compatibilidade)
-# - centrocusto_update → centrocusto_update_modal (principal) + redirect (compatibilidade)
-# - centrocusto_delete → centrocusto_delete_ajax (principal) + redirect (compatibilidade)
-# + api_centrocusto_tree_data → nova API para dados da árvore
+# PADRÃO DA NOVA ARQUITETURA PARA CÓDIGOS EXTERNOS:
+# 1. Visualização hierárquica integrada (contacontabil_external.py)
+# 2. Edição inline direta na lista (contaexterna_inline.py)
+# 3. APIs específicas para validação e operações AJAX
+# 4. Templates responsivos e modernos
+# 5. JavaScript otimizado para UX fluida
 #
-# CONTAS CONTÁBEIS (migradas):
-# - contacontabil_list → contacontabil_tree_view (principal) + redirect (compatibilidade)
-# - contacontabil_create → contacontabil_create_modal (principal) + redirect (compatibilidade)
-# - contacontabil_update → contacontabil_update_modal (principal) + redirect (compatibilidade)
-# - contacontabil_delete → contacontabil_delete_ajax (principal) + redirect (compatibilidade)
-# + api_contacontabil_tree_data → nova API para dados da árvore
-# + api_validar_codigo_contacontabil → nova API para validação
+# FUNCIONALIDADES DOS CÓDIGOS EXTERNOS:
+# ✅ Lista com filtros por conta contábil
+# ✅ Edição inline de código e nome
+# ✅ Criação inline direta na lista
+# ✅ Exclusão com confirmação via AJAX
+# ✅ Validação em tempo real
+# ✅ Interface limpa sem modais desnecessários
+# ✅ Integração total com árvore de contas contábeis
 #
-# CONTAS CONTÁBEIS COM CÓDIGOS EXTERNOS (nova funcionalidade):
-# + contacontabil_tree_with_external_view → árvore principal com códigos externos
-# + api_contacontabil_tree_with_external_data → API da árvore com códigos externos
-# + contaexterna_list → gerenciar códigos externos
-# + contaexterna_create → criar códigos externos
-#
-# PADRÃO DA NOVA ARQUITETURA:
-# 1. View principal única (*_tree_view) para visualização hierárquica
-# 2. Modais para operações CRUD (*_create_modal, *_update_modal, *_detail_modal*)
-# 3. AJAX para exclusões (*_delete_ajax)
-# 4. APIs modernas para dados da árvore (api_*_tree_data)
-# 5. APIs de validação específicas (api_validar_codigo_*)
-# 6. Views antigas mantidas para compatibilidade com redirecionamentos
-# 7. Funcionalidades especializadas (*_with_external_*) para recursos avançados
-#
-# BENEFÍCIOS DA NOVA ARQUITETURA:
-# - Interface consistente e moderna
-# - Performance otimizada com renderização em lotes
-# - Validação em tempo real
-# - Hierarquia dinâmica baseada em código
-# - Compatibilidade total com código existente
-# - Manutenibilidade aprimorada
-# - Suporte a códigos externos integrado
+# BENEFÍCIOS DA IMPLEMENTAÇÃO INLINE:
+# - Edição mais rápida e intuitiva
+# - Menos cliques para o usuário
+# - Interface mais limpa
+# - Performance melhorada
+# - Código mais simples e maintível
+# - UX moderna e responsiva

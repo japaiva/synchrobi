@@ -1,0 +1,392 @@
+<!-- gestor/templates/gestor/partials/contaexterna_list_modal.html - EDIÇÃO INLINE -->
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h6 class="mb-0">
+            <i class="fas fa-link me-2"></i>Códigos Externos
+            {% if filtros.conta_codigo %}- {{ filtros.conta_codigo }}{% endif %}
+        </h6>
+        <small class="text-muted">{{ total_count }} código(s)</small>
+    </div>
+    <button type="button" class="btn btn-sm btn-success" onclick="addNewExternal()">
+        <i class="fas fa-plus me-1"></i> Novo
+    </button>
+</div>
+
+<!-- Lista dos códigos externos -->
+<div style="max-height: 400px; overflow-y: auto;" class="external-list">
+    {% if page_obj %}
+        {% for externa in page_obj %}
+        <div class="external-item mb-2 p-2 border rounded" data-id="{{ externa.id }}">
+            <!-- Modo Visualização -->
+            <div class="view-mode">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-1">
+                            <code class="codigo-display me-2 bg-primary text-white px-2 py-1 rounded">{{ externa.codigo_externo }}</code>
+                            <span class="nome-display fw-bold">{{ externa.nome_externo }}</span>
+                        </div>
+                        {% if externa.sistema_origem %}
+                        <div class="small text-muted">
+                            <i class="fas fa-server me-1"></i>{{ externa.sistema_origem }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-primary btn-edit" onclick="editInline({{ externa.id }})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" onclick="deleteExternal({{ externa.id }}, '{{ externa.codigo_externo|escapejs }}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modo Edição -->
+            <div class="edit-mode d-none">
+                <div class="row g-2">
+                    <div class="col-4">
+                        <input type="text" class="form-control form-control-sm codigo-input" value="{{ externa.codigo_externo }}" placeholder="Código">
+                    </div>
+                    <div class="col-6">
+                        <input type="text" class="form-control form-control-sm nome-input" value="{{ externa.nome_externo }}" placeholder="Nome">
+                    </div>
+                    <div class="col-2">
+                        <div class="btn-group btn-group-sm w-100">
+                            <button type="button" class="btn btn-success btn-save" onclick="saveInline({{ externa.id }})">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-cancel" onclick="cancelEdit({{ externa.id }})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        
+        <!-- Estado vazio -->
+        <div class="text-center py-4" id="empty-state">
+            <i class="fas fa-link text-muted mb-3" style="font-size: 2rem;"></i>
+            <h6 class="text-muted">Nenhum código externo</h6>
+            {% if filtros.conta_codigo %}
+            <p class="text-muted small mb-0">Esta conta ainda não possui códigos externos.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% endif %}
+    
+    <!-- Formulário para novo código (inicialmente oculto) -->
+    <div class="external-item mb-2 p-2 border rounded d-none" id="new-external-form">
+        <div class="row g-2">
+            <div class="col-4">
+                <input type="text" class="form-control form-control-sm" id="new-codigo" placeholder="Código">
+            </div>
+            <div class="col-6">
+                <input type="text" class="form-control form-control-sm" id="new-nome" placeholder="Nome">
+            </div>
+            <div class="col-2">
+                <div class="btn-group btn-group-sm w-100">
+                    <button type="button" class="btn btn-success" onclick="saveNew()">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelNew()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.external-item {
+    background: #f8f9fa;
+    transition: all 0.2s ease;
+}
+
+.external-item:hover {
+    background: #e3f2fd;
+    transform: translateX(2px);
+}
+
+.external-item code {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.btn-group-sm .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.edit-mode input {
+    font-size: 12px;
+}
+
+.loading-inline {
+    opacity: 0.6;
+    pointer-events: none;
+}
+</style>
+
+<script>
+// Variáveis globais
+const contaCodigo = '{{ filtros.conta_codigo }}';
+const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+// Editar inline
+function editInline(id) {
+    const item = document.querySelector(`[data-id="${id}"]`);
+    const viewMode = item.querySelector('.view-mode');
+    const editMode = item.querySelector('.edit-mode');
+    
+    // Esconder modo visualização e mostrar edição
+    viewMode.classList.add('d-none');
+    editMode.classList.remove('d-none');
+    
+    // Focar no primeiro campo
+    editMode.querySelector('.codigo-input').focus();
+}
+
+// Cancelar edição
+function cancelEdit(id) {
+    const item = document.querySelector(`[data-id="${id}"]`);
+    const viewMode = item.querySelector('.view-mode');
+    const editMode = item.querySelector('.edit-mode');
+    
+    // Voltar para modo visualização
+    editMode.classList.add('d-none');
+    viewMode.classList.remove('d-none');
+    
+    // Restaurar valores originais
+    const codigoDisplay = item.querySelector('.codigo-display').textContent;
+    const nomeDisplay = item.querySelector('.nome-display').textContent;
+    
+    editMode.querySelector('.codigo-input').value = codigoDisplay;
+    editMode.querySelector('.nome-input').value = nomeDisplay;
+}
+
+// Salvar edição
+function saveInline(id) {
+    const item = document.querySelector(`[data-id="${id}"]`);
+    const editMode = item.querySelector('.edit-mode');
+    
+    const codigoInput = editMode.querySelector('.codigo-input');
+    const nomeInput = editMode.querySelector('.nome-input');
+    
+    const novoCodigo = codigoInput.value.trim();
+    const novoNome = nomeInput.value.trim();
+    
+    if (!novoCodigo || !novoNome) {
+        alert('Código e nome são obrigatórios!');
+        return;
+    }
+    
+    // Mostrar loading
+    item.classList.add('loading-inline');
+    
+    // Enviar requisição
+    fetch(`{% url "gestor:contaexterna_update" 0 %}`.replace('0', id), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+            'conta_contabil': document.querySelector('#conta-contabil-id').value || '',
+            'codigo_externo': novoCodigo,
+            'nome_externo': novoNome,
+            'ativa': 'on'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        item.classList.remove('loading-inline');
+        
+        if (data.success) {
+            // Atualizar visualização
+            item.querySelector('.codigo-display').textContent = novoCodigo;
+            item.querySelector('.nome-display').textContent = novoNome;
+            
+            // Voltar para modo visualização
+            cancelEdit(id);
+            
+            // Mostrar sucesso
+            showToast('Código atualizado com sucesso!', 'success');
+        } else {
+            alert(data.message || 'Erro ao salvar');
+        }
+    })
+    .catch(error => {
+        item.classList.remove('loading-inline');
+        alert('Erro: ' + error.message);
+    });
+}
+
+// Adicionar novo código
+function addNewExternal() {
+    const form = document.getElementById('new-external-form');
+    const emptyState = document.getElementById('empty-state');
+    
+    // Esconder estado vazio se existir
+    if (emptyState) {
+        emptyState.classList.add('d-none');
+    }
+    
+    // Mostrar formulário
+    form.classList.remove('d-none');
+    
+    // Limpar campos
+    document.getElementById('new-codigo').value = '';
+    document.getElementById('new-nome').value = '';
+    
+    // Focar no primeiro campo
+    document.getElementById('new-codigo').focus();
+}
+
+// Cancelar novo
+function cancelNew() {
+    const form = document.getElementById('new-external-form');
+    const emptyState = document.getElementById('empty-state');
+    
+    form.classList.add('d-none');
+    
+    // Se não há itens, mostrar estado vazio
+    if (document.querySelectorAll('[data-id]').length === 0 && emptyState) {
+        emptyState.classList.remove('d-none');
+    }
+}
+
+// Salvar novo
+function saveNew() {
+    const novoCodigo = document.getElementById('new-codigo').value.trim();
+    const novoNome = document.getElementById('new-nome').value.trim();
+    
+    if (!novoCodigo || !novoNome) {
+        alert('Código e nome são obrigatórios!');
+        return;
+    }
+    
+    if (!contaCodigo) {
+        alert('Conta contábil não identificada!');
+        return;
+    }
+    
+    // Mostrar loading
+    const form = document.getElementById('new-external-form');
+    form.classList.add('loading-inline');
+    
+    // Buscar ID da conta contábil
+    fetch(`{% url "gestor:api_validar_codigo_contacontabil" %}?codigo=${encodeURIComponent(contaCodigo)}`)
+    .then(response => response.json())
+    .then(contaData => {
+        if (!contaData.valid) {
+            throw new Error('Conta contábil não encontrada');
+        }
+        
+        // Criar nova conta externa
+        return fetch('{% url "gestor:contaexterna_create" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+                'conta_contabil': contaCodigo, // Usar código em vez de ID
+                'codigo_externo': novoCodigo,
+                'nome_externo': novoNome,
+                'ativa': 'on'
+            })
+        });
+    })
+    .then(response => response.json())
+    .then(data => {
+        form.classList.remove('loading-inline');
+        
+        if (data.success) {
+            // Recarregar a lista
+            if (typeof openExternalAccountModal === 'function') {
+                openExternalAccountModal(contaCodigo);
+            }
+            
+            showToast('Código criado com sucesso!', 'success');
+        } else {
+            alert(data.message || 'Erro ao criar');
+        }
+    })
+    .catch(error => {
+        form.classList.remove('loading-inline');
+        alert('Erro: ' + error.message);
+    });
+}
+
+// Excluir código
+function deleteExternal(id, codigo) {
+    if (!confirm(`Excluir código "${codigo}"?`)) return;
+    
+    fetch(`{% url "gestor:api_contaexterna_delete" 0 %}`.replace('0', id), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remover item da tela
+            document.querySelector(`[data-id="${id}"]`).remove();
+            
+            // Se não sobrou nenhum item, mostrar estado vazio
+            if (document.querySelectorAll('[data-id]').length === 0) {
+                const emptyState = document.getElementById('empty-state');
+                if (emptyState) {
+                    emptyState.classList.remove('d-none');
+                }
+            }
+            
+            showToast('Código excluído!', 'success');
+        } else {
+            alert(data.message || 'Erro ao excluir');
+        }
+    })
+    .catch(error => {
+        alert('Erro: ' + error.message);
+    });
+}
+
+// Toast simples
+function showToast(message, type = 'info') {
+    // Implementação simples de toast
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'success' ? 'success' : 'info'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas fa-${type === 'success' ? 'check' : 'info'}-circle me-2"></i>
+            ${message}
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+// Campo oculto para ID da conta (se necessário)
+if (!document.getElementById('conta-contabil-id')) {
+    const hiddenField = document.createElement('input');
+    hiddenField.type = 'hidden';
+    hiddenField.id = 'conta-contabil-id';
+    hiddenField.value = contaCodigo;
+    document.body.appendChild(hiddenField);
+}
+</script>
