@@ -1078,33 +1078,26 @@ class FornecedorForm(forms.ModelForm):
         
         widgets = {
             'codigo': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Código do fornecedor'
+                'class': 'form-control'
             }),
             'razao_social': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Razão social do fornecedor'
+                'class': 'form-control'
             }),
             'nome_fantasia': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Nome fantasia (opcional)'
+                'class': 'form-control'
             }),
             'cnpj_cpf': forms.TextInput(attrs={
-                'class': 'form-control cnpj-cpf-mask',
-                'placeholder': 'CNPJ ou CPF'
+                'class': 'form-control cnpj-cpf-mask'
             }),
             'telefone': forms.TextInput(attrs={
-                'class': 'form-control telefone-mask',
-                'placeholder': '(00) 00000-0000'
+                'class': 'form-control telefone-mask'
             }),
             'email': forms.EmailInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'email@exemplo.com'
+                'class': 'form-control'
             }),
             'endereco': forms.Textarea(attrs={
                 'class': 'form-control',
-                'rows': 3,
-                'placeholder': 'Endereço completo do fornecedor'
+                'rows': 3
             }),
             'ativo': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
