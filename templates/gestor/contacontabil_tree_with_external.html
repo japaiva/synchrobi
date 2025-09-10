@@ -1,0 +1,393 @@
+<!-- gestor/templates/gestor/contacontabil_tree_with_external.html -->
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}Contas Contábeis com Códigos Externos | SynchroBI{% endblock %}
+
+{% block extra_css %}
+{% include 'gestor/partials/tree_styles.html' %}
+<style>
+    .external-accounts {
+        margin-top: 8px;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border-left: 3px solid #6c757d;
+    }
+    
+    .external-account-item {
+        padding: 4px 8px;
+        margin: 2px 0;
+        background: white;
+        border-radius: 4px;
+        font-size: 11px;
+        border-left: 2px solid #17a2b8;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .external-code {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #495057;
+        background: rgba(23, 162, 184, 0.1);
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-right: 8px;
+    }
+    
+    .external-name {
+        flex: 1;
+        color: #6c757d;
+        margin-right: 8px;
+    }
+    
+    .external-system {
+        font-size: 10px;
+        background: #e9ecef;
+        color: #495057;
+        padding: 2px 6px;
+        border-radius: 10px;
+        white-space: nowrap;
+    }
+    
+    .external-actions {
+        display: flex;
+        gap: 2px;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+    
+    .external-account-item:hover .external-actions {
+        opacity: 1;
+    }
+    
+    .tree-node.has-externals {
+        border-left-width: 6px;
+    }
+    
+    .tree-node.has-externals.analytic {
+        border-left-color: #20c997;
+    }
+    
+    .external-count-badge {
+        background: #17a2b8;
+        color: white;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 8px;
+    }
+    
+    .toggle-externals {
+        background: none;
+        border: none;
+        color: #6c757d;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .toggle-externals:hover {
+        background: #e9ecef;
+        color: #495057;
+    }
+    
+    .toggle-externals.expanded {
+        color: #17a2b8;
+        background: rgba(23, 162, 184, 0.1);
+    }
+    
+    .modal-external-accounts .external-account-item {
+        margin: 4px 0;
+        padding: 8px;
+        font-size: 13px;
+    }
+    
+    .companies-list {
+        margin-top: 4px;
+        font-size: 10px;
+        color: #6c757d;
+        font-style: italic;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <!-- Header -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">Contas Contábeis com Códigos Externos</h4>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-info btn-sm" onclick="refreshTree()">
+                    <i class="fas fa-sync-alt me-1"></i> Atualizar
+                </button>
+                <button class="btn btn-success btn-sm" onclick="openCreateModal()">
+                    <i class="fas fa-plus me-1"></i> Nova Conta
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="openExternalAccountModal()">
+                    <i class="fas fa-link me-1"></i> Gerenciar Códigos Externos
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controles -->
+    <div class="card">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <input type="text" id="tree-search" class="form-control" placeholder="Buscar conta contábil ou código externo...">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filter-system" onchange="filterBySystem()">
+                        <option value="">Todos os sistemas</option>
+                        <option value="Consinco">Consinco</option>
+                        <option value="Protheus">Protheus</option>
+                        <option value="SAP">SAP</option>
+                        <option value="ERP">ERP</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filter-has-external" onchange="filterByExternalStatus()">
+                        <option value="">Todas as contas</option>
+                        <option value="with">Com códigos externos</option>
+                        <option value="without">Sem códigos externos</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="card">
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-accounts">{{ stats.total_contas }}</div>
+                        <div class="stat-label">Total de Contas</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number text-success" id="accounts-with-external">{{ stats.contas_com_externos }}</div>
+                        <div class="stat-label">Com Códigos Externos</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number text-info" id="total-external-codes">{{ stats.total_externos }}</div>
+                        <div class="stat-label">Total Códigos Externos</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number text-warning" id="systems-count">{{ stats.sistemas_count }}</div>
+                        <div class="stat-label">Sistemas Diferentes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Árvore -->
+    <div class="card">
+        <div class="card-body p-0">
+            <ul id="itemTree" class="tree-item"></ul>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Conta Contábil -->
+<div class="modal fade" id="contaContabilModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Carregando...</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary mb-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Códigos Externos -->
+<div class="modal fade" id="externalAccountModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="externalModalTitle">Códigos Externos</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="externalModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary mb-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner">
+        <div class="spinner-border text-primary mb-3"></div>
+        <div>Processando...</div>
+    </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- CSRF Token -->
+{% csrf_token %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/tree-manager-external.js' %}"></script>
+<script>
+let treeManager;
+document.addEventListener('DOMContentLoaded', () => {
+    const config = {
+        treeData: {{ tree_data_json|safe }},
+        updateUrlBase: '{{ update_url_base }}',
+        createUrl: '{% url "gestor:contacontabil_create_modal" %}',
+        apiTreeDataUrl: '{% url "gestor:api_contacontabil_tree_with_external" %}',
+        modalId: 'contaContabilModal',
+        entityName: 'Conta Contábil',
+        hasCompanyField: false,
+        hasDetailModal: false,
+        useId: false,
+        hasExternalAccounts: true
+    };
+    treeManager = new TreeManagerExternal(config);
+});
+
+// Funções globais para compatibilidade
+function openCreateModal(event, codigoPai) { treeManager.openCreateModal(event, codigoPai); }
+function openEditModal(event, codigo) { treeManager.openEditModal(event, codigo); }
+function deleteContaContabil(event, codigo, nome) { treeManager.deleteItem(event, codigo, nome); }
+function refreshTree() { treeManager.refreshTree(); }
+
+function openExternalAccountModal(contaCodigo = null) {
+    const modal = new bootstrap.Modal(document.getElementById('externalAccountModal'));
+    const title = document.getElementById('externalModalTitle');
+    const body = document.getElementById('externalModalBody');
+    
+    if (contaCodigo) {
+        title.textContent = `Códigos Externos - ${contaCodigo}`;
+    } else {
+        title.textContent = 'Gerenciar Códigos Externos';
+    }
+    
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary mb-3"></div><div>Carregando...</div></div>';
+    modal.show();
+    
+    // Carregar conteúdo via AJAX
+    let url = '{% url "gestor:contaexterna_list" %}';
+    if (contaCodigo) {
+        url += `?conta=${encodeURIComponent(contaCodigo)}`;
+    }
+    
+    fetch(url, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        body.innerHTML = html;
+    })
+    .catch(error => {
+        body.innerHTML = `
+            <div class="alert alert-danger">
+                <h6>Erro ao carregar códigos externos</h6>
+                <p>${error.message}</p>
+            </div>
+        `;
+    });
+}
+
+function filterBySystem() {
+    const system = document.getElementById('filter-system').value;
+    treeManager.filterBySystem(system);
+}
+
+function filterByExternalStatus() {
+    const status = document.getElementById('filter-has-external').value;
+    treeManager.filterByExternalStatus(status);
+}
+
+function toggleExternalAccounts(event, codigo) {
+    event.stopPropagation();
+    
+    const button = event.target.closest('.toggle-externals');
+    const externalDiv = document.querySelector(`[data-codigo="${codigo}"] .external-accounts`);
+    
+    if (externalDiv) {
+        const isExpanded = !externalDiv.classList.contains('d-none');
+        
+        if (isExpanded) {
+            externalDiv.classList.add('d-none');
+            button.classList.remove('expanded');
+            button.innerHTML = '<i class="fas fa-eye"></i>';
+        } else {
+            externalDiv.classList.remove('d-none');
+            button.classList.add('expanded');
+            button.innerHTML = '<i class="fas fa-eye-slash"></i>';
+        }
+    }
+}
+
+function addExternalAccount(event, contaCodigo) {
+    event.stopPropagation();
+    
+    const url = `{% url "gestor:contaexterna_create" %}?conta_contabil=${encodeURIComponent(contaCodigo)}`;
+    window.open(url, '_blank');
+}
+
+function editExternalAccount(event, externalId) {
+    event.stopPropagation();
+    
+    const url = `{% url "gestor:contaexterna_update" 0 %}`.replace('0', externalId);
+    window.open(url, '_blank');
+}
+
+function deleteExternalAccount(event, externalId, externalCode) {
+    event.stopPropagation();
+    
+    if (!confirm(`Tem certeza que deseja excluir o código externo "${externalCode}"?\n\nEsta ação não pode ser desfeita.`)) {
+        return;
+    }
+    
+    fetch(`{% url "gestor:contaexterna_delete" 0 %}`.replace('0', externalId), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            treeManager.showToast(data.message, 'success');
+            treeManager.refreshTree();
+        } else {
+            treeManager.showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        treeManager.showToast('Erro ao excluir código externo: ' + error.message, 'error');
+    });
+}
+</script>
+{% endblock %}

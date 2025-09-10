@@ -1,4 +1,4 @@
-# gestor/urls.py - URLs atualizadas incluindo centros de custo
+# gestor/urls.py - URLs atualizadas sem empresa_centro_custo
 
 from django.urls import path
 from . import views
@@ -20,18 +20,6 @@ urlpatterns = [
     path('api/validar-sigla-empresa/', views.api_validar_sigla_empresa, name='api_validar_sigla_empresa'),
     path('api/validar-cnpj-empresa/', views.api_validar_cnpj_empresa, name='api_validar_cnpj_empresa'),
     path('api/empresa/<str:sigla>/info/', views.api_empresa_info, name='api_empresa_info'),
-
-    # Centros de Custo das Empresas
-    path('empresa-centros-custo/', views.empresa_centro_custo_list, name='empresa_centro_custo_list'),
-    path('empresas/<str:sigla_empresa>/centros-custo/', views.empresa_centro_custo_list, name='empresa_centro_custo_list'),
-    path('empresa-centros-custo/novo/', views.empresa_centro_custo_create, name='empresa_centro_custo_create'),
-    path('empresas/<str:sigla_empresa>/centros-custo/novo/', views.empresa_centro_custo_create, name='empresa_centro_custo_create'),
-    path('empresa-centros-custo/<int:pk>/editar/', views.empresa_centro_custo_update, name='empresa_centro_custo_update'),
-    path('empresa-centros-custo/<int:pk>/excluir/', views.empresa_centro_custo_delete, name='empresa_centro_custo_delete'),
-    
-    # APIs para Centros de Custo das Empresas
-    path('api/empresas/<str:sigla_empresa>/centros-custo/', views.api_empresa_centros_custo, name='api_empresa_centros_custo'),
-    path('api/centros-custo/<str:codigo_centro>/empresas/', views.api_centro_custo_empresas, name='api_centro_custo_empresas'),
 
     # ===== UNIDADES - NOVA ARQUITETURA FOCADA NA ÁRVORE =====
     
@@ -73,8 +61,7 @@ urlpatterns = [
     path('centros-custo/<str:codigo>/editar-old/', views.centrocusto_update, name='centrocusto_update'),
     path('centros-custo/<str:codigo>/excluir-old/', views.centrocusto_delete, name='centrocusto_delete'),
 
-
-    # === CONTA CONTÁBIL - HIERARQUIA MODAL ===
+    # ===== CONTAS CONTÁBEIS - NOVA ARQUITETURA FOCADA NA ÁRVORE =====
     
     # View principal da árvore
     path('contas-contabeis/', views.contacontabil_tree_view, name='contacontabil_tree'),
@@ -84,8 +71,8 @@ urlpatterns = [
     path('contas-contabeis/<str:codigo>/editar/', views.contacontabil_update_modal, name='contacontabil_update_modal'),
     path('contas-contabeis/<str:codigo>/excluir/', views.contacontabil_delete_ajax, name='contacontabil_delete_ajax'),
     
-    # APIs
-    path('api/contas-contabeis/tree-data/',  views.api_contacontabil_tree_data, name='api_contacontabil_tree_data'),
+    # APIs básicas
+    path('api/contas-contabeis/tree-data/', views.api_contacontabil_tree_data, name='api_contacontabil_tree_data'),
     path('api/contas-contabeis/validar-codigo/', views.api_validar_codigo_contacontabil, name='api_validar_codigo_contacontabil'),
     
     # URLs de compatibilidade (redirecionam para árvore)
@@ -94,10 +81,18 @@ urlpatterns = [
     path('contas-contabeis/<str:codigo>/', views.contacontabil_update, name='contacontabil_update'),
     path('contas-contabeis/<str:codigo>/deletar/', views.contacontabil_delete, name='contacontabil_delete'),
 
-
-    # APIs para Contas Contábeis
-    path('api/validar-codigo-contacontabil/', views.api_validar_codigo_contacontabil, name='api_validar_codigo_contacontabil'),
+    # ===== CONTAS CONTÁBEIS COM CÓDIGOS EXTERNOS =====
     
+    # View principal da árvore com códigos externos
+    path('contas-contabeis/arvore-externa/', views.contacontabil_tree_with_external_view, name='contacontabil_tree_with_external'),
+    
+    # API para dados da árvore com códigos externos
+    path('api/contas-contabeis/arvore-externa/', views.api_contacontabil_tree_with_external_data, name='api_contacontabil_tree_with_external'),
+    
+    # CRUD para códigos externos
+    path('contas-externas/', views.contaexterna_list, name='contaexterna_list'),
+    path('contas-externas/nova/', views.contaexterna_create, name='contaexterna_create'),
+
     # ===== USUÁRIOS =====
     path('usuarios/', views.usuario_list, name='usuario_list'),
     path('usuarios/criar/', views.usuario_create, name='usuario_create'),
@@ -114,23 +109,3 @@ urlpatterns = [
     # APIs gerais
     path('api/parametro/<str:codigo>/valor/', views.api_parametro_valor, name='api_parametro_valor'),
 ]
-
-# ===== PRINCIPAIS MUDANÇAS =====
-#
-# CENTROS DE CUSTO:
-# 1. 'centros-custo/' agora aponta direto para a árvore (centrocusto_tree_view)
-# 2. URLs modais têm nomes específicos (_modal, _ajax)
-# 3. APIs organizadas para árvore hierárquica
-# 4. URLs antigas mantidas com redirecionamento para compatibilidade
-#
-# ESTRUTURA:
-# - centros-custo/ → árvore principal
-# - centros-custo/criar/ → modal de criação
-# - centros-custo/{codigo}/editar/ → modal de edição  
-# - centros-custo/{codigo}/excluir/ → exclusão via AJAX
-# - api/centros-custo/tree-data/ → dados da árvore
-# - api/centros-custo/validar-codigo/ → validação em tempo real
-#
-# COMPATIBILIDADE:
-# - URLs antigas redirecionam para novas funcionalidades
-# - Mantém funcionalidade para sistemas que dependem das URLs antigas

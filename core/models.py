@@ -987,3 +987,133 @@ class EmpresaCentroCusto(models.Model):
             models.Index(fields=['responsavel']),
             models.Index(fields=['ativo']),
         ]
+
+# Adicionar ao final do arquivo core/models.py
+
+class ContaExterna(models.Model):
+    """
+    Modelo para mapear códigos de contas externas (ERPs) às contas contábeis internas
+    """
+    
+    # Relacionamento com conta contábil interna
+    conta_contabil = models.ForeignKey(
+        ContaContabil,
+        on_delete=models.CASCADE,
+        related_name='contas_externas',
+        verbose_name="Conta Contábil Interna"
+    )
+    
+    # Dados da conta externa
+    codigo_externo = models.CharField(
+        max_length=50,
+        verbose_name="Código Externo",
+        help_text="Código da conta no sistema externo (ERP)"
+    )
+    
+    nome_externo = models.CharField(
+        max_length=255,
+        verbose_name="Nome no Sistema Externo",
+        help_text="Nome/descrição da conta no sistema externo"
+    )
+    
+    # Sistema/empresa origem
+    sistema_origem = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Sistema de Origem",
+        help_text="Nome do ERP/sistema de origem (ex: Consinco, Protheus)"
+    )
+    
+    empresas_utilizacao = models.TextField(
+        blank=True,
+        verbose_name="Empresas de Utilização",
+        help_text="Empresas que utilizam esta conta (ex: CMC & EBC & Taiff & Action Motors)"
+    )
+    
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name="Observações",
+        help_text="Observações sobre a conta externa"
+    )
+    
+    # Campos de controle
+    ativa = models.BooleanField(
+        default=True,
+        verbose_name="Ativa",
+        help_text="Se a conta externa está ativa"
+    )
+    
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    
+    # Campos para sincronização
+    sincronizado = models.BooleanField(
+        default=False,
+        verbose_name="Sincronizado",
+        help_text="Se a conta foi sincronizada com o sistema externo"
+    )
+    
+    data_ultima_sincronizacao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Última Sincronização"
+    )
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Verificar se não há duplicação do código externo para a mesma conta interna
+        duplicatas = ContaExterna.objects.filter(
+            conta_contabil=self.conta_contabil,
+            codigo_externo=self.codigo_externo,
+            ativa=True
+        )
+        
+        if self.pk:
+            duplicatas = duplicatas.exclude(pk=self.pk)
+        
+        if duplicatas.exists():
+            raise ValidationError({
+                'codigo_externo': f'Já existe uma conta externa ativa com este código para a conta {self.conta_contabil.codigo}'
+            })
+    
+    @property
+    def codigo_display(self):
+        """Código para exibição"""
+        return f"{self.codigo_externo} ({self.sistema_origem})" if self.sistema_origem else self.codigo_externo
+    
+    @property
+    def empresas_lista(self):
+        """Retorna lista de empresas que utilizam esta conta"""
+        if not self.empresas_utilizacao:
+            return []
+        
+        # Dividir por & e limpar espaços
+        empresas = [emp.strip() for emp in self.empresas_utilizacao.split('&')]
+        return [emp for emp in empresas if emp]
+    
+    def sincronizar_dados(self):
+        """Sincroniza dados com o sistema externo"""
+        # Implementar lógica de sincronização
+        self.sincronizado = True
+        self.data_ultima_sincronizacao = timezone.now()
+        self.save()
+    
+    def __str__(self):
+        sistema = f" ({self.sistema_origem})" if self.sistema_origem else ""
+        return f"{self.codigo_externo}{sistema} → {self.conta_contabil.codigo}"
+    
+    class Meta:
+        db_table = 'contas_externas'
+        verbose_name = 'Conta Externa'
+        verbose_name_plural = 'Contas Externas'
+        ordering = ['conta_contabil__codigo', 'codigo_externo']
+        unique_together = ['conta_contabil', 'codigo_externo', 'ativa']  # Evita duplicatas ativas
+        indexes = [
+            models.Index(fields=['conta_contabil']),
+            models.Index(fields=['codigo_externo']),
+            models.Index(fields=['sistema_origem']),
+            models.Index(fields=['ativa']),
+            models.Index(fields=['sincronizado']),
+        ]

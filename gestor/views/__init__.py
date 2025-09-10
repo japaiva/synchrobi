@@ -3,16 +3,6 @@
 # Dashboard
 from .dashboard import dashboard, home
 
-# Empresa Centro Custo
-from .empresa_centro_custo import (
-    empresa_centro_custo_list, 
-    empresa_centro_custo_create, 
-    empresa_centro_custo_update, 
-    empresa_centro_custo_delete,
-    api_empresa_centros_custo, 
-    api_centro_custo_empresas
-)
-
 # Empresa
 from .empresa import (
     empresa_list, 
@@ -86,6 +76,21 @@ from .contacontabil import (
     contacontabil_delete,            # Redireciona para AJAX
 )
 
+# Conta Contabil com Códigos Externos - Nova funcionalidade
+from .contacontabil_external import (
+    # View principal da árvore com externos
+    contacontabil_tree_with_external_view,    # View principal com códigos externos
+    
+    # API para dados da árvore com externos
+    api_contacontabil_tree_with_external_data, # API da árvore com códigos externos
+    
+    # CRUD para contas externas
+    contaexterna_list,                        # Lista de códigos externos
+    contaexterna_create,                      # Criar código externo
+    # contaexterna_update,                    # Editar código externo (implementar)
+    # contaexterna_delete,                    # Excluir código externo (implementar)
+)
+
 # Usuario
 from .usuario import (
     usuario_list, 
@@ -122,13 +127,19 @@ from .parametro import (
 # - centrocusto_delete → centrocusto_delete_ajax (principal) + redirect (compatibilidade)
 # + api_centrocusto_tree_data → nova API para dados da árvore
 #
-# CONTAS CONTÁBEIS (migradas nesta atualização):
+# CONTAS CONTÁBEIS (migradas):
 # - contacontabil_list → contacontabil_tree_view (principal) + redirect (compatibilidade)
 # - contacontabil_create → contacontabil_create_modal (principal) + redirect (compatibilidade)
 # - contacontabil_update → contacontabil_update_modal (principal) + redirect (compatibilidade)
 # - contacontabil_delete → contacontabil_delete_ajax (principal) + redirect (compatibilidade)
 # + api_contacontabil_tree_data → nova API para dados da árvore
 # + api_validar_codigo_contacontabil → nova API para validação
+#
+# CONTAS CONTÁBEIS COM CÓDIGOS EXTERNOS (nova funcionalidade):
+# + contacontabil_tree_with_external_view → árvore principal com códigos externos
+# + api_contacontabil_tree_with_external_data → API da árvore com códigos externos
+# + contaexterna_list → gerenciar códigos externos
+# + contaexterna_create → criar códigos externos
 #
 # PADRÃO DA NOVA ARQUITETURA:
 # 1. View principal única (*_tree_view) para visualização hierárquica
@@ -137,6 +148,7 @@ from .parametro import (
 # 4. APIs modernas para dados da árvore (api_*_tree_data)
 # 5. APIs de validação específicas (api_validar_codigo_*)
 # 6. Views antigas mantidas para compatibilidade com redirecionamentos
+# 7. Funcionalidades especializadas (*_with_external_*) para recursos avançados
 #
 # BENEFÍCIOS DA NOVA ARQUITETURA:
 # - Interface consistente e moderna
@@ -145,3 +157,4 @@ from .parametro import (
 # - Hierarquia dinâmica baseada em código
 # - Compatibilidade total com código existente
 # - Manutenibilidade aprimorada
+# - Suporte a códigos externos integrado
