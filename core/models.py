@@ -569,7 +569,7 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
     
     def __str__(self):
         tipo_icon = "📂" if self.e_sintetico else "🏢"
-        return f"{tipo_icon} {self.codigo_display} - {self.nome}"
+        return f"{self.codigo_display} - {self.nome}"
     
     class Meta:
         db_table = 'unidades'
@@ -696,7 +696,7 @@ class CentroCusto(models.Model, HierarquiaDinamicaMixin):
     
     def __str__(self):
         tipo_icon = "💼" if self.e_sintetico else "🎯"
-        return f"{tipo_icon} {self.codigo} - {self.nome}"
+        return f"{self.codigo} - {self.nome}"
     
     class Meta:
         db_table = 'centros_custo'
@@ -826,7 +826,7 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
     
     def __str__(self):
         tipo_icon = "📊" if self.e_sintetico else "📋"
-        return f"{tipo_icon} {self.codigo} - {self.nome}"
+        return f"{self.codigo} - {self.nome}"
     
     class Meta:
         db_table = 'contas_contabeis'

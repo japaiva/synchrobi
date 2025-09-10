@@ -1,5 +1,6 @@
 <!-- gestor/templates/gestor/movimento_list.html -->
 {% extends 'gestor/base_gestor.html' %}
+{% load format_br %}
 {% load static %}
 
 {% block title %}Movimentos | SynchroBI{% endblock %}
@@ -113,8 +114,7 @@
             <th style="width: 120px;">C.Custo</th>
             <th style="width: 120px;">C.Ctb</th>
             <th style="width: 140px;">Fornecedor</th>
-            <th style="width: 40px;" class="text-center">Nat</th>
-            <th style="width: 100px;" class="text-end">Valor</th>
+            <th style="width: 140px;" class="text-end">Valor</th>
             <th>Histórico</th>
             <th style="width: 120px;" class="text-end">Ações</th>
           </tr>
@@ -151,16 +151,13 @@
                   <span class="text-muted small">-</span>
                 {% endif %}
               </td>
-              <td class="text-center">
-                <span class="badge bg-{% if movimento.natureza == 'D' %}danger{% elif movimento.natureza == 'C' %}success{% else %}secondary{% endif %}" style="font-size: 0.7rem;">
-                  {{ movimento.natureza }}
-                </span>
-              </td>
+
               <td class="text-end">
                 <div class="fw-bold {% if movimento.valor < 0 %}text-danger{% else %}text-success{% endif %}" style="font-size: 0.85rem;">
-                  R$ {{ movimento.valor|floatformat:2 }}
+                  R$ {{ movimento.valor|formato_br }}
                 </div>
               </td>
+
               <td>
                 <div class="text-muted small">{{ movimento.historico|truncatechars:80 }}</div>
                 {% if movimento.documento %}

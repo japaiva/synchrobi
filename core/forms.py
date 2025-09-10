@@ -3,6 +3,7 @@
 from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
+from core.utils.view_utils import CustomDateInput, CustomDateTimeInput, DateAwareModelForm
 from core.models import (
     Usuario, Unidade, CentroCusto, ContaContabil, ParametroSistema, 
     Empresa,  ContaExterna, Fornecedor, Movimento
@@ -1107,10 +1108,6 @@ class FornecedorForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Help texts
-        self.fields['codigo'].help_text = "Código único do fornecedor"
-        self.fields['razao_social'].help_text = "Nome oficial da empresa ou pessoa"
-        self.fields['cnpj_cpf'].help_text = "CNPJ para empresas ou CPF para pessoas físicas"
         
         # Campos obrigatórios
         self.fields['codigo'].required = True
@@ -1221,6 +1218,8 @@ class FornecedorForm(forms.ModelForm):
         
         return fornecedor
 
+
+
 class MovimentoForm(forms.ModelForm):
     """Formulário para criar/editar movimentos - VERSÃO CORRIGIDA"""
     
@@ -1233,10 +1232,10 @@ class MovimentoForm(forms.ModelForm):
         
         widgets = {
             # Data no formato brasileiro
-            'data': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
+            'data': CustomDateInput(attrs={
+                'class': 'form-control'
             }),
+
             'unidade': forms.Select(attrs={'class': 'form-select'}),
             'centro_custo': forms.Select(attrs={'class': 'form-select'}),
             'conta_contabil': forms.Select(attrs={'class': 'form-select'}),
@@ -1286,7 +1285,6 @@ class MovimentoForm(forms.ModelForm):
         self.fields['valor'].required = True
         self.fields['historico'].required = True
         
-
          
         # Empty labels para campos obrigatórios
         self.fields['unidade'].empty_label = "--- Selecione a Unidade ---"
