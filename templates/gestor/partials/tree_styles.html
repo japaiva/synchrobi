@@ -119,12 +119,14 @@
         align-items: center;
         justify-content: space-between;
         width: 100%;
+        gap: 15px; /* Espaço entre conteúdo e badges */
     }
 
     .tree-content {
         flex: 1;
         display: flex;
         align-items: center;
+        gap: 8px; /* Espaço entre elementos do conteúdo */
     }
 
     .tree-code {
@@ -135,27 +137,32 @@
         font-size: 12px;
         font-weight: 600;
         color: #495057;
-        margin-right: 12px;
         min-width: 100px;
+        flex-shrink: 0; /* Não encolhe */
     }
 
     .tree-name {
         font-weight: 500;
         color: #212529;
+        flex: 1; /* Ocupa espaço disponível */
+        margin-right: 12px; /* Espaço específico antes dos badges */
     }
 
     .tree-badges {
         display: flex;
-        gap: 6px;
+        gap: 8px; /* Espaço entre badges e ações */
         align-items: center;
+        flex-shrink: 0; /* Não encolhe */
     }
 
     .type-badge {
         font-size: 10px;
-        padding: 2px 6px;
+        padding: 3px 8px;
         border-radius: 12px;
         font-weight: 600;
         text-transform: uppercase;
+        white-space: nowrap; /* Não quebra linha */
+        margin-right: 6px; /* Espaço específico após o badge */
     }
 
     .type-badge.synthetic {
@@ -173,6 +180,8 @@
     .tree-actions {
         opacity: 0;
         transition: opacity 0.2s ease;
+        display: flex;
+        gap: 4px; /* Espaço entre botões de ação */
     }
 
     .tree-node:hover .tree-actions {
@@ -184,9 +193,14 @@
         font-size: 12px;
         border: none;
         border-radius: 4px;
-        margin-left: 4px;
         cursor: pointer;
         transition: all 0.2s ease;
+    }
+
+    /* Espaçamentos específicos para informações da empresa */
+    .tree-content small.text-muted {
+        margin-left: 8px;
+        white-space: nowrap;
     }
 
     .search-container {
@@ -273,6 +287,18 @@
         .tree-code {
             min-width: 80px;
             font-size: 11px;
+        }
+        
+        .tree-info {
+            gap: 8px; /* Reduz espaço em mobile */
+        }
+        
+        .tree-content {
+            gap: 4px; /* Reduz espaço em mobile */
+        }
+        
+        .tree-name {
+            margin-right: 8px; /* Reduz margem em mobile */
         }
         
         .stats-cards {
