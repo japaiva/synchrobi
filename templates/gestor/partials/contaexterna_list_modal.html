@@ -1,36 +1,18 @@
-<!-- gestor/templates/gestor/partials/contaexterna_list_modal.html - EDIÇÃO INLINE -->
+<!-- gestor/templates/gestor/partials/contaexterna_list_modal.html - VERSÃO COMPACTA COM EDIÇÃO INLINE -->
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <h6 class="mb-0">
-            <i class="fas fa-link me-2"></i>Códigos Externos
-            {% if filtros.conta_codigo %}- {{ filtros.conta_codigo }}{% endif %}
-        </h6>
-        <small class="text-muted">{{ total_count }} código(s)</small>
-    </div>
-    <button type="button" class="btn btn-sm btn-success" onclick="addNewExternal()">
-        <i class="fas fa-plus me-1"></i> Novo
-    </button>
-</div>
 
-<!-- Lista dos códigos externos -->
+
+<!-- Lista dos códigos externos - COMPACTA -->
 <div style="max-height: 400px; overflow-y: auto;" class="external-list">
     {% if page_obj %}
         {% for externa in page_obj %}
         <div class="external-item mb-2 p-2 border rounded" data-id="{{ externa.id }}">
-            <!-- Modo Visualização -->
+            <!-- Modo Visualização - UMA LINHA -->
             <div class="view-mode">
                 <div class="d-flex justify-content-between align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center mb-1">
-                            <code class="codigo-display me-2 bg-primary text-white px-2 py-1 rounded">{{ externa.codigo_externo }}</code>
-                            <span class="nome-display fw-bold">{{ externa.nome_externo }}</span>
-                        </div>
-                        {% if externa.sistema_origem %}
-                        <div class="small text-muted">
-                            <i class="fas fa-server me-1"></i>{{ externa.sistema_origem }}
-                        </div>
-                        {% endif %}
+                    <div class="flex-grow-1 d-flex align-items-center">
+                        <code class="codigo-display me-2 bg-primary text-white px-2 py-1 rounded" style="font-size: 11px;">{{ externa.codigo_externo }}</code>
+                        <span class="nome-display fw-bold me-2">{{ externa.nome_externo }}</span>
                     </div>
                     
                     <div class="btn-group btn-group-sm">
@@ -44,24 +26,18 @@
                 </div>
             </div>
             
-            <!-- Modo Edição -->
+            <!-- Modo Edição - UMA LINHA -->
             <div class="edit-mode d-none">
-                <div class="row g-2">
-                    <div class="col-4">
-                        <input type="text" class="form-control form-control-sm codigo-input" value="{{ externa.codigo_externo }}" placeholder="Código">
-                    </div>
-                    <div class="col-6">
-                        <input type="text" class="form-control form-control-sm nome-input" value="{{ externa.nome_externo }}" placeholder="Nome">
-                    </div>
-                    <div class="col-2">
-                        <div class="btn-group btn-group-sm w-100">
-                            <button type="button" class="btn btn-success btn-save" onclick="saveInline({{ externa.id }})">
-                                <i class="fas fa-check"></i>
-                            </button>
-                            <button type="button" class="btn btn-secondary btn-cancel" onclick="cancelEdit({{ externa.id }})">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="text" class="form-control form-control-sm codigo-input" value="{{ externa.codigo_externo }}" placeholder="Código" style="width: 120px;">
+                    <input type="text" class="form-control form-control-sm nome-input flex-grow-1" value="{{ externa.nome_externo }}" placeholder="Nome">
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-success btn-save" onclick="saveInline({{ externa.id }})">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-cancel" onclick="cancelEdit({{ externa.id }})">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -79,24 +55,18 @@
         {% endfor %}
     {% endif %}
     
-    <!-- Formulário para novo código (inicialmente oculto) -->
+    <!-- Formulário para novo código (inicialmente oculto) - SIMPLES -->
     <div class="external-item mb-2 p-2 border rounded d-none" id="new-external-form">
-        <div class="row g-2">
-            <div class="col-4">
-                <input type="text" class="form-control form-control-sm" id="new-codigo" placeholder="Código">
-            </div>
-            <div class="col-6">
-                <input type="text" class="form-control form-control-sm" id="new-nome" placeholder="Nome">
-            </div>
-            <div class="col-2">
-                <div class="btn-group btn-group-sm w-100">
-                    <button type="button" class="btn btn-success" onclick="saveNew()">
-                        <i class="fas fa-check"></i>
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="cancelNew()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
+        <div class="d-flex align-items-center gap-2">
+            <input type="text" class="form-control form-control-sm" id="new-codigo" placeholder="Código" style="width: 80px;">
+            <input type="text" class="form-control form-control-sm flex-grow-1" id="new-nome" placeholder="Descrição">
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-success" onclick="saveNew()" title="Salvar">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="cancelNew()" title="Cancelar">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -130,6 +100,16 @@
 .loading-inline {
     opacity: 0.6;
     pointer-events: none;
+}
+
+/* Garantir que tudo fique numa linha */
+.view-mode .d-flex,
+.edit-mode .d-flex {
+    white-space: nowrap;
+}
+
+.nome-display {
+    /* Remover limitações para mostrar descrição completa */
 }
 </style>
 
@@ -281,29 +261,20 @@ function saveNew() {
     const form = document.getElementById('new-external-form');
     form.classList.add('loading-inline');
     
-    // Buscar ID da conta contábil
-    fetch(`{% url "gestor:api_validar_codigo_contacontabil" %}?codigo=${encodeURIComponent(contaCodigo)}`)
-    .then(response => response.json())
-    .then(contaData => {
-        if (!contaData.valid) {
-            throw new Error('Conta contábil não encontrada');
-        }
-        
-        // Criar nova conta externa
-        return fetch('{% url "gestor:contaexterna_create" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'X-Requested-With': 'XMLHttpRequest',
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: new URLSearchParams({
-                'conta_contabil': contaCodigo, // Usar código em vez de ID
-                'codigo_externo': novoCodigo,
-                'nome_externo': novoNome,
-                'ativa': 'on'
-            })
-        });
+    // Criar nova conta externa
+    fetch('{% url "gestor:contaexterna_create" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+            'conta_contabil': contaCodigo,
+            'codigo_externo': novoCodigo,
+            'nome_externo': novoNome,
+            'ativa': 'on'
+        })
     })
     .then(response => response.json())
     .then(data => {
@@ -363,7 +334,6 @@ function deleteExternal(id, codigo) {
 
 // Toast simples
 function showToast(message, type = 'info') {
-    // Implementação simples de toast
     const toast = document.createElement('div');
     toast.className = `alert alert-${type === 'success' ? 'success' : 'info'} position-fixed`;
     toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
