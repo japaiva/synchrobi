@@ -330,6 +330,8 @@ class Empresa(models.Model):
 
 # ===== MODELO UNIDADE COM HIERARQUIA DINÂMICA =====
 
+# core/models.py - Substituir a classe Unidade existente
+
 class Unidade(models.Model, HierarquiaDinamicaMixin):
     """Unidade organizacional com hierarquia dinâmica baseada em código"""
 
@@ -346,7 +348,12 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
     )
 
     codigo = models.CharField(max_length=50, unique=True, verbose_name="Código")
-    codigo_allstrategy = models.CharField(max_length=20, blank=True, verbose_name="Código All Strategy")
+    codigo_allstrategy = models.CharField(
+        max_length=20, 
+        blank=True, 
+        verbose_name="Código All Strategy",
+        db_index=True  # ÍNDICE ADICIONADO
+    )
     nome = models.CharField(max_length=255, verbose_name="Nome da Unidade")
     
     empresa = models.ForeignKey(
@@ -357,8 +364,6 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
         null=True,
         blank=True
     )
-    
-    # REMOVIDO: unidade_pai (agora dinâmico via HierarquiaDinamicaMixin)
     
     nivel = models.IntegerField(verbose_name="Nível Hierárquico")
     ativa = models.BooleanField(default=True, verbose_name="Ativa")
@@ -387,18 +392,27 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
                              f'Certifique-se de que existe pelo menos uma unidade superior.'
                 })
         
-        # Para unidades novas (sem PK), sugerir código All Strategy se não fornecido
-        if not self.pk and not self.codigo_allstrategy and self.codigo:
-            partes = self.codigo.split('.')
-            ultimo_segmento = partes[-1]
-            if ultimo_segmento.isdigit():
-                self.codigo_allstrategy = ultimo_segmento
+        # Validar código All Strategy se fornecido
+        if self.codigo_allstrategy:
+            # Verificar duplicação do código All Strategy apenas se não vazio
+            query = Unidade.objects.filter(codigo_allstrategy=self.codigo_allstrategy, ativa=True)
+            if self.pk:
+                query = query.exclude(pk=self.pk)
+            
+            if query.exists():
+                raise ValidationError({
+                    'codigo_allstrategy': f'Já existe uma unidade ativa com código All Strategy "{self.codigo_allstrategy}"'
+                })
     
     def save(self, *args, **kwargs):
         """Save simplificado - apenas calcula nível"""
         
         # Calcular nível baseado no número de pontos
         self.nivel = self.codigo.count('.') + 1
+        
+        # Limpar código All Strategy se vazio
+        if not self.codigo_allstrategy:
+            self.codigo_allstrategy = ''
         
         # Validar
         self.full_clean()
@@ -407,6 +421,78 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
         
         # Limpar cache relacionado
         self._limpar_cache()
+    
+    # MÉTODOS DE BUSCA OTIMIZADOS
+    
+    @classmethod
+    def buscar_por_codigo_allstrategy(cls, codigo_allstrategy, apenas_ativas=True):
+        """
+        Busca unidade pelo código All Strategy (otimizado com índice)
+        """
+        if not codigo_allstrategy:
+            return None
+        
+        try:
+            query = cls.objects.filter(codigo_allstrategy=codigo_allstrategy)
+            if apenas_ativas:
+                query = query.filter(ativa=True)
+            
+            return query.first()  # Usar first() para evitar exceção se não encontrar
+            
+        except Exception as e:
+            logger.error(f'Erro ao buscar unidade por código All Strategy {codigo_allstrategy}: {str(e)}')
+            return None
+    
+    @classmethod
+    def buscar_unidade_para_movimento(cls, codigo_unidade):
+        """
+        Busca unidade para movimentação - primeiro por All Strategy, depois por código normal
+        """
+        # Tentar primeiro por código All Strategy (mais comum para movimentos)
+        unidade = cls.buscar_por_codigo_allstrategy(str(codigo_unidade))
+        
+        if unidade:
+            return unidade
+        
+        # Se não encontrou, tentar por código normal
+        try:
+            return cls.objects.get(codigo=str(codigo_unidade), ativa=True)
+        except cls.DoesNotExist:
+            logger.warning(f'Unidade não encontrada para código: {codigo_unidade}')
+            return None
+    
+    @classmethod
+    def buscar_multiplas_para_movimentos(cls, codigos_unidades):
+        """
+        Busca múltiplas unidades de forma otimizada para importação em lote
+        """
+        codigos_str = [str(c) for c in codigos_unidades if c]
+        
+        # Buscar por All Strategy e código normal em uma só query
+        unidades_all_strategy = list(cls.objects.filter(
+            codigo_allstrategy__in=codigos_str, 
+            ativa=True
+        ).values('codigo_allstrategy', 'id', 'codigo', 'nome'))
+        
+        unidades_codigo = list(cls.objects.filter(
+            codigo__in=codigos_str, 
+            ativa=True
+        ).values('codigo', 'id', 'codigo_allstrategy', 'nome'))
+        
+        # Criar mapa para retorno rápido
+        mapa_unidades = {}
+        
+        # Priorizar busca por All Strategy
+        for unidade in unidades_all_strategy:
+            if unidade['codigo_allstrategy']:
+                mapa_unidades[unidade['codigo_allstrategy']] = unidade
+        
+        # Complementar com busca por código normal
+        for unidade in unidades_codigo:
+            if unidade['codigo'] not in mapa_unidades:
+                mapa_unidades[unidade['codigo']] = unidade
+        
+        return mapa_unidades
     
     def _limpar_cache(self):
         """Limpa cache relacionado a esta unidade"""
@@ -474,8 +560,15 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
             return self.codigo_allstrategy
         return self.codigo
     
+    @property
+    def codigo_busca_display(self):
+        """Mostra ambos códigos quando relevante"""
+        if self.codigo_allstrategy and self.codigo_allstrategy != self.codigo:
+            return f"{self.codigo} (AS: {self.codigo_allstrategy})"
+        return self.codigo
+    
     def __str__(self):
-        tipo_icon = "📁" if self.e_sintetico else "🏢"
+        tipo_icon = "📂" if self.e_sintetico else "🏢"
         return f"{tipo_icon} {self.codigo_display} - {self.nome}"
     
     class Meta:
@@ -485,10 +578,11 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
         ordering = ['codigo']
         indexes = [
             models.Index(fields=['codigo']),
-            models.Index(fields=['codigo_allstrategy']),
+            models.Index(fields=['codigo_allstrategy']),  # ÍNDICE PRINCIPAL PARA BUSCA
             models.Index(fields=['ativa']),
             models.Index(fields=['nivel']),
             models.Index(fields=['empresa']),
+            models.Index(fields=['codigo_allstrategy', 'ativa']),  # ÍNDICE COMPOSTO OTIMIZADO
         ]
 
 # ===== MODELO CENTRO DE CUSTO COM HIERARQUIA DINÂMICA =====
@@ -745,36 +839,6 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
             models.Index(fields=['nivel']),
             models.Index(fields=['tipo']),
         ]
-# ===== MODELO FORNECEDOR (mantido como estava) =====
-
-class Fornecedor(models.Model):
-    """Cadastro de fornecedores"""
-    codigo = models.CharField(max_length=20, primary_key=True)
-    razao_social = models.CharField(max_length=255)
-    nome_fantasia = models.CharField(max_length=255, blank=True)
-    cnpj_cpf = models.CharField(max_length=18)
-    inscricao_estadual = models.CharField(max_length=30, blank=True)
-    endereco = models.TextField(blank=True)
-    telefone = models.CharField(max_length=20, blank=True)
-    email = models.EmailField(blank=True)
-    
-    # Dados bancários
-    banco = models.CharField(max_length=100, blank=True)
-    agencia = models.CharField(max_length=10, blank=True)
-    conta = models.CharField(max_length=20, blank=True)
-    pix = models.CharField(max_length=100, blank=True)
-    
-    ativo = models.BooleanField(default=True)
-    data_cadastro = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"{self.codigo} - {self.razao_social}"
-    
-    class Meta:
-        db_table = 'fornecedores'
-        verbose_name = 'Fornecedor'
-        verbose_name_plural = 'Fornecedores'
-        ordering = ['razao_social']
 
 # ===== MODELO PARÂMETRO SISTEMA (mantido como estava) =====
 
@@ -1116,4 +1180,489 @@ class ContaExterna(models.Model):
             models.Index(fields=['sistema_origem']),
             models.Index(fields=['ativa']),
             models.Index(fields=['sincronizado']),
+        ]
+
+# core/models.py - Adicionar ao final do arquivo
+
+class Fornecedor(models.Model):
+    """Cadastro de fornecedores com dados simplificados"""
+    
+    codigo = models.CharField(max_length=20, primary_key=True, verbose_name="Código")
+    razao_social = models.CharField(max_length=255, verbose_name="Razão Social")
+    nome_fantasia = models.CharField(max_length=255, blank=True, verbose_name="Nome Fantasia")
+    cnpj_cpf = models.CharField(max_length=18, blank=True, verbose_name="CNPJ/CPF")
+    
+    # Dados de contato
+    telefone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
+    email = models.EmailField(blank=True, verbose_name="E-mail")
+    endereco = models.TextField(blank=True, verbose_name="Endereço")
+    
+    # Dados bancários removidos conforme solicitação
+    
+    # Controle
+    ativo = models.BooleanField(default=True, verbose_name="Ativo")
+    criado_automaticamente = models.BooleanField(default=False, verbose_name="Criado Automaticamente")
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+    
+    # Campos para rastreamento da origem
+    origem_historico = models.TextField(
+        blank=True, 
+        verbose_name="Histórico de Origem",
+        help_text="Histórico original de onde foi extraído"
+    )
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Limpar razão social
+        if self.razao_social:
+            self.razao_social = self.razao_social.strip().upper()
+        
+        # Validar CNPJ/CPF se fornecido
+        if self.cnpj_cpf:
+            import re
+            cnpj_cpf_limpo = re.sub(r'[^\d]', '', self.cnpj_cpf)
+            if len(cnpj_cpf_limpo) not in [11, 14]:
+                raise ValidationError({
+                    'cnpj_cpf': 'CNPJ deve ter 14 dígitos ou CPF deve ter 11 dígitos'
+                })
+    
+    @property
+    def nome_display(self):
+        """Nome para exibição (nome fantasia se houver, senão razão social)"""
+        return self.nome_fantasia or self.razao_social
+    
+    @property
+    def cnpj_cpf_formatado(self):
+        """CNPJ/CPF formatado"""
+        if not self.cnpj_cpf:
+            return ''
+        
+        import re
+        numeros = re.sub(r'[^\d]', '', self.cnpj_cpf)
+        
+        if len(numeros) == 14:  # CNPJ
+            return f"{numeros[:2]}.{numeros[2:5]}.{numeros[5:8]}/{numeros[8:12]}-{numeros[12:14]}"
+        elif len(numeros) == 11:  # CPF
+            return f"{numeros[:3]}.{numeros[3:6]}.{numeros[6:9]}-{numeros[9:11]}"
+        else:
+            return self.cnpj_cpf
+    
+    @property
+    def tipo_pessoa(self):
+        """Retorna se é PF ou PJ baseado no CNPJ/CPF"""
+        if not self.cnpj_cpf:
+            return 'Não informado'
+        
+        import re
+        numeros = re.sub(r'[^\d]', '', self.cnpj_cpf)
+        
+        if len(numeros) == 14:
+            return 'Pessoa Jurídica'
+        elif len(numeros) == 11:
+            return 'Pessoa Física'
+        else:
+            return 'Inválido'
+    
+    @classmethod
+    def extrair_do_historico(cls, historico, salvar=True):
+        """
+        Extrai fornecedor do histórico no padrão: "- 123456 NOME DO FORNECEDOR -"
+        """
+        import re
+        
+        # Padrão para capturar código e nome do fornecedor
+        match = re.search(r'- (\d+)\s+([A-Z\s&\.\-_]+?) -', historico)
+        
+        if not match:
+            return None
+        
+        codigo, nome = match.groups()
+        codigo = codigo.strip()
+        nome = nome.strip()
+        
+        if len(nome) < 3:  # Nome muito curto, provavelmente inválido
+            return None
+        
+        # Verificar se já existe
+        try:
+            fornecedor = cls.objects.get(codigo=codigo)
+            logger.info(f'Fornecedor existente encontrado: {codigo} - {nome}')
+            return fornecedor
+        except cls.DoesNotExist:
+            pass
+        
+        # Criar novo fornecedor se não existe
+        if salvar:
+            try:
+                fornecedor = cls.objects.create(
+                    codigo=codigo,
+                    razao_social=nome,
+                    criado_automaticamente=True,
+                    origem_historico=historico[:500]  # Limitar tamanho
+                )
+                logger.info(f'Novo fornecedor criado automaticamente: {codigo} - {nome}')
+                return fornecedor
+            except Exception as e:
+                logger.error(f'Erro ao criar fornecedor {codigo}: {str(e)}')
+                return None
+        else:
+            # Retornar instância não salva para preview
+            return cls(
+                codigo=codigo,
+                razao_social=nome,
+                criado_automaticamente=True,
+                origem_historico=historico[:500]
+            )
+    
+    def __str__(self):
+        return f"{self.codigo} - {self.nome_display}"
+    
+    class Meta:
+        db_table = 'fornecedores'
+        verbose_name = 'Fornecedor'
+        verbose_name_plural = 'Fornecedores'
+        ordering = ['razao_social']
+        indexes = [
+            models.Index(fields=['codigo']),
+            models.Index(fields=['razao_social']),
+            models.Index(fields=['ativo']),
+            models.Index(fields=['criado_automaticamente']),
+        ]
+
+# core/models.py - Adicionar ao final do arquivo
+
+class Movimento(models.Model):
+    """
+    Movimentação financeira/contábil com relacionamentos para unidade, centro de custo, 
+    conta contábil e fornecedor
+    """
+    
+    NATUREZA_CHOICES = [
+        ('D', 'Débito'),
+        ('C', 'Crédito'),
+        ('A', 'Ambas'),
+    ]
+    
+    # Campos temporais
+    mes = models.IntegerField(verbose_name="Mês")
+    ano = models.IntegerField(verbose_name="Ano")
+    data = models.DateField(verbose_name="Data do Movimento")
+    
+    # Relacionamentos principais (FKs)
+    unidade = models.ForeignKey(
+        Unidade,
+        on_delete=models.PROTECT,
+        related_name='movimentos',
+        verbose_name="Unidade",
+        help_text="Unidade organizacional"
+    )
+    
+    centro_custo = models.ForeignKey(
+        CentroCusto,
+        on_delete=models.PROTECT,
+        related_name='movimentos',
+        verbose_name="Centro de Custo"
+    )
+    
+    conta_contabil = models.ForeignKey(
+        ContaContabil,
+        on_delete=models.PROTECT,
+        related_name='movimentos',
+        verbose_name="Conta Contábil"
+    )
+    
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.PROTECT,
+        related_name='movimentos',
+        verbose_name="Fornecedor",
+        null=True,
+        blank=True,
+        help_text="Fornecedor extraído do histórico (quando aplicável)"
+    )
+    
+    # Campos do movimento
+    documento = models.CharField(
+        max_length=50, 
+        blank=True, 
+        verbose_name="Documento",
+        help_text="Número do documento"
+    )
+    
+    natureza = models.CharField(
+        max_length=1, 
+        choices=NATUREZA_CHOICES,
+        verbose_name="Natureza",
+        help_text="D=Débito, C=Crédito, A=Ambas"
+    )
+    
+    valor = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2,
+        verbose_name="Valor",
+        help_text="Valor do movimento"
+    )
+    
+    historico = models.TextField(
+        verbose_name="Histórico",
+        help_text="Histórico completo da movimentação"
+    )
+    
+    # Campos opcionais
+    codigo_projeto = models.CharField(
+        max_length=20, 
+        blank=True, 
+        verbose_name="Código do Projeto"
+    )
+    
+    gerador = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Gerador",
+        help_text="Sistema ou processo que gerou o movimento"
+    )
+    
+    rateio = models.CharField(
+        max_length=1, 
+        default='N',
+        verbose_name="Rateio",
+        help_text="S=Sim, N=Não"
+    )
+    
+    # Campos de controle
+    data_importacao = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Data de Importação"
+    )
+    
+    arquivo_origem = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Arquivo de Origem",
+        help_text="Nome do arquivo Excel de origem"
+    )
+    
+    linha_origem = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Linha de Origem",
+        help_text="Linha no arquivo Excel de origem"
+    )
+    
+    # Campos calculados para otimização
+    periodo_mes_ano = models.CharField(
+        max_length=7,
+        verbose_name="Período",
+        help_text="Formato YYYY-MM para indexação rápida",
+        db_index=True
+    )
+    
+    valor_absoluto = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        verbose_name="Valor Absoluto",
+        help_text="Valor sem sinal para totalizações"
+    )
+    
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+        
+        # Validar período
+        if self.mes < 1 or self.mes > 12:
+            raise ValidationError({
+                'mes': 'Mês deve estar entre 1 e 12'
+            })
+        
+        if self.ano < 2000 or self.ano > 2100:
+            raise ValidationError({
+                'ano': 'Ano deve estar entre 2000 e 2100'
+            })
+        
+        # Validar natureza vs valor
+        if self.natureza == 'D' and self.valor > 0:
+            # Para débitos, normalmente valor é negativo, mas vamos permitir flexibilidade
+            pass
+        elif self.natureza == 'C' and self.valor < 0:
+            # Para créditos, normalmente valor é positivo, mas vamos permitir flexibilidade
+            pass
+    
+    def save(self, *args, **kwargs):
+        """Save com cálculos automáticos"""
+        
+        # Calcular período para indexação
+        self.periodo_mes_ano = f"{self.ano}-{self.mes:02d}"
+        
+        # Calcular valor absoluto
+        self.valor_absoluto = abs(self.valor) if self.valor else 0
+        
+        # Validar
+        self.full_clean()
+        
+        super().save(*args, **kwargs)
+    
+    # MÉTODOS DE CONSULTA E ANÁLISE
+    
+    @classmethod
+    def get_movimentos_periodo(cls, mes_inicio, ano_inicio, mes_fim=None, ano_fim=None):
+        """
+        Busca movimentos por período
+        """
+        if mes_fim is None:
+            mes_fim = mes_inicio
+        if ano_fim is None:
+            ano_fim = ano_inicio
+        
+        periodo_inicio = f"{ano_inicio}-{mes_inicio:02d}"
+        periodo_fim = f"{ano_fim}-{mes_fim:02d}"
+        
+        return cls.objects.filter(
+            periodo_mes_ano__gte=periodo_inicio,
+            periodo_mes_ano__lte=periodo_fim
+        ).select_related(
+            'unidade', 'centro_custo', 'conta_contabil', 'fornecedor'
+        ).order_by('data', 'id')
+    
+    @classmethod
+    def limpar_periodo(cls, mes_inicio, ano_inicio, mes_fim=None, ano_fim=None):
+        """
+        Remove movimentos de um período antes de nova importação
+        """
+        movimentos_periodo = cls.get_movimentos_periodo(mes_inicio, ano_inicio, mes_fim, ano_fim)
+        count = movimentos_periodo.count()
+        
+        if count > 0:
+            movimentos_periodo.delete()
+            logger.info(f'{count} movimentos removidos do período {ano_inicio}-{mes_inicio:02d} a {ano_fim or ano_inicio}-{(mes_fim or mes_inicio):02d}')
+        
+        return count
+    
+    @classmethod
+    def processar_linha_excel(cls, linha_dados, numero_linha, nome_arquivo):
+        """
+        Processa uma linha do Excel e cria o movimento
+        """
+        try:
+            # Extrair dados da linha
+            mes = int(linha_dados.get('Mês', 0))
+            ano = int(linha_dados.get('Ano', 0))
+            data = linha_dados.get('Data')
+            codigo_unidade = linha_dados.get('Cód. da unidade')
+            codigo_centro_custo = linha_dados.get('Cód. do centro de custo')
+            codigo_conta_contabil = linha_dados.get('Cód. da conta contábil')
+            documento = linha_dados.get('Documento', '')
+            natureza = linha_dados.get('Natureza (D/C/A)', 'D')
+            valor = linha_dados.get('Valor', 0)
+            historico = linha_dados.get('Histórico', '')
+            codigo_projeto = linha_dados.get('Cód. do projeto', '')
+            gerador = linha_dados.get('Gerador', '')
+            rateio = linha_dados.get('Rateio', 'N')
+            
+            # Buscar unidade
+            unidade = Unidade.buscar_unidade_para_movimento(codigo_unidade)
+            if not unidade:
+                raise ValueError(f'Unidade não encontrada para código: {codigo_unidade}')
+            
+            # Buscar centro de custo
+            try:
+                centro_custo = CentroCusto.objects.get(codigo=codigo_centro_custo, ativo=True)
+            except CentroCusto.DoesNotExist:
+                raise ValueError(f'Centro de custo não encontrado: {codigo_centro_custo}')
+            
+            # Buscar conta contábil via código externo
+            try:
+                conta_externa = ContaExterna.objects.get(codigo_externo=str(codigo_conta_contabil), ativa=True)
+                conta_contabil = conta_externa.conta_contabil
+            except ContaExterna.DoesNotExist:
+                raise ValueError(f'Conta contábil não encontrada para código externo: {codigo_conta_contabil}')
+            
+            # Extrair fornecedor do histórico
+            fornecedor = None
+            if historico:
+                fornecedor = Fornecedor.extrair_do_historico(historico, salvar=True)
+            
+            # Converter data se necessário
+            if isinstance(data, str):
+                from datetime import datetime
+                data = datetime.strptime(data, '%Y-%m-%d').date()
+            elif hasattr(data, 'date'):
+                data = data.date()
+            
+            # Criar movimento
+            movimento = cls.objects.create(
+                mes=mes,
+                ano=ano,
+                data=data,
+                unidade=unidade,
+                centro_custo=centro_custo,
+                conta_contabil=conta_contabil,
+                fornecedor=fornecedor,
+                documento=str(documento) if documento else '',
+                natureza=natureza,
+                valor=float(valor) if valor else 0,
+                historico=historico,
+                codigo_projeto=str(codigo_projeto) if codigo_projeto else '',
+                gerador=str(gerador) if gerador else '',
+                rateio=str(rateio) if rateio else 'N',
+                arquivo_origem=nome_arquivo,
+                linha_origem=numero_linha
+            )
+            
+            return movimento, None  # movimento, erro
+            
+        except Exception as e:
+            error_msg = f'Linha {numero_linha}: {str(e)}'
+            logger.error(f'Erro ao processar movimento: {error_msg}')
+            return None, error_msg
+    
+    # PROPRIEDADES CALCULADAS
+    
+    @property
+    def periodo_display(self):
+        """Período formatado para exibição"""
+        return f"{self.mes:02d}/{self.ano}"
+    
+    @property
+    def valor_formatado(self):
+        """Valor formatado em reais"""
+        return f"R$ {self.valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    
+    @property
+    def natureza_display(self):
+        """Natureza por extenso"""
+        return dict(self.NATUREZA_CHOICES).get(self.natureza, self.natureza)
+    
+    @property
+    def tem_fornecedor(self):
+        """Verifica se tem fornecedor associado"""
+        return self.fornecedor is not None
+    
+    @property
+    def descricao_resumida(self):
+        """Descrição resumida para listagens"""
+        return f"{self.unidade.codigo_display} | {self.centro_custo.codigo} | {self.conta_contabil.codigo} | {self.valor_formatado}"
+    
+    def __str__(self):
+        return f"{self.periodo_display} - {self.descricao_resumida}"
+    
+    class Meta:
+        db_table = 'movimentos'
+        verbose_name = 'Movimento'
+        verbose_name_plural = 'Movimentos'
+        ordering = ['-ano', '-mes', '-data', 'id']
+        indexes = [
+            models.Index(fields=['ano', 'mes']),
+            models.Index(fields=['periodo_mes_ano']),
+            models.Index(fields=['data']),
+            models.Index(fields=['unidade']),
+            models.Index(fields=['centro_custo']),
+            models.Index(fields=['conta_contabil']),
+            models.Index(fields=['fornecedor']),
+            models.Index(fields=['natureza']),
+            models.Index(fields=['valor']),
+            models.Index(fields=['ano', 'mes', 'unidade']),  # Índice composto para relatórios
+            models.Index(fields=['data_importacao']),
         ]

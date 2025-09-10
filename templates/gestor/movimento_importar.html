@@ -1,0 +1,663 @@
+<!-- gestor/templates/gestor/movimento_importar.html -->
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}Importar Movimentos | SynchroBI{% endblock %}
+
+{% block extra_css %}
+<style>
+.upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    background-color: #f8f9fa;
+}
+
+.upload-area.dragover {
+    border-color: #007bff;
+    background-color: #e7f3ff;
+}
+
+.upload-area:hover {
+    border-color: #6c757d;
+    background-color: #e9ecef;
+}
+
+.progress-container {
+    display: none;
+}
+
+.status-icon {
+    font-size: 1.2rem;
+    margin-right: 8px;
+}
+
+.preview-table {
+    font-size: 0.85rem;
+}
+
+.validation-badge {
+    font-size: 0.7rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      
+      <!-- Header -->
+      <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+          <h4 class="mb-0">
+            <i class="fas fa-upload me-2"></i>Importação de Movimentos
+          </h4>
+        </div>
+        <div class="card-body">
+
+          
+          <!-- Configuração do Período -->
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <h6>Período de Importação</h6>
+              <div class="row">
+                <div class="col-6">
+                  <label for="mes_inicio" class="form-label">Mês Início</label>
+                  <select id="mes_inicio" class="form-select">
+                    {% for i in "123456789012"|make_list %}
+                      <option value="{{ forloop.counter }}" {% if forloop.counter == mes_atual %}selected{% endif %}>
+                        {{ forloop.counter|date:"F" }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label for="ano_inicio" class="form-label">Ano Início</label>
+                  <input type="number" id="ano_inicio" class="form-control" 
+                         value="{{ ano_atual }}" min="2020" max="2030">
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <h6>Período Fim (opcional)</h6>
+              <div class="row">
+                <div class="col-6">
+                  <label for="mes_fim" class="form-label">Mês Fim</label>
+                  <select id="mes_fim" class="form-select">
+                    <option value="">Mesmo mês</option>
+                    {% for i in "123456789012"|make_list %}
+                      <option value="{{ forloop.counter }}">
+                        {{ forloop.counter|date:"F" }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label for="ano_fim" class="form-label">Ano Fim</label>
+                  <input type="number" id="ano_fim" class="form-control" 
+                         placeholder="Mesmo ano" min="2020" max="2030">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Upload Area -->
+          <div class="upload-area" id="uploadArea">
+            <div id="uploadContent">
+              <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+              <h5>Arraste o arquivo Excel aqui</h5>
+              <p class="text-muted mb-3">ou clique para selecionar</p>
+              <button type="button" class="btn btn-primary" id="selectFileBtn">
+                <i class="fas fa-folder-open me-1"></i> Selecionar Arquivo
+              </button>
+              <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+              <div class="mt-3">
+                <small class="text-muted">
+                  Formatos aceitos: .xlsx, .xls<br>
+                  Colunas obrigatórias: Mês, Ano, Data, Cód. da unidade, Cód. do centro de custo, 
+                  Cód. da conta contábil, Natureza (D/C/A), Valor, Histórico
+                </small>
+              </div>
+            </div>
+            
+            <!-- Progress -->
+            <div class="progress-container" id="progressContainer">
+              <div class="progress mb-3">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                     id="progressBar" style="width: 0%"></div>
+              </div>
+              <p id="progressText">Processando arquivo...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview dos Dados -->
+      <div class="card" id="previewCard" style="display: none;">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-eye me-2"></i>Preview dos Dados
+          </h5>
+          <div>
+            <button type="button" class="btn btn-success" id="confirmarImportacao" disabled>
+              <i class="fas fa-check me-1"></i> Confirmar Importação
+            </button>
+            <button type="button" class="btn btn-secondary" id="cancelarPreview">
+              <i class="fas fa-times me-1"></i> Cancelar
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          
+          <!-- Estatísticas do Preview -->
+          <div class="row mb-4" id="previewStats">
+            <!-- Será preenchido via JavaScript -->
+          </div>
+          
+          <!-- Alertas -->
+          <div id="previewAlerts">
+            <!-- Será preenchido via JavaScript -->
+          </div>
+          
+          <!-- Tabela de Preview -->
+          <div class="table-responsive">
+            <table class="table table-sm preview-table" id="previewTable">
+              <thead class="table-light">
+                <tr>
+                  <th>Linha</th>
+                  <th>Mês/Ano</th>
+                  <th>Unidade</th>
+                  <th>Centro</th>
+                  <th>Conta</th>
+                  <th>Fornecedor</th>
+                  <th>Valor</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Será preenchido via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resultado da Importação -->
+      <div class="card" id="resultadoCard" style="display: none;">
+        <div class="card-header bg-success text-white">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-check-circle me-2"></i>Importação Concluída
+          </h5>
+        </div>
+        <div class="card-body">
+          <div id="resultadoContent">
+            <!-- Será preenchido via JavaScript -->
+          </div>
+          <div class="mt-4">
+            <a href="{% url 'gestor:movimento_list' %}" class="btn btn-primary">
+              <i class="fas fa-list me-1"></i> Ver Movimentos Importados
+            </a>
+            <button type="button" class="btn btn-secondary" id="novaImportacao">
+              <i class="fas fa-plus me-1"></i> Nova Importação
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    let selectedFile = null;
+    let previewData = null;
+
+    // Elementos
+    const $uploadArea = $('#uploadArea');
+    const $fileInput = $('#fileInput');
+    const $selectFileBtn = $('#selectFileBtn');
+    const $progressContainer = $('#progressContainer');
+    const $progressBar = $('#progressBar');
+    const $progressText = $('#progressText');
+    const $previewCard = $('#previewCard');
+    const $resultadoCard = $('#resultadoCard');
+
+    // Upload área - clique para selecionar
+    $uploadArea.on('click', function(e) {
+        if (e.target === this || e.target.id === 'uploadContent') {
+            $fileInput.click();
+        }
+    });
+
+    $selectFileBtn.on('click', function() {
+        $fileInput.click();
+    });
+
+    // Drag and drop
+    $uploadArea.on('dragover', function(e) {
+        e.preventDefault();
+        $(this).addClass('dragover');
+    });
+
+    $uploadArea.on('dragleave', function(e) {
+        e.preventDefault();
+        $(this).removeClass('dragover');
+    });
+
+    $uploadArea.on('drop', function(e) {
+        e.preventDefault();
+        $(this).removeClass('dragover');
+        
+        const files = e.originalEvent.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileSelection(files[0]);
+        }
+    });
+
+    // Seleção de arquivo
+    $fileInput.on('change', function() {
+        if (this.files.length > 0) {
+            handleFileSelection(this.files[0]);
+        }
+    });
+
+    // Processar arquivo selecionado
+    function handleFileSelection(file) {
+        // Validar tipo
+        if (!file.name.match(/\.(xlsx|xls)$/i)) {
+            alert('Por favor, selecione um arquivo Excel (.xlsx ou .xls)');
+            return;
+        }
+
+        selectedFile = file;
+        
+        // Mostrar progresso
+        showProgress('Analisando arquivo...');
+        
+        // Fazer preview
+        previewArquivo();
+    }
+
+    // Preview do arquivo
+    function previewArquivo() {
+        const formData = new FormData();
+        formData.append('arquivo', selectedFile);
+
+        $.ajax({
+            url: '{% url "gestor:api_preview_movimentos_excel" %}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(response) {
+                hideProgress();
+                
+                if (response.success) {
+                    previewData = response;
+                    mostrarPreview(response);
+                } else {
+                    alert('Erro: ' + response.error);
+                }
+            },
+            error: function() {
+                hideProgress();
+                alert('Erro ao processar arquivo');
+            }
+        });
+    }
+
+    // Mostrar preview
+    function mostrarPreview(data) {
+        // Estatísticas
+        const statsHtml = `
+            <div class="col-md-2">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-2 text-center">
+                        <h5 class="mb-1">${data.stats.total_linhas_arquivo}</h5>
+                        <small class="text-muted">Total de Linhas</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-2 text-center">
+                        <h5 class="mb-1">${data.stats.linhas_preview}</h5>
+                        <small class="text-muted">Preview</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-2 text-center">
+                        <h5 class="mb-1 ${data.stats.total_erros > 0 ? 'text-danger' : 'text-success'}">${data.stats.total_erros}</h5>
+                        <small class="text-muted">Erros</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-2 text-center">
+                        <h5 class="mb-1 text-info">${data.stats.fornecedores_novos}</h5>
+                        <small class="text-muted">Fornecedores Novos</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-2 text-center">
+                        <h5 class="mb-1 ${data.stats.pode_importar ? 'text-success' : 'text-danger'}">
+                            <i class="fas fa-${data.stats.pode_importar ? 'check' : 'times'}"></i>
+                        </h5>
+                        <small class="text-muted">${data.stats.pode_importar ? 'Pronto' : 'Bloqueado'}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#previewStats').html(statsHtml);
+
+        // Alertas
+        let alertsHtml = '';
+        if (data.stats.total_erros > 0) {
+            alertsHtml += `
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Erros Encontrados</h6>
+                    <p>Foram encontrados ${data.stats.total_erros} erro(s) que impedem a importação:</p>
+                    <ul class="mb-0">
+                        ${data.erros_encontrados.map(erro => `<li>${erro}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        if (data.stats.fornecedores_novos > 0) {
+            alertsHtml += `
+                <div class="alert alert-info">
+                    <h6 class="alert-heading"><i class="fas fa-plus-circle me-2"></i>Novos Fornecedores</h6>
+                    <p>${data.stats.fornecedores_novos} fornecedor(es) será(ão) criado(s) automaticamente:</p>
+                    <ul class="mb-0">
+                        ${data.fornecedores_novos.map(forn => `<li>${forn}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        if (data.stats.pode_importar) {
+            alertsHtml += `
+                <div class="alert alert-success">
+                    <h6 class="alert-heading"><i class="fas fa-check-circle me-2"></i>Arquivo Válido</h6>
+                    <p class="mb-0">O arquivo está pronto para importação. Revise os dados abaixo e confirme.</p>
+                </div>
+            `;
+        }
+
+        $('#previewAlerts').html(alertsHtml);
+
+        // Tabela de preview
+        let tableHtml = '';
+        data.preview_results.forEach(function(linha) {
+            const hasErrors = linha.errors.length > 0;
+            const hasWarnings = linha.warnings.length > 0;
+            
+            let statusBadges = '';
+            if (hasErrors) {
+                statusBadges += '<span class="badge bg-danger validation-badge me-1">Erro</span>';
+            }
+            if (hasWarnings) {
+                statusBadges += '<span class="badge bg-warning validation-badge me-1">Aviso</span>';
+            }
+            if (!hasErrors && !hasWarnings) {
+                statusBadges += '<span class="badge bg-success validation-badge">OK</span>';
+            }
+
+            // Badges de validação
+            let validationInfo = '';
+            if (linha.validacoes.unidade) {
+                validationInfo += linha.validacoes.unidade.encontrada ? 
+                    '<span class="badge bg-success validation-badge me-1">Un ✓</span>' : 
+                    '<span class="badge bg-danger validation-badge me-1">Un ✗</span>';
+            }
+            if (linha.validacoes.centro_custo) {
+                validationInfo += linha.validacoes.centro_custo.encontrado ? 
+                    '<span class="badge bg-success validation-badge me-1">CC ✓</span>' : 
+                    '<span class="badge bg-danger validation-badge me-1">CC ✗</span>';
+            }
+            if (linha.validacoes.conta_contabil) {
+                validationInfo += linha.validacoes.conta_contabil.encontrada ? 
+                    '<span class="badge bg-success validation-badge me-1">Ct ✓</span>' : 
+                    '<span class="badge bg-danger validation-badge me-1">Ct ✗</span>';
+            }
+
+            tableHtml += `
+                <tr class="${hasErrors ? 'table-danger' : hasWarnings ? 'table-warning' : ''}">
+                    <td>${linha.linha}</td>
+                    <td>${linha.dados.mes}/${linha.dados.ano}</td>
+                    <td>
+                        <code class="small">${linha.dados.codigo_unidade}</code>
+                        ${linha.validacoes.unidade && linha.validacoes.unidade.detalhes ? 
+                            `<br><small class="text-muted">${linha.validacoes.unidade.detalhes}</small>` : ''}
+                    </td>
+                    <td>
+                        <code class="small">${linha.dados.codigo_centro}</code>
+                        ${linha.validacoes.centro_custo && linha.validacoes.centro_custo.detalhes ? 
+                            `<br><small class="text-muted">${linha.validacoes.centro_custo.detalhes}</small>` : ''}
+                    </td>
+                    <td>
+                        <code class="small">${linha.dados.codigo_conta}</code>
+                        ${linha.validacoes.conta_contabil && linha.validacoes.conta_contabil.detalhes ? 
+                            `<br><small class="text-muted">${linha.validacoes.conta_contabil.detalhes}</small>` : ''}
+                    </td>
+                    <td>
+                        ${linha.validacoes.fornecedor && linha.validacoes.fornecedor.detalhes ? 
+                            `<small>${linha.validacoes.fornecedor.detalhes}</small>` : 
+                            '<span class="text-muted">-</span>'}
+                        ${linha.validacoes.fornecedor && linha.validacoes.fornecedor.sera_criado ? 
+                            '<br><span class="badge bg-info validation-badge">Novo</span>' : ''}
+                    </td>
+                    <td class="text-end">
+                        <span class="badge bg-${linha.dados.natureza === 'D' ? 'danger' : 'success'} validation-badge me-1">
+                            ${linha.dados.natureza}
+                        </span>
+                        <br><small>R$ ${parseFloat(linha.dados.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</small>
+                    </td>
+                    <td>
+                        ${statusBadges}
+                        <br>${validationInfo}
+                    </td>
+                </tr>
+            `;
+        });
+
+        $('#previewTable tbody').html(tableHtml);
+
+        // Habilitar/desabilitar botão de importação
+        $('#confirmarImportacao').prop('disabled', !data.stats.pode_importar);
+
+        // Mostrar card de preview
+        $previewCard.show();
+        $('html, body').animate({
+            scrollTop: $previewCard.offset().top - 100
+        }, 500);
+    }
+
+    // Confirmar importação
+    $('#confirmarImportacao').on('click', function() {
+        if (!previewData || !previewData.stats.pode_importar) {
+            alert('Não é possível importar devido a erros no arquivo');
+            return;
+        }
+
+        if (!confirm('Confirma a importação dos movimentos? Esta ação irá remover movimentos existentes no período selecionado.')) {
+            return;
+        }
+
+        realizarImportacao();
+    });
+
+    // Realizar importação
+    function realizarImportacao() {
+        showProgress('Importando movimentos...');
+
+        const formData = new FormData();
+        formData.append('arquivo', selectedFile);
+        formData.append('mes_inicio', $('#mes_inicio').val());
+        formData.append('ano_inicio', $('#ano_inicio').val());
+        formData.append('mes_fim', $('#mes_fim').val() || $('#mes_inicio').val());
+        formData.append('ano_fim', $('#ano_fim').val() || $('#ano_inicio').val());
+
+        $.ajax({
+            url: '{% url "gestor:api_importar_movimentos_excel" %}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(response) {
+                hideProgress();
+                
+                if (response.success) {
+                    mostrarResultado(response.resultado, response.erros);
+                } else {
+                    alert('Erro na importação: ' + response.error);
+                }
+            },
+            error: function() {
+                hideProgress();
+                alert('Erro na comunicação com o servidor');
+            }
+        });
+    }
+
+    // Mostrar resultado
+    function mostrarResultado(resultado, erros) {
+        let resultHtml = `
+            <div class="row text-center mb-4">
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-3">
+                            <h4 class="text-danger mb-1">${resultado.movimentos_removidos}</h4>
+                            <small class="text-muted">Movimentos Removidos</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-3">
+                            <h4 class="text-success mb-1">${resultado.movimentos_criados}</h4>
+                            <small class="text-muted">Movimentos Criados</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-3">
+                            <h4 class="text-info mb-1">${resultado.fornecedores_criados}</h4>
+                            <small class="text-muted">Fornecedores Criados</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-3">
+                            <h4 class="text-warning mb-1">${resultado.total_erros}</h4>
+                            <small class="text-muted">Erros</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alert alert-success">
+                <h6 class="alert-heading"><i class="fas fa-check-circle me-2"></i>Importação Concluída</h6>
+                <ul class="mb-0">
+                    <li><strong>Período:</strong> ${resultado.periodo}</li>
+                    <li><strong>Arquivo:</strong> ${resultado.nome_arquivo}</li>
+                    <li><strong>Movimentos processados:</strong> ${resultado.movimentos_criados}</li>
+                    <li><strong>Fornecedores criados:</strong> ${resultado.fornecedores_criados}</li>
+                </ul>
+            </div>
+        `;
+
+        if (erros && erros.length > 0) {
+            resultHtml += `
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Erros Durante a Importação</h6>
+                    <p>Alguns registros apresentaram problemas:</p>
+                    <ul class="mb-0">
+                        ${erros.map(erro => `<li>${erro}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        $('#resultadoContent').html(resultHtml);
+        $previewCard.hide();
+        $resultadoCard.show();
+        
+        $('html, body').animate({
+            scrollTop: $resultadoCard.offset().top - 100
+        }, 500);
+    }
+
+    // Cancelar preview
+    $('#cancelarPreview').on('click', function() {
+        resetarInterface();
+    });
+
+    // Nova importação
+    $('#novaImportacao').on('click', function() {
+        resetarInterface();
+    });
+
+    // Resetar interface
+    function resetarInterface() {
+        selectedFile = null;
+        previewData = null;
+        $fileInput.val('');
+        $previewCard.hide();
+        $resultadoCard.hide();
+        hideProgress();
+    }
+
+    // Funções de progresso
+    function showProgress(text) {
+        $('#uploadContent').hide();
+        $progressContainer.show();
+        $progressBar.css('width', '0%');
+        $progressText.text(text);
+        
+        // Animação de progresso indeterminado
+        let progress = 0;
+        const interval = setInterval(function() {
+            progress += Math.random() * 15;
+            if (progress > 90) progress = 90;
+            $progressBar.css('width', progress + '%');
+        }, 200);
+        
+        $progressContainer.data('interval', interval);
+    }
+
+    function hideProgress() {
+        const interval = $progressContainer.data('interval');
+        if (interval) {
+            clearInterval(interval);
+        }
+        
+        $progressBar.css('width', '100%');
+        setTimeout(function() {
+            $progressContainer.hide();
+            $('#uploadContent').show();
+        }, 500);
+    }
+});
+</script>
+{% endblock %}

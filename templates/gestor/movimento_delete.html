@@ -1,0 +1,186 @@
+<!-- gestor/templates/gestor/movimento_delete.html -->
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}Excluir Movimento | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="card shadow">
+    <div class="card-header bg-danger text-white">
+      <h4 class="mb-0">
+        <i class="fas fa-exclamation-triangle me-2"></i>Confirmar Exclusão de Movimento
+      </h4>
+    </div>
+    <div class="card-body">
+      
+      <div class="alert alert-warning">
+        <h5 class="alert-heading">
+          <i class="fas fa-exclamation-triangle me-2"></i>Atenção
+        </h5>
+        <p>
+          Você está prestes a excluir permanentemente o movimento:
+        </p>
+        
+        <div class="bg-light p-4 rounded">
+          <div class="row">
+            <div class="col-md-6">
+              <h6 class="text-primary mb-3">Dados Temporais</h6>
+              <ul class="list-unstyled">
+                <li><strong>Data:</strong> {{ movimento.data|date:"d/m/Y" }}</li>
+                <li><strong>Período:</strong> {{ movimento.periodo_display }}</li>
+                <li><strong>Mês/Ano:</strong> {{ movimento.mes }}/{{ movimento.ano }}</li>
+              </ul>
+              
+              <h6 class="text-primary mb-3 mt-4">Valores</h6>
+              <ul class="list-unstyled">
+                <li><strong>Natureza:</strong> 
+                  <span class="badge bg-{% if movimento.natureza == 'D' %}danger{% elif movimento.natureza == 'C' %}success{% else %}secondary{% endif %}">
+                    {{ movimento.get_natureza_display }}
+                  </span>
+                </li>
+                <li><strong>Valor:</strong> 
+                  <span class="fs-5 fw-bold {% if movimento.valor < 0 %}text-danger{% else %}text-success{% endif %}">
+                    {{ movimento.valor_formatado }}
+                  </span>
+                </li>
+                {% if movimento.documento %}
+                <li><strong>Documento:</strong> {{ movimento.documento }}</li>
+                {% endif %}
+                <li><strong>Rateio:</strong> {% if movimento.rateio == 'S' %}Sim{% else %}Não{% endif %}</li>
+              </ul>
+            </div>
+            
+            <div class="col-md-6">
+              <h6 class="text-primary mb-3">Estrutura</h6>
+              <ul class="list-unstyled">
+                <li><strong>Unidade:</strong><br>
+                  <code class="small">{{ movimento.unidade.codigo_display }}</code><br>
+                  <small class="text-muted">{{ movimento.unidade.nome }}</small>
+                </li>
+                <li class="mt-2"><strong>Centro de Custo:</strong><br>
+                  <code class="small">{{ movimento.centro_custo.codigo }}</code><br>
+                  <small class="text-muted">{{ movimento.centro_custo.nome }}</small>
+                </li>
+                <li class="mt-2"><strong>Conta Contábil:</strong><br>
+                  <code class="small">{{ movimento.conta_contabil.codigo }}</code><br>
+                  <small class="text-muted">{{ movimento.conta_contabil.nome }}</small>
+                </li>
+                {% if movimento.fornecedor %}
+                <li class="mt-2"><strong>Fornecedor:</strong><br>
+                  <code class="small">{{ movimento.fornecedor.codigo }}</code><br>
+                  <small class="text-muted">{{ movimento.fornecedor.razao_social }}</small>
+                  {% if movimento.fornecedor.criado_automaticamente %}
+                    <span class="badge bg-info ms-1" style="font-size: 0.6rem;">Auto</span>
+                  {% endif %}
+                </li>
+                {% endif %}
+              </ul>
+            </div>
+          </div>
+          
+          <!-- Histórico -->
+          <div class="mt-4">
+            <h6 class="text-primary mb-2">Histórico</h6>
+            <div class="bg-white p-3 rounded border">
+              <small class="text-muted">{{ movimento.historico }}</small>
+            </div>
+          </div>
+          
+          <!-- Informações Adicionais -->
+          {% if movimento.codigo_projeto or movimento.gerador %}
+          <div class="mt-4">
+            <h6 class="text-primary mb-2">Informações Adicionais</h6>
+            <ul class="list-unstyled">
+              {% if movimento.codigo_projeto %}
+              <li><strong>Código Projeto:</strong> {{ movimento.codigo_projeto }}</li>
+              {% endif %}
+              {% if movimento.gerador %}
+              <li><strong>Gerador:</strong> {{ movimento.gerador }}</li>
+              {% endif %}
+            </ul>
+          </div>
+          {% endif %}
+          
+          <!-- Origem do Movimento -->
+          <div class="mt-4">
+            <h6 class="text-primary mb-2">Origem</h6>
+            {% if movimento.arquivo_origem %}
+              <div class="alert alert-info py-2">
+                <i class="fas fa-file-excel me-2"></i>
+                <strong>Importado via Excel:</strong> {{ movimento.arquivo_origem }}
+                {% if movimento.linha_origem %}
+                  (linha {{ movimento.linha_origem }})
+                {% endif %}
+                <br>
+                <small class="text-muted">Data de importação: {{ movimento.data_importacao|date:"d/m/Y H:i" }}</small>
+              </div>
+            {% else %}
+              <div class="alert alert-secondary py-2">
+                <i class="fas fa-user me-2"></i>
+                <strong>Criado manualmente</strong>
+                <br>
+                <small class="text-muted">Data de criação: {{ movimento.data_importacao|date:"d/m/Y H:i" }}</small>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <hr>
+        <p class="mb-0 text-danger">
+          <strong>Esta ação não pode ser desfeita!</strong>
+        </p>
+      </div>
+      
+      <!-- Formulário de confirmação -->
+      <form method="post" class="mt-4">
+        {% csrf_token %}
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="confirmDelete" required>
+          <label class="form-check-label" for="confirmDelete">
+            Confirmo que desejo excluir permanentemente este movimento
+          </label>
+        </div>
+        
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'gestor:movimento_list' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-times me-1"></i> Cancelar
+          </a>
+          <div>
+            <a href="{% url 'gestor:movimento_update' movimento.pk %}" class="btn btn-secondary me-2">
+              <i class="fas fa-edit me-1"></i> Editar ao Invés de Excluir
+            </a>
+            <button type="submit" class="btn btn-danger" id="btnExcluir" disabled>
+              <i class="fas fa-trash me-1"></i> Confirmar Exclusão
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxConfirm = document.getElementById('confirmDelete');
+    const btnExcluir = document.getElementById('btnExcluir');
+    
+    if (checkboxConfirm && btnExcluir) {
+        checkboxConfirm.addEventListener('change', function() {
+            btnExcluir.disabled = !this.checked;
+        });
+        
+        // Confirmação final antes do envio
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const valorMovimento = '{{ movimento.valor_formatado|escapejs }}';
+            const periodoMovimento = '{{ movimento.periodo_display|escapejs }}';
+            const mensagem = `Tem CERTEZA ABSOLUTA que deseja excluir o movimento?\n\nPeríodo: ${periodoMovimento}\nValor: ${valorMovimento}\n\nEsta ação é IRREVERSÍVEL!`;
+            
+            if (!confirm(mensagem)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -16,34 +16,53 @@
 <!-- Menu de Cadastros -->
 <li class="nav-item dropdown">
   <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-    </i> Cadastros
+    Cadastros
   </a>
   <ul class="dropdown-menu dropdown-menu-dark">
     <li><a class="dropdown-item" href="{% url 'gestor:empresa_list' %}">
-        </i> Empresas
+        Empresas
     </a></li>
     <li><a class="dropdown-item" href="{% url 'gestor:unidade_tree' %}">
-        </i> Unidades
+        Unidades
     </a></li>
-
     <li><a class="dropdown-item" href="{% url 'gestor:centrocusto_tree' %}">
-        </i> Centros de Custo
+        Centros de Custo
     </a></li>
     <li><a class="dropdown-item" href="{% url 'gestor:contacontabil_tree' %}">
-        </i> Contas Contábeis
+        Contas Contábeis
     </a></li>
-        <li><a class="dropdown-item" href="{% url 'gestor:contacontabil_list' %}">
-        </i> Fornecedores
-    </a></li>
+
 
     <li><hr class="dropdown-divider"></li>
 
-    <li><a class="dropdown-item" href="{% url 'gestor:usuario_list' %}">
-        </i> Usuários
+    <li><a class="dropdown-item" href="{% url 'gestor:fornecedor_list' %}">
+        Fornecedores
     </a></li>
 
+    <li><a class="dropdown-item" href="{% url 'gestor:usuario_list' %}">
+        Usuários
+    </a></li>
     <li><a class="dropdown-item" >
-        </i> Parâmetros
+        Parâmetros
+    </a></li>
+  </ul>
+</li>
+
+<!-- Menu de Movimentos -->
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Movimentos
+  </a>
+  <ul class="dropdown-menu dropdown-menu-dark">
+    <li><a class="dropdown-item" href="{% url 'gestor:movimento_list' %}">
+        Movimentos
+    </a></li>
+    <li><a class="dropdown-item" href="{% url 'gestor:movimento_importar' %}">
+        Importar Movimentos
+    </a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="#">
+        Relatório Gerencial
     </a></li>
   </ul>
 </li>

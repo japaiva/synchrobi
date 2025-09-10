@@ -312,3 +312,97 @@ def api_validar_codigo(request):
     info['nivel'] = codigo.count('.') + 1
     
     return JsonResponse(info)
+# ===== MANTER EM gestor/views/unidade.py =====
+
+@login_required
+def api_buscar_unidade_multiplos_criterios(request):
+    """
+    API para busca de unidades por múltiplos critérios incluindo código All Strategy
+    """
+    search_term = request.GET.get('q', '').strip()
+    limit = int(request.GET.get('limit', 20))
+    apenas_ativas = request.GET.get('ativas_only', 'true').lower() == 'true'
+    
+    if not search_term or len(search_term) < 1:
+        return JsonResponse({'success': False, 'message': 'Termo de busca é obrigatório'})
+    
+    try:
+        from django.db.models import Q
+        
+        queryset = Unidade.objects.select_related('empresa')
+        if apenas_ativas:
+            queryset = queryset.filter(ativa=True)
+        
+        # Busca por código, All Strategy, nome e descrição
+        filtros = (
+            Q(codigo__icontains=search_term) |
+            Q(codigo_allstrategy__icontains=search_term) |
+            Q(nome__icontains=search_term) |
+            Q(descricao__icontains=search_term)
+        )
+        
+        unidades = queryset.filter(filtros).order_by('nivel', 'codigo')[:limit]
+        
+        results = []
+        for unidade in unidades:
+            caminho = unidade.get_caminho_hierarquico()
+            caminho_texto = ' > '.join([f"{u.codigo_display}" for u in caminho])
+            
+            results.append({
+                'id': unidade.id,
+                'codigo': unidade.codigo,
+                'codigo_allstrategy': unidade.codigo_allstrategy,
+                'codigo_display': unidade.codigo_display,
+                'nome': unidade.nome,
+                'tipo_display': unidade.get_tipo_display(),
+                'nivel': unidade.nivel,
+                'empresa_sigla': unidade.empresa.sigla if unidade.empresa else '',
+                'caminho_hierarquico': caminho_texto,
+                'tem_filhos': unidade.tem_filhos
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'results': results,
+            'total_found': len(results),
+            'has_more': len(results) == limit
+        })
+        
+    except Exception as e:
+        logger.error(f'Erro na busca de unidades: {str(e)}')
+        return JsonResponse({'success': False, 'error': 'Erro na busca'})
+
+@login_required
+def api_buscar_unidade_para_movimento(request):
+    """
+    API específica para buscar unidade durante importação - prioriza All Strategy
+    """
+    codigo_unidade = request.GET.get('codigo', '').strip()
+    
+    if not codigo_unidade:
+        return JsonResponse({'success': False, 'error': 'Código da unidade é obrigatório'})
+    
+    try:
+        unidade = Unidade.buscar_unidade_para_movimento(codigo_unidade)
+        
+        if unidade:
+            return JsonResponse({
+                'success': True,
+                'unidade': {
+                    'id': unidade.id,
+                    'codigo': unidade.codigo,
+                    'codigo_allstrategy': unidade.codigo_allstrategy,
+                    'nome': unidade.nome,
+                    'tipo_display': unidade.get_tipo_display()
+                },
+                'encontrado_por': 'codigo_allstrategy' if unidade.codigo_allstrategy == codigo_unidade else 'codigo_normal'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': f'Unidade não encontrada para código: {codigo_unidade}'
+            })
+            
+    except Exception as e:
+        logger.error(f'Erro ao buscar unidade para movimento: {str(e)}')
+        return JsonResponse({'success': False, 'error': 'Erro interno'})

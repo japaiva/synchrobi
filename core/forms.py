@@ -1,12 +1,14 @@
-# core/forms.py - Forms simplificados para hierarquia dinâmica
+# core/forms.py 
 
 from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
-from core.models import Usuario, Unidade, CentroCusto, ContaContabil, ParametroSistema, Empresa,  ContaExterna
+from core.models import (
+    Usuario, Unidade, CentroCusto, ContaContabil, ParametroSistema, 
+    Empresa,  ContaExterna, Fornecedor, Movimento
+)
 
 # ===== FORMULÁRIO UNIDADE SIMPLIFICADO =====
-
 
 class UnidadeForm(forms.ModelForm):
     """Formulário para criar/editar unidades organizacionais com hierarquia dinâmica"""
@@ -1061,3 +1063,396 @@ class ContaExternaBulkForm(forms.Form):
         
         else:
             raise forms.ValidationError("Ação inválida selecionada.")
+        
+# core/forms.py - Adicionar ao final do arquivo existente
+
+class FornecedorForm(forms.ModelForm):
+    """Formulário para criar/editar fornecedores"""
+    
+    class Meta:
+        model = Fornecedor
+        fields = [
+            'codigo', 'razao_social', 'nome_fantasia', 'cnpj_cpf',
+            'telefone', 'email', 'endereco', 'ativo'
+        ]
+        
+        widgets = {
+            'codigo': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Código do fornecedor'
+            }),
+            'razao_social': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Razão social do fornecedor'
+            }),
+            'nome_fantasia': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nome fantasia (opcional)'
+            }),
+            'cnpj_cpf': forms.TextInput(attrs={
+                'class': 'form-control cnpj-cpf-mask',
+                'placeholder': 'CNPJ ou CPF'
+            }),
+            'telefone': forms.TextInput(attrs={
+                'class': 'form-control telefone-mask',
+                'placeholder': '(00) 00000-0000'
+            }),
+            'email': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'email@exemplo.com'
+            }),
+            'endereco': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Endereço completo do fornecedor'
+            }),
+            'ativo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Help texts
+        self.fields['codigo'].help_text = "Código único do fornecedor"
+        self.fields['razao_social'].help_text = "Nome oficial da empresa ou pessoa"
+        self.fields['cnpj_cpf'].help_text = "CNPJ para empresas ou CPF para pessoas físicas"
+        
+        # Campos obrigatórios
+        self.fields['codigo'].required = True
+        self.fields['razao_social'].required = True
+        
+        # Se estiver editando, código não pode ser alterado
+        if self.instance.pk:
+            self.fields['codigo'].widget.attrs['readonly'] = True
+            self.fields['codigo'].help_text = "Código não pode ser alterado após criação"
+            
+            # Mostrar informação sobre criação automática
+            if self.instance.criado_automaticamente:
+                self.fields['codigo'].help_text += " (Criado automaticamente do histórico)"
+    
+    def clean_codigo(self):
+        """Validação do código do fornecedor"""
+        codigo = self.cleaned_data.get('codigo', '').strip()
+        
+        if not codigo:
+            raise forms.ValidationError("Código é obrigatório.")
+        
+        # Verificar duplicação
+        queryset = Fornecedor.objects.filter(codigo=codigo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Já existe um fornecedor com este código.")
+        
+        return codigo
+    
+    def clean_razao_social(self):
+        """Validação da razão social"""
+        razao_social = self.cleaned_data.get('razao_social', '').strip()
+        
+        if not razao_social:
+            raise forms.ValidationError("Razão social é obrigatória.")
+        
+        if len(razao_social) < 3:
+            raise forms.ValidationError("Razão social deve ter pelo menos 3 caracteres.")
+        
+        return razao_social.upper()
+    
+    def clean_cnpj_cpf(self):
+        """Validação do CNPJ/CPF"""
+        cnpj_cpf = self.cleaned_data.get('cnpj_cpf', '').strip()
+        
+        if not cnpj_cpf:
+            return ''  # Campo opcional
+        
+        # Remover formatação
+        import re
+        cnpj_cpf_limpo = re.sub(r'[^\d]', '', cnpj_cpf)
+        
+        if len(cnpj_cpf_limpo) not in [11, 14]:
+            raise forms.ValidationError("CNPJ deve ter 14 dígitos ou CPF deve ter 11 dígitos.")
+        
+        # Verificar duplicação (apenas se não vazio)
+        queryset = Fornecedor.objects.filter(cnpj_cpf__icontains=cnpj_cpf_limpo)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            fornecedor_existente = queryset.first()
+            raise forms.ValidationError(
+                f'CNPJ/CPF já cadastrado para: {fornecedor_existente.codigo} - {fornecedor_existente.razao_social}'
+            )
+        
+        return cnpj_cpf
+    
+    def clean_email(self):
+        """Validação do email"""
+        email = self.cleaned_data.get('email', '').strip().lower()
+        
+        if not email:
+            return ''  # Campo opcional
+        
+        # Verificar duplicação (apenas se não vazio)
+        queryset = Fornecedor.objects.filter(email=email)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        
+        if queryset.exists():
+            raise forms.ValidationError("Email já cadastrado para outro fornecedor.")
+        
+        return email
+    
+    def save(self, commit=True):
+        """Save customizado"""
+        fornecedor = super().save(commit=False)
+        
+        # Limpar campos
+        if fornecedor.codigo:
+            fornecedor.codigo = fornecedor.codigo.strip()
+        if fornecedor.razao_social:
+            fornecedor.razao_social = fornecedor.razao_social.strip().upper()
+        if fornecedor.nome_fantasia:
+            fornecedor.nome_fantasia = fornecedor.nome_fantasia.strip()
+        
+        if commit:
+            fornecedor.save()
+            
+            # Log da operação
+            import logging
+            logger = logging.getLogger('synchrobi')
+            action = "atualizado" if self.instance.pk else "criado"
+            logger.info(f'Fornecedor {action}: {fornecedor.codigo} - {fornecedor.razao_social}')
+        
+        return fornecedor
+
+class MovimentoForm(forms.ModelForm):
+    """Formulário para criar/editar movimentos manualmente (caso necessário)"""
+    
+    class Meta:
+        model = Movimento
+        fields = [
+            'mes', 'ano', 'data', 'unidade', 'centro_custo', 'conta_contabil',
+            'fornecedor', 'documento', 'natureza', 'valor', 'historico',
+            'codigo_projeto', 'gerador', 'rateio'
+        ]
+        
+        widgets = {
+            'mes': forms.Select(attrs={'class': 'form-select'}),
+            'ano': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 2020,
+                'max': 2030
+            }),
+            'data': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'unidade': forms.Select(attrs={'class': 'form-select'}),
+            'centro_custo': forms.Select(attrs={'class': 'form-select'}),
+            'conta_contabil': forms.Select(attrs={'class': 'form-select'}),
+            'fornecedor': forms.Select(attrs={'class': 'form-select'}),
+            'documento': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Número do documento'
+            }),
+            'natureza': forms.Select(attrs={'class': 'form-select'}),
+            'valor': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'placeholder': '0.00'
+            }),
+            'historico': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Histórico da movimentação'
+            }),
+            'codigo_projeto': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Código do projeto (opcional)'
+            }),
+            'gerador': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Sistema gerador (opcional)'
+            }),
+            'rateio': forms.Select(attrs={'class': 'form-select'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Configurar choices do mês
+        self.fields['mes'].choices = [
+            ('', '--- Selecione ---'),
+            (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
+            (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
+            (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro')
+        ]
+        
+        # Configurar choices do rateio
+        self.fields['rateio'].choices = [
+            ('N', 'Não'),
+            ('S', 'Sim'),
+        ]
+        
+        # Filtrar querysets para apenas registros ativos
+        self.fields['unidade'].queryset = Unidade.objects.filter(ativa=True).order_by('codigo')
+        self.fields['centro_custo'].queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
+        self.fields['conta_contabil'].queryset = ContaContabil.objects.filter(ativa=True).order_by('codigo')
+        self.fields['fornecedor'].queryset = Fornecedor.objects.filter(ativo=True).order_by('razao_social')
+        
+        # Campos obrigatórios
+        self.fields['mes'].required = True
+        self.fields['ano'].required = True
+        self.fields['data'].required = True
+        self.fields['unidade'].required = True
+        self.fields['centro_custo'].required = True
+        self.fields['conta_contabil'].required = True
+        self.fields['natureza'].required = True
+        self.fields['valor'].required = True
+        self.fields['historico'].required = True
+        
+        # Help texts
+        self.fields['natureza'].help_text = "D=Débito, C=Crédito, A=Ambas"
+        self.fields['valor'].help_text = "Valor do movimento (use valores negativos para débitos)"
+        self.fields['fornecedor'].help_text = "Fornecedor (opcional)"
+        
+        # Empty labels para campos obrigatórios
+        self.fields['unidade'].empty_label = "--- Selecione a Unidade ---"
+        self.fields['centro_custo'].empty_label = "--- Selecione o Centro de Custo ---"
+        self.fields['conta_contabil'].empty_label = "--- Selecione a Conta Contábil ---"
+        self.fields['fornecedor'].empty_label = "--- Selecione o Fornecedor (opcional) ---"
+    
+    def clean_data(self):
+        """Validação da data"""
+        data = self.cleaned_data.get('data')
+        mes = self.cleaned_data.get('mes')
+        ano = self.cleaned_data.get('ano')
+        
+        if data and mes and ano:
+            if data.month != mes or data.year != ano:
+                raise forms.ValidationError("Data deve estar no mês/ano selecionados.")
+        
+        return data
+    
+    def clean_valor(self):
+        """Validação do valor"""
+        valor = self.cleaned_data.get('valor')
+        
+        if valor == 0:
+            raise forms.ValidationError("Valor não pode ser zero.")
+        
+        return valor
+    
+    def clean(self):
+        """Validação geral"""
+        cleaned_data = super().clean()
+        
+        # Verificar se existe movimento duplicado no mesmo período
+        if not self.instance.pk:  # Apenas para novos movimentos
+            mes = cleaned_data.get('mes')
+            ano = cleaned_data.get('ano')
+            unidade = cleaned_data.get('unidade')
+            centro_custo = cleaned_data.get('centro_custo')
+            conta_contabil = cleaned_data.get('conta_contabil')
+            valor = cleaned_data.get('valor')
+            historico = cleaned_data.get('historico')
+            
+            if all([mes, ano, unidade, centro_custo, conta_contabil, valor, historico]):
+                duplicados = Movimento.objects.filter(
+                    mes=mes,
+                    ano=ano,
+                    unidade=unidade,
+                    centro_custo=centro_custo,
+                    conta_contabil=conta_contabil,
+                    valor=valor,
+                    historico=historico[:100]  # Primeiros 100 caracteres
+                )
+                
+                if duplicados.exists():
+                    raise forms.ValidationError(
+                        "Já existe um movimento muito similar no mesmo período. "
+                        "Verifique se não é uma duplicação."
+                    )
+        
+        return cleaned_data
+
+class MovimentoFiltroForm(forms.Form):
+    """Formulário para filtros da lista de movimentos"""
+    
+    ano = forms.ChoiceField(
+        choices=[],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+        label="Ano"
+    )
+    
+    mes = forms.ChoiceField(
+        choices=[
+            ('', 'Todos os meses'),
+            (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
+            (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
+            (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro')
+        ],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+        label="Mês"
+    )
+    
+    unidade = forms.ModelChoiceField(
+        queryset=Unidade.objects.filter(ativa=True).order_by('codigo'),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+        empty_label="Todas as unidades",
+        label="Unidade"
+    )
+    
+    centro_custo = forms.CharField(
+        max_length=20,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'Código do centro'
+        }),
+        label="Centro de Custo"
+    )
+    
+    fornecedor = forms.ModelChoiceField(
+        queryset=Fornecedor.objects.filter(ativo=True).order_by('razao_social'),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+        empty_label="Todos os fornecedores",
+        label="Fornecedor"
+    )
+    
+    natureza = forms.ChoiceField(
+        choices=[
+            ('', 'Todas'),
+            ('D', 'Débito'),
+            ('C', 'Crédito'),
+            ('A', 'Ambas')
+        ],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+        label="Natureza"
+    )
+    
+    search = forms.CharField(
+        max_length=200,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'Buscar no histórico, documento...'
+        }),
+        label="Busca Livre"
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Preencher anos disponíveis dinamicamente
+        anos_disponiveis = Movimento.objects.values_list('ano', flat=True).distinct().order_by('-ano')
+        ano_choices = [('', 'Todos os anos')] + [(ano, str(ano)) for ano in anos_disponiveis]
+        self.fields['ano'].choices = ano_choices

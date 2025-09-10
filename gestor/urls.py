@@ -1,4 +1,4 @@
-# gestor/urls.py - URLs completamente corrigidas
+# gestor/urls.py - Seu arquivo original + fornecedor e movimento
 
 from django.urls import path
 from . import views
@@ -113,6 +113,32 @@ urlpatterns = [
     path('parametros/<str:codigo>/editar/', views.parametro_update, name='parametro_update'),
     path('parametros/<str:codigo>/excluir/', views.parametro_delete, name='parametro_delete'),
     
+    # ===== FORNECEDORES =====
+    path('fornecedores/', views.fornecedor_list, name='fornecedor_list'),
+    path('fornecedores/novo/', views.fornecedor_create, name='fornecedor_create'),
+    path('fornecedores/<str:codigo>/editar/', views.fornecedor_update, name='fornecedor_update'),
+    path('fornecedores/<str:codigo>/excluir/', views.fornecedor_delete, name='fornecedor_delete'),
+    path('fornecedores/<str:codigo>/toggle-status/', views.fornecedor_toggle_status, name='fornecedor_toggle_status'),
+    
+    # APIs Fornecedor
+    path('api/fornecedor/validar-codigo/', views.api_validar_codigo_fornecedor, name='api_validar_codigo_fornecedor'),
+    path('api/fornecedor/buscar/', views.api_buscar_fornecedor, name='api_buscar_fornecedor'),
+    path('api/fornecedor/<str:codigo>/', views.api_fornecedor_info, name='api_fornecedor_info'),
+    path('api/fornecedor/extrair-historico/', views.api_extrair_fornecedor_historico, name='api_extrair_fornecedor_historico'),
+    
+    # ===== MOVIMENTOS =====
+    path('movimentos/', views.movimento_list, name='movimento_list'),
+    path('movimentos/novo/', views.movimento_create, name='movimento_create'),
+    path('movimentos/<int:pk>/editar/', views.movimento_update, name='movimento_update'),
+    path('movimentos/<int:pk>/excluir/', views.movimento_delete, name='movimento_delete'),
+    path('movimentos/importar/', views.movimento_importar, name='movimento_importar'),
+    path('movimentos/export-excel/', views.movimento_export_excel, name='movimento_export_excel'),
+    
+    # APIs Movimento
+    path('api/movimento/preview-excel/', views.api_preview_movimentos_excel, name='api_preview_movimentos_excel'),
+    path('api/movimento/importar-excel/', views.api_importar_movimentos_excel, name='api_importar_movimentos_excel'),
+    path('api/movimento/validar-periodo/', views.api_validar_periodo_importacao, name='api_validar_periodo_importacao'),
+
     # APIs gerais
     path('api/parametro/<str:codigo>/valor/', views.api_parametro_valor, name='api_parametro_valor'),
 ]

@@ -1,0 +1,386 @@
+<!-- gestor/templates/gestor/fornecedor_form.html -->
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}{% if form.instance.codigo %}Editar{% else %}Novo{% endif %} Fornecedor | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas {% if form.instance.codigo %}fa-edit{% else %}fa-plus-circle{% endif %} me-2"></i>
+      {% if form.instance.codigo %}Editar{% else %}Novo{% endif %} Fornecedor
+    </h5>
+    <a href="{% url 'gestor:fornecedor_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+  
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p class="mb-0">{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+      
+      <!-- Identificação Principal -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-id-card me-2"></i>
+            Identificação do Fornecedor
+          </h6>
+        </div>
+        <div class="card-body">
+          
+          <!-- Aviso para fornecedores criados automaticamente -->
+          {% if form.instance.codigo and form.instance.criado_automaticamente %}
+            <div class="alert alert-info">
+              <h6 class="alert-heading">
+                <i class="fas fa-robot me-2"></i>Fornecedor Criado Automaticamente
+              </h6>
+              <p class="mb-0">
+                Este fornecedor foi criado automaticamente durante a importação de movimentos. 
+                Você pode complementar as informações e ajustar os dados conforme necessário.
+              </p>
+              {% if form.instance.origem_historico %}
+                <div class="mt-2">
+                  <small class="text-muted">
+                    <strong>Origem:</strong> {{ form.instance.origem_historico|truncatechars:100 }}
+                  </small>
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+          
+          <div class="row g-3">
+            <!-- Primeira linha: Código e Status -->
+            <div class="col-md-6">
+              <label for="{{ form.codigo.id_for_label }}" class="form-label">
+                Código <span class="text-danger">*</span>
+                {% if form.instance.codigo %}
+                  <small class="text-muted">(não pode ser alterado)</small>
+                {% endif %}
+              </label>
+              {{ form.codigo }}
+              {% if form.codigo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.codigo.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">{{ form.codigo.help_text }}</div>
+            </div>
+            
+            <div class="col-md-3">
+              <div class="mt-4">
+                <div class="form-check form-switch">
+                  {{ form.ativo }}
+                  <label class="form-check-label" for="{{ form.ativo.id_for_label }}">
+                    Fornecedor Ativo
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            <div class="col-md-3">
+              <label class="form-label">Status</label>
+              <div class="form-control bg-light" style="height: 38px; padding-top: 8px;">
+                {% if form.instance.codigo %}
+                  {% if form.instance.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                  {% else %}
+                    <span class="badge bg-danger">Inativo</span>
+                  {% endif %}
+                  {% if form.instance.criado_automaticamente %}
+                    <span class="badge bg-info ms-1">Auto</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-info">Novo Fornecedor</span>
+                {% endif %}
+              </div>
+            </div>
+            
+            <!-- Segunda linha: Razão Social -->
+            <div class="col-md-12">
+              <label for="{{ form.razao_social.id_for_label }}" class="form-label">
+                Razão Social <span class="text-danger">*</span>
+              </label>
+              {{ form.razao_social }}
+              {% if form.razao_social.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.razao_social.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">{{ form.razao_social.help_text }}</div>
+            </div>
+            
+            <!-- Terceira linha: Nome Fantasia -->
+            <div class="col-md-12">
+              <label for="{{ form.nome_fantasia.id_for_label }}" class="form-label">
+                Nome Fantasia
+              </label>
+              {{ form.nome_fantasia }}
+              {% if form.nome_fantasia.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.nome_fantasia.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Documentos -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-file-alt me-2"></i>
+            Documentos
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.cnpj_cpf.id_for_label }}" class="form-label">
+                CNPJ/CPF
+              </label>
+              {{ form.cnpj_cpf }}
+              {% if form.cnpj_cpf.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.cnpj_cpf.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">{{ form.cnpj_cpf.help_text }}</div>
+            </div>
+            
+            <!-- Preview do tipo de pessoa -->
+            <div class="col-md-6">
+              <label class="form-label">Tipo de Pessoa</label>
+              <div class="form-control bg-light" style="height: 38px; padding-top: 8px;">
+                {% if form.instance.cnpj_cpf %}
+                  <span class="badge bg-secondary">{{ form.instance.tipo_pessoa }}</span>
+                {% else %}
+                  <span class="text-muted small">Será identificado automaticamente</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Informações de Contato -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-address-book me-2"></i>
+            Informações de Contato
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Telefone e Email -->
+            <div class="col-md-6">
+              <label for="{{ form.telefone.id_for_label }}" class="form-label">
+                Telefone
+              </label>
+              {{ form.telefone }}
+              {% if form.telefone.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.telefone.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-6">
+              <label for="{{ form.email.id_for_label }}" class="form-label">
+                E-mail
+              </label>
+              {{ form.email }}
+              {% if form.email.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.email.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <!-- Endereço -->
+            <div class="col-12">
+              <label for="{{ form.endereco.id_for_label }}" class="form-label">
+                Endereço
+              </label>
+              {{ form.endereco }}
+              {% if form.endereco.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.endereco.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estatísticas (apenas para edição) -->
+      {% if form.instance.codigo %}
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-light">
+            <h6 class="card-title mb-0">
+              <i class="fas fa-chart-line me-2"></i>
+              Estatísticas
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="row text-center">
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-primary mb-1">{{ form.instance.movimentos.count|default:0 }}</h4>
+                    <small class="text-muted">Movimentos</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-success mb-1">
+                      {% if form.instance.data_criacao %}
+                        {{ form.instance.data_criacao|date:"d/m/Y" }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </h4>
+                    <small class="text-muted">Data Criação</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-info mb-1">
+                      {% if form.instance.data_alteracao %}
+                        {{ form.instance.data_alteracao|date:"d/m/Y" }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </h4>
+                    <small class="text-muted">Última Alteração</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-warning mb-1">
+                      {% if form.instance.criado_automaticamente %}
+                        <i class="fas fa-robot"></i>
+                      {% else %}
+                        <i class="fas fa-user"></i>
+                      {% endif %}
+                    </h4>
+                    <small class="text-muted">Tipo Criação</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Botões de ação -->
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if form.instance.codigo and form.instance.movimentos.count == 0 %}
+          <a href="{% url 'gestor:fornecedor_delete' form.instance.codigo %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i> Excluir
+          </a>
+          {% endif %}
+        </div>
+        <div>
+          <a href="{% url 'gestor:fornecedor_list' %}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-times me-1"></i> Cancelar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> {% if form.instance.codigo %}Salvar Alterações{% else %}Criar Fornecedor{% endif %}
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Máscaras para campos
+    $('.cnpj-cpf-mask').mask('00.000.000/0000-00', {
+        translation: {
+            '0': {pattern: /[0-9]/}
+        },
+        onKeyPress: function(val, e, field, options) {
+            var mask = (val.replace(/\D/g, '').length <= 11) ? '000.000.000-009' : '00.000.000/0000-00';
+            field.mask(mask, options);
+        }
+    });
+    
+    $('.telefone-mask').mask('(00) 00000-0000');
+    
+    // Validação em tempo real do código
+    const codigoInput = document.getElementById('{{ form.codigo.id_for_label }}');
+    if (codigoInput && !codigoInput.readOnly) {
+        codigoInput.addEventListener('blur', function() {
+            const codigo = this.value.trim();
+            if (codigo) {
+                fetch(`{% url 'gestor:api_validar_codigo_fornecedor' %}?codigo=${codigo}&atual={{ form.instance.codigo|default:'' }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const feedbackDiv = this.parentElement.querySelector('.validation-feedback') || 
+                                           document.createElement('div');
+                        feedbackDiv.className = 'validation-feedback small mt-1';
+                        
+                        if (data.valid) {
+                            feedbackDiv.className += ' text-success';
+                            feedbackDiv.textContent = data.message || 'Código válido';
+                        } else {
+                            feedbackDiv.className += ' text-danger';
+                            feedbackDiv.textContent = data.error;
+                        }
+                        
+                        if (!this.parentElement.querySelector('.validation-feedback')) {
+                            this.parentElement.appendChild(feedbackDiv);
+                        }
+                    })
+                    .catch(error => console.error('Erro ao validar código:', error));
+            }
+        });
+    }
+    
+    // Preview do tipo de pessoa baseado no CNPJ/CPF
+    const cnpjCpfInput = document.querySelector('.cnpj-cpf-mask');
+    if (cnpjCpfInput) {
+        cnpjCpfInput.addEventListener('input', function() {
+            const value = this.value.replace(/\D/g, '');
+            const tipoDiv = document.querySelector('[data-tipo-pessoa]') || 
+                          document.querySelector('.col-md-6:last-child .form-control.bg-light');
+            
+            if (tipoDiv) {
+                if (value.length === 14) {
+                    tipoDiv.innerHTML = '<span class="badge bg-primary">Pessoa Jurídica</span>';
+                } else if (value.length === 11) {
+                    tipoDiv.innerHTML = '<span class="badge bg-success">Pessoa Física</span>';
+                } else if (value.length > 0) {
+                    tipoDiv.innerHTML = '<span class="text-warning small">Digitando...</span>';
+                } else {
+                    tipoDiv.innerHTML = '<span class="text-muted small">Será identificado automaticamente</span>';
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
