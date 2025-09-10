@@ -1,3 +1,4 @@
+<!-- ===== 1. UNIDADE_TREE_MAIN.HTML ===== -->
 {% extends 'gestor/base_gestor.html' %}
 {% load static %}
 
@@ -43,13 +44,8 @@
                 <div class="col-md-8">
                     <input type="text" id="tree-search" class="form-control" placeholder="🔍 Buscar unidade...">
                 </div>
-                <div class="col-md-4">
-                    <select class="form-select" id="levelFilter" onchange="filterTree()">
-                        <option value="">Todos os Níveis</option>
-                        {% for nivel, count in stats.contas_por_nivel.items %}
-                            <option value="{{ nivel }}">Nível {{ nivel }} ({{ count }})</option>
-                        {% endfor %}
-                    </select>
+                <div class="col-md-8">
+                    <!-- Espaço vazio para manter alinhamento -->
                 </div>
             </div>
         </div>
@@ -90,277 +86,35 @@
 
 <!-- Toasts -->
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- CSRF Token -->
+{% csrf_token %}
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/tree-manager.js' %}"></script>
 <script>
-const CONFIG = {
-    treeData: {{ tree_data_json|safe }},
-    updateUrlBase: '{{ update_url_base }}',
-    createUrl: '{% url create_url %}',
-    apiTreeDataUrl: '{% url "gestor:api_unidade_tree_data" %}'
-};
-
-let filteredData = CONFIG.treeData;
-let expandedNodes = new Set();
-let modal;
-
+let treeManager;
 document.addEventListener('DOMContentLoaded', () => {
-    modal = new bootstrap.Modal(document.getElementById('unidadeModal'));
-    renderTree(CONFIG.treeData, document.getElementById('itemTree'));
-    
-    // Search
-    document.getElementById('tree-search').addEventListener('input', e => {
-        filterTree(e.target.value.toLowerCase());
-    });
+    const config = {
+        treeData: {{ tree_data_json|safe }},
+        updateUrlBase: '{{ update_url_base }}',
+        createUrl: '{% url create_url %}',
+        apiTreeDataUrl: '{% url "gestor:api_unidade_tree_data" %}',
+        modalId: 'unidadeModal',
+        entityName: 'Unidade',
+        hasCompanyField: true,
+        hasDetailModal: true,
+        useId: true
+    };
+    treeManager = new TreeManager(config);
 });
 
-function renderTree(data, container) {
-    container.innerHTML = !data?.length ? 
-        '<li class="tree-item"><div class="alert alert-info text-center">Nenhuma unidade encontrada.</div></li>' :
-        data.map(item => createTreeNode(item).outerHTML).join('');
-}
-
-function createTreeNode(item) {
-    const li = document.createElement('li');
-    li.className = 'tree-item';
-    
-    const hasChildren = item.filhos?.length > 0;
-    const isExpanded = expandedNodes.has(item.codigo);
-    const typeClass = item.tipo === 'A' ? 'analytic' : 'synthetic';
-    const typeBadge = item.tipo ? `<span class="type-badge ${typeClass}">${item.tipo === 'A' ? 'Analítico' : 'Sintético'}</span>` : '';
-
-    li.innerHTML = `
-        <div class="tree-node level-${item.nivel} ${typeClass}" onclick="openDetailModal(${item.id})">
-            <div class="tree-info">
-                <div class="tree-content">
-                    ${hasChildren ? 
-                        `<button class="tree-toggle ${isExpanded ? 'expanded' : ''}" onclick="toggleNode(event, '${item.codigo}')">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>` : 
-                        '<span style="width: 22px; display: inline-block;"></span>'
-                    }
-                    <span class="tree-code">${item.codigo}</span>
-                    <span class="tree-name">${item.nome}</span>
-                    ${item.empresa_sigla ? `<small class="text-muted ms-2">(${item.empresa_sigla})</small>` : ''}
-                </div>
-                <div class="tree-badges">
-                    ${typeBadge}
-                    <div class="tree-actions">
-                        <button class="btn btn-sm btn-outline-info" onclick="openDetailModal(event, ${item.id})" title="Detalhes">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="openEditModal(event, ${item.id})" title="Editar">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-success" onclick="openCreateModal(event, '${item.codigo}')" title="Sub-unidade">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUnidade(event, ${item.id}, '${item.nome}')" title="Excluir">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        ${hasChildren ? 
-            `<ul class="tree-children ${isExpanded ? 'expanded' : 'collapsed'}">
-                ${item.filhos.map(filho => createTreeNode(filho).outerHTML).join('')}
-            </ul>` : ''
-        }
-    `;
-    return li;
-}
-
-function openModal(url, title) {
-    showLoading();
-    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(response => response.text())
-        .then(html => {
-            hideLoading();
-            document.getElementById('modalBody').innerHTML = html;
-            document.getElementById('modalTitle').textContent = title;
-            modal.show();
-            initializeModalForm();
-        })
-        .catch(() => {
-            hideLoading();
-            showToast('Erro ao carregar', 'error');
-        });
-}
-
-function openCreateModal(event, codigo_pai = null) {
-    if (event) event.stopPropagation();
-    let url = CONFIG.createUrl;
-    if (codigo_pai) url += `?codigo_pai=${codigo_pai}`;
-    openModal(url, 'Nova Unidade');
-}
-
-function openEditModal(event, id) {
-    if (event) event.stopPropagation();
-    openModal(`${CONFIG.updateUrlBase}${id}/editar/`, 'Editar Unidade');
-}
-
-function openDetailModal(event, id) {
-    if (event) event.stopPropagation();
-    openModal(`${CONFIG.updateUrlBase}${id}/detalhes/`, 'Detalhes da Unidade');
-}
-
-function initializeModalForm() {
-    const form = document.querySelector('#modalBody form');
-    if (!form) return;
-    
-    form.addEventListener('submit', e => {
-        e.preventDefault();
-        showLoading();
-        
-        fetch(form.action, {
-            method: 'POST',
-            body: new FormData(form),
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(response => response.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showToast(data.message, 'success');
-                modal.hide();
-                refreshTree();
-            } else {
-                showToast(data.message, 'error');
-            }
-        })
-        .catch(() => {
-            hideLoading();
-            showToast('Erro ao processar', 'error');
-        });
-    });
-}
-
-function deleteUnidade(event, id, nome) {
-    if (event) event.stopPropagation();
-    if (!confirm(`Excluir "${nome}"?`)) return;
-    
-    showLoading();
-    fetch(`${CONFIG.updateUrlBase}${id}/excluir/`, {
-        method: 'POST',
-        headers: { 
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        hideLoading();
-        showToast(data.message, data.success ? 'success' : 'error');
-        if (data.success) refreshTree();
-    })
-    .catch(() => {
-        hideLoading();
-        showToast('Erro ao excluir', 'error');
-    });
-}
-
-function refreshTree() {
-    showLoading();
-    fetch(CONFIG.apiTreeDataUrl)
-        .then(response => response.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                CONFIG.treeData = data.tree_data;
-                filteredData = data.tree_data;
-                renderTree(filteredData, document.getElementById('itemTree'));
-                showToast('Atualizado', 'success');
-            }
-        })
-        .catch(() => {
-            hideLoading();
-            showToast('Erro ao atualizar', 'error');
-        });
-}
-
-function toggleNode(event, codigo) {
-    event.stopPropagation();
-    expandedNodes.has(codigo) ? expandedNodes.delete(codigo) : expandedNodes.add(codigo);
-    renderTree(filteredData, document.getElementById('itemTree'));
-}
-
-function filterTree(searchTerm = '') {
-    const levelFilter = document.getElementById('levelFilter').value;
-    
-    if (!searchTerm && !levelFilter) {
-        filteredData = CONFIG.treeData;
-    } else {
-        filteredData = filterRecursive(CONFIG.treeData, searchTerm, levelFilter);
-        if (searchTerm) expandRelevantNodes(filteredData);
-    }
-    
-    renderTree(filteredData, document.getElementById('itemTree'));
-}
-
-function filterRecursive(data, searchTerm, levelFilter) {
-    const result = [];
-    
-    data.forEach(item => {
-        let matches = true;
-        
-        if (searchTerm) {
-            matches = matches && (item.codigo.toLowerCase().includes(searchTerm) || item.nome.toLowerCase().includes(searchTerm));
-        }
-        
-        if (levelFilter) {
-            matches = matches && item.nivel === parseInt(levelFilter);
-        }
-        
-        let filteredChildren = [];
-        if (item.filhos) {
-            filteredChildren = filterRecursive(item.filhos, searchTerm, levelFilter);
-        }
-        
-        if (matches || filteredChildren.length > 0) {
-            result.push({ ...item, filhos: filteredChildren });
-        }
-    });
-    
-    return result;
-}
-
-function expandRelevantNodes(data) {
-    data.forEach(item => {
-        if (item.filhos?.length > 0) {
-            expandedNodes.add(item.codigo);
-            expandRelevantNodes(item.filhos);
-        }
-    });
-}
-
-function showLoading() { document.getElementById('loadingOverlay').classList.add('show'); }
-function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
-
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const id = 'toast-' + Date.now();
-    const bgClass = type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info';
-    const icon = type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : 'info-circle';
-    
-    container.insertAdjacentHTML('beforeend', `
-        <div class="toast align-items-center text-white bg-${bgClass} border-0" id="${id}" role="alert">
-            <div class="d-flex">
-                <div class="toast-body">
-                    <i class="fas fa-${icon} me-2"></i>${message}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-            </div>
-        </div>
-    `);
-    
-    const toast = new bootstrap.Toast(document.getElementById(id), { delay: 4000 });
-    toast.show();
-    
-    document.getElementById(id).addEventListener('hidden.bs.toast', function() {
-        this.remove();
-    });
-}
+// Funções globais para compatibilidade
+function openCreateModal(event, codigoPai) { treeManager.openCreateModal(event, codigoPai); }
+function openEditModal(event, id) { treeManager.openEditModal(event, id); }
+function openDetailModal(event, id) { treeManager.openDetailModal(event, id); }
+function deleteUnidade(event, id, nome) { treeManager.deleteItem(event, id, nome); }
+function refreshTree() { treeManager.refreshTree(); }
 </script>
 {% endblock %}
