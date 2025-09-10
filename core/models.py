@@ -1468,33 +1468,31 @@ class Movimento(models.Model):
     )
     
     def clean(self):
-        """Validação customizada"""
+        """Validação customizada - VERSÃO CORRIGIDA"""
         super().clean()
         
-        # Validar período
-        if self.mes < 1 or self.mes > 12:
-            raise ValidationError({
-                'mes': 'Mês deve estar entre 1 e 12'
-            })
-        
-        if self.ano < 2000 or self.ano > 2100:
-            raise ValidationError({
-                'ano': 'Ano deve estar entre 2000 e 2100'
-            })
-        
-        # Validar natureza vs valor
-        if self.natureza == 'D' and self.valor > 0:
-            # Para débitos, normalmente valor é negativo, mas vamos permitir flexibilidade
-            pass
-        elif self.natureza == 'C' and self.valor < 0:
-            # Para créditos, normalmente valor é positivo, mas vamos permitir flexibilidade
-            pass
-    
+        # Validar apenas se os valores existem (evita erro NoneType)
+        if self.data:
+            # Extrair mês e ano da data automaticamente
+            self.mes = self.data.month
+            self.ano = self.data.year
+            
+            # Validar limites do ano
+            if self.ano < 2000 or self.ano > 2100:
+                raise ValidationError({
+                    'data': 'Ano deve estar entre 2000 e 2100'
+                })
+
     def save(self, *args, **kwargs):
-        """Save com cálculos automáticos"""
+        """Save com cálculos automáticos - VERSÃO CORRIGIDA"""
         
-        # Calcular período para indexação
-        self.periodo_mes_ano = f"{self.ano}-{self.mes:02d}"
+        # Se tem data, extrair mês e ano automaticamente
+        if self.data:
+            self.mes = self.data.month
+            self.ano = self.data.year
+            
+            # Calcular período para indexação
+            self.periodo_mes_ano = f"{self.ano}-{self.mes:02d}"
         
         # Calcular valor absoluto
         self.valor_absoluto = abs(self.valor) if self.valor else 0

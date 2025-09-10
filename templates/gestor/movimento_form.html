@@ -1,308 +1,386 @@
-<!-- gestor/templates/gestor/movimento_list.html -->
+<!-- gestor/templates/gestor/movimento_form.html -->
 {% extends 'gestor/base_gestor.html' %}
 {% load static %}
 
-{% block title %}Movimentos | SynchroBI{% endblock %}
+{% block title %}{% if form.instance.pk %}Editar{% else %}Novo{% endif %} Movimento | SynchroBI{% endblock %}
 
 {% block content %}
 <div class="card shadow">
   <div class="card-header bg-light d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      Movimentos
+      <i class="fas {% if form.instance.pk %}fa-edit{% else %}fa-plus-circle{% endif %} me-2"></i>
+      {% if form.instance.pk %}Editar{% else %}Novo{% endif %} Movimento
     </h5>
-    <div>
-      <a href="{% url 'gestor:movimento_create' %}" class="btn btn-primary btn-sm me-2">
-        <i class="fas fa-plus me-1"></i> Novo Movimento
-      </a>
-      <a href="{% url 'gestor:movimento_export_excel' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-info btn-sm me-2">
-        <i class="fas fa-file-excel me-1"></i> Exportar Excel
-      </a>
-      <a href="{% url 'gestor:movimento_importar' %}" class="btn btn-success btn-sm me-2">
-        <i class="fas fa-upload me-1"></i> Importar
-      </a>
-      <a href="{% url 'gestor:dashboard' %}" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i> Voltar
-      </a>
-    </div>
+    <a href="{% url 'gestor:movimento_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Voltar
+    </a>
   </div>
   
-  <!-- Filtros -->
-  <div class="card-header bg-white">
-    <form method="get" class="row g-3 align-items-end">
-      <div class="col-md-2">
-        <label for="ano" class="form-label small">Ano</label>
-        <select name="ano" id="ano" class="form-select form-select-sm">
-          <option value="">Todos</option>
-          {% if form_filtros.fields.ano.queryset %}
-            {% for ano_opt in form_filtros.fields.ano.queryset %}
-              <option value="{{ ano_opt }}" {% if form_filtros.ano.value == ano_opt|stringformat:"s" %}selected{% endif %}>
-                {{ ano_opt }}
-              </option>
-            {% endfor %}
-          {% endif %}
-        </select>
-      </div>
-      
-      <div class="col-md-2">
-        <label for="mes" class="form-label small">Mês</label>
-        <select name="mes" id="mes" class="form-select form-select-sm">
-          <option value="">Todos</option>
-          <option value="1" {% if form_filtros.mes.value == "1" %}selected{% endif %}>Janeiro</option>
-          <option value="2" {% if form_filtros.mes.value == "2" %}selected{% endif %}>Fevereiro</option>
-          <option value="3" {% if form_filtros.mes.value == "3" %}selected{% endif %}>Março</option>
-          <option value="4" {% if form_filtros.mes.value == "4" %}selected{% endif %}>Abril</option>
-          <option value="5" {% if form_filtros.mes.value == "5" %}selected{% endif %}>Maio</option>
-          <option value="6" {% if form_filtros.mes.value == "6" %}selected{% endif %}>Junho</option>
-          <option value="7" {% if form_filtros.mes.value == "7" %}selected{% endif %}>Julho</option>
-          <option value="8" {% if form_filtros.mes.value == "8" %}selected{% endif %}>Agosto</option>
-          <option value="9" {% if form_filtros.mes.value == "9" %}selected{% endif %}>Setembro</option>
-          <option value="10" {% if form_filtros.mes.value == "10" %}selected{% endif %}>Outubro</option>
-          <option value="11" {% if form_filtros.mes.value == "11" %}selected{% endif %}>Novembro</option>
-          <option value="12" {% if form_filtros.mes.value == "12" %}selected{% endif %}>Dezembro</option>
-        </select>
-      </div>
-      
-      <div class="col-md-2">
-        <label for="unidade" class="form-label small">Unidade</label>
-        <select name="unidade" id="unidade" class="form-select form-select-sm">
-          <option value="">Todas</option>
-          {% if form_filtros.fields.unidade.queryset %}
-            {% for unidade in form_filtros.fields.unidade.queryset %}
-              <option value="{{ unidade.id }}" {% if form_filtros.unidade.value == unidade.id %}selected{% endif %}>
-                {{ unidade.codigo_display }} - {{ unidade.nome|truncatechars:25 }}
-              </option>
-            {% endfor %}
-          {% endif %}
-        </select>
-      </div>
-      
-      <div class="col-md-2">
-        <label for="centro_custo" class="form-label small">Centro Custo</label>
-        <input type="text" name="centro_custo" id="centro_custo" class="form-control form-control-sm" 
-               placeholder="Código" value="{{ form_filtros.centro_custo.value|default:'' }}">
-      </div>
-      
-      <div class="col-md-2">
-        <button type="submit" class="btn btn-sm btn-primary w-100">
-          <i class="fas fa-search me-1"></i> Buscar
-        </button>
-      </div>
-      
-      <div class="col-md-2">
-        <a href="{% url 'gestor:movimento_list' %}" class="btn btn-sm btn-outline-secondary w-100">
-          <i class="fas fa-eraser me-1"></i> Limpar
-        </a>
-      </div>
-    </form>
-    
-    <!-- Segunda linha de filtros -->
-    <form method="get" class="row g-3 align-items-end mt-2">
-      <!-- Manter filtros anteriores como hidden -->
-      {% for key, value in request.GET.items %}
-        {% if key != 'search' and key != 'natureza' %}
-          <input type="hidden" name="{{ key }}" value="{{ value }}">
-        {% endif %}
-      {% endfor %}
-      
-      <div class="col-md-4">
-        <label for="search" class="form-label small">Busca Livre</label>
-        <input type="text" name="search" id="search" class="form-control form-control-sm" 
-               placeholder="Histórico, documento, fornecedor..." value="{{ form_filtros.search.value|default:'' }}">
-      </div>
-      
-      <div class="col-md-2">
-        <label for="natureza" class="form-label small">Natureza</label>
-        <select name="natureza" id="natureza" class="form-select form-select-sm">
-          <option value="">Todas</option>
-          <option value="D" {% if form_filtros.natureza.value == "D" %}selected{% endif %}>Débito</option>
-          <option value="C" {% if form_filtros.natureza.value == "C" %}selected{% endif %}>Crédito</option>
-          <option value="A" {% if form_filtros.natureza.value == "A" %}selected{% endif %}>Ambas</option>
-        </select>
-      </div>
-      
-      <div class="col-md-6">
-        <div class="text-end">
-          <small class="text-muted">
-            <strong>{{ total_movimentos|default:0 }}</strong> movimento{{ total_movimentos|default:0|pluralize }} encontrado{{ total_movimentos|default:0|pluralize }} • 
-            <strong>Total:</strong> R$ {{ total_valor|floatformat:2 }}
-          </small>
-        </div>
-      </div>
-    </form>
-  </div>
-  
-  <!-- Tabela -->
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th style="width: 80px;">Data</th>
-            <th style="width: 120px;">Unidade</th>
-            <th style="width: 120px;">Centro Custo</th>
-            <th style="width: 120px;">Conta Contábil</th>
-            <th style="width: 140px;">Fornecedor</th>
-            <th style="width: 40px;" class="text-center">Nat</th>
-            <th style="width: 100px;" class="text-end">Valor</th>
-            <th>Histórico</th>
-            <th style="width: 120px;" class="text-end">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for movimento in page_obj %}
-            <tr>
-              <td>
-                <div class="small fw-bold">{{ movimento.data|date:"d/m/Y" }}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">{{ movimento.periodo_display }}</div>
-              </td>
-              <td>
-                <div class="small fw-bold">{{ movimento.unidade.codigo_display }}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">{{ movimento.unidade.nome|truncatechars:20 }}</div>
-              </td>
-              <td>
-                <div class="small fw-bold">{{ movimento.centro_custo.codigo }}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">{{ movimento.centro_custo.nome|truncatechars:20 }}</div>
-              </td>
-              <td>
-                <div class="small fw-bold">{{ movimento.conta_contabil.codigo }}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">{{ movimento.conta_contabil.nome|truncatechars:20 }}</div>
-              </td>
-              <td>
-                {% if movimento.fornecedor %}
-                  <div class="small fw-bold">{{ movimento.fornecedor.codigo }}</div>
-                  <div class="text-muted" style="font-size: 0.75rem;">
-                    {{ movimento.fornecedor.razao_social|truncatechars:18 }}
-                    {% if movimento.fornecedor.criado_automaticamente %}
-                      <span class="badge bg-info" style="font-size: 0.6rem;">Auto</span>
-                    {% endif %}
-                  </div>
-                {% else %}
-                  <span class="text-muted small">-</span>
-                {% endif %}
-              </td>
-              <td class="text-center">
-                <span class="badge bg-{% if movimento.natureza == 'D' %}danger{% elif movimento.natureza == 'C' %}success{% else %}secondary{% endif %}" style="font-size: 0.7rem;">
-                  {{ movimento.natureza }}
-                </span>
-              </td>
-              <td class="text-end">
-                <div class="fw-bold {% if movimento.valor < 0 %}text-danger{% else %}text-success{% endif %}" style="font-size: 0.85rem;">
-                  R$ {{ movimento.valor|floatformat:2 }}
-                </div>
-              </td>
-              <td>
-                <div class="text-muted small">{{ movimento.historico|truncatechars:80 }}</div>
-                {% if movimento.documento %}
-                  <div class="text-muted" style="font-size: 0.7rem;">
-                    <strong>Doc:</strong> {{ movimento.documento }}
-                  </div>
-                {% endif %}
-              </td>
-              <td class="text-end">
-                <div class="btn-group" role="group" aria-label="Ações">
-                  <a href="{% url 'gestor:movimento_update' movimento.pk %}" 
-                     class="btn btn-sm btn-outline-primary" 
-                     title="Editar">
-                    <i class="fas fa-edit"></i>
-                  </a>
-                  
-                  <a href="{% url 'gestor:movimento_delete' movimento.pk %}" 
-                     class="btn btn-sm btn-outline-danger" 
-                     title="Excluir">
-                    <i class="fas fa-trash-alt"></i>
-                  </a>
-                </div>
-              </td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="9" class="text-center py-5 text-muted">
-                {% if filtros_aplicados %}
-                  <p>Nenhum movimento encontrado com os critérios de busca.</p>
-                  <a href="{% url 'gestor:movimento_list' %}" class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-eraser me-1"></i> Limpar filtros
-                  </a>
-                {% else %}
-                  <p>Nenhum movimento importado ainda.</p>
-                  <div class="d-flex gap-2 justify-content-center">
-                    <a href="{% url 'gestor:movimento_create' %}" class="btn btn-sm btn-primary">
-                      <i class="fas fa-plus me-1"></i> Criar primeiro movimento
-                    </a>
-                    <a href="{% url 'gestor:movimento_importar' %}" class="btn btn-sm btn-success">
-                      <i class="fas fa-upload me-1"></i> Importar movimentos
-                    </a>
-                  </div>
-                {% endif %}
-              </td>
-            </tr>
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p class="mb-0">{{ error }}</p>
           {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    
-    <!-- Paginação -->
-    {% if page_obj.has_other_pages %}
-      <div class="card-footer bg-white">
-        <nav aria-label="Paginação">
-          <ul class="pagination pagination-sm justify-content-center mb-0">
-            {% if page_obj.has_previous %}
-              <li class="page-item">
-                <a class="page-link" href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
-                  <i class="fas fa-angle-double-left"></i>
-                </a>
-              </li>
-              <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
-                  <i class="fas fa-angle-left"></i>
-                </a>
-              </li>
-            {% endif %}
+        </div>
+      {% endif %}
+      
+      <!-- Dados do Movimento - Tudo em um box -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-file-invoice-dollar me-2"></i>
+            Dados do Movimento
+          </h6>
+        </div>
+        <div class="card-body">
+          
+          <!-- Aviso para movimentos importados -->
+          {% if form.instance.pk and form.instance.arquivo_origem %}
+            <div class="alert alert-info mb-3">
+              <h6 class="alert-heading">
+                <i class="fas fa-file-excel me-2"></i>Movimento Importado
+              </h6>
+              <p class="mb-0">
+                Este movimento foi importado via Excel. Você pode editar os dados conforme necessário.
+              </p>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <strong>Arquivo:</strong> {{ form.instance.arquivo_origem }}
+                  {% if form.instance.linha_origem %}
+                    (linha {{ form.instance.linha_origem }})
+                  {% endif %}
+                  <br>
+                  <strong>Data de importação:</strong> {{ form.instance.data_importacao|date:"d/m/Y H:i" }}
+                </small>
+              </div>
+            </div>
+          {% endif %}
+          
+          <!-- Primeira linha: Data, Natureza, Valor -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label for="{{ form.data.id_for_label }}" class="form-label">
+                Data <span class="text-danger">*</span>
+              </label>
+              {{ form.data }}
+              {% if form.data.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.data.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
             
-            <li class="page-item active">
-              <span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
-            </li>
+            <div class="col-md-4">
+              <label for="{{ form.natureza.id_for_label }}" class="form-label">
+                Natureza <span class="text-danger">*</span>
+              </label>
+              {{ form.natureza }}
+              {% if form.natureza.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.natureza.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
             
-            {% if page_obj.has_next %}
-              <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
-                  <i class="fas fa-angle-right"></i>
-                </a>
-              </li>
-              <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
-                  <i class="fas fa-angle-double-right"></i>
-                </a>
-              </li>
-            {% endif %}
-          </ul>
-        </nav>
-        
-        <div class="text-center mt-2">
-          <small class="text-muted">
-            Mostrando {{ page_obj|length }} de {{ page_obj.paginator.count }} movimento{{ page_obj.paginator.count|pluralize }}
-            {% if filtros_aplicados %}(filtrado{{ page_obj.paginator.count|pluralize }}){% endif %}
-          </small>
+            <div class="col-md-4">
+              <label for="{{ form.valor.id_for_label }}" class="form-label">
+                Valor <span class="text-danger">*</span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text">R$</span>
+                {{ form.valor }}
+              </div>
+              {% if form.valor.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.valor.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <!-- Segunda linha: Unidade, Centro Custo, Conta Contábil -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label for="{{ form.unidade.id_for_label }}" class="form-label">
+                Unidade <span class="text-danger">*</span>
+              </label>
+              {{ form.unidade }}
+              {% if form.unidade.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.unidade.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-4">
+              <label for="{{ form.centro_custo.id_for_label }}" class="form-label">
+                Centro de Custo <span class="text-danger">*</span>
+              </label>
+              {{ form.centro_custo }}
+              {% if form.centro_custo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.centro_custo.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-4">
+              <label for="{{ form.conta_contabil.id_for_label }}" class="form-label">
+                Conta Contábil <span class="text-danger">*</span>
+              </label>
+              {{ form.conta_contabil }}
+              {% if form.conta_contabil.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.conta_contabil.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <!-- Terceira linha: Fornecedor, Documento -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="{{ form.fornecedor.id_for_label }}" class="form-label">
+                Fornecedor
+              </label>
+              {{ form.fornecedor }}
+              {% if form.fornecedor.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.fornecedor.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-6">
+              <label for="{{ form.documento.id_for_label }}" class="form-label">
+                Documento
+              </label>
+              {{ form.documento }}
+              {% if form.documento.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.documento.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <!-- Quarta linha: Histórico -->
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              <label for="{{ form.historico.id_for_label }}" class="form-label">
+                Histórico <span class="text-danger">*</span>
+              </label>
+              {{ form.historico }}
+              {% if form.historico.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.historico.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <!-- Quinta linha: Projeto, Gerador -->
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.codigo_projeto.id_for_label }}" class="form-label">
+                Código do Projeto
+              </label>
+              {{ form.codigo_projeto }}
+              {% if form.codigo_projeto.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.codigo_projeto.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="col-md-6">
+              <label for="{{ form.gerador.id_for_label }}" class="form-label">
+                Gerador
+              </label>
+              {{ form.gerador }}
+              {% if form.gerador.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.gerador.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
-    {% endif %}
+
+      <!-- Estatísticas (apenas para edição) -->
+      {% if form.instance.pk %}
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-light">
+            <h6 class="card-title mb-0">
+              <i class="fas fa-info-circle me-2"></i>
+              Informações do Sistema
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="row text-center">
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-primary mb-1">{{ form.instance.id }}</h4>
+                    <small class="text-muted">ID</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-success mb-1">
+                      {{ form.instance.periodo_display }}
+                    </h4>
+                    <small class="text-muted">Período</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-info mb-1">
+                      {{ form.instance.data_importacao|date:"d/m/Y" }}
+                    </h4>
+                    <small class="text-muted">Data Criação</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card border-0 bg-light">
+                  <div class="card-body py-3">
+                    <h4 class="text-warning mb-1">
+                      {% if form.instance.arquivo_origem %}
+                        <i class="fas fa-file-excel"></i>
+                      {% else %}
+                        <i class="fas fa-user"></i>
+                      {% endif %}
+                    </h4>
+                    <small class="text-muted">Origem</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Botões de ação -->
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if form.instance.pk %}
+          <a href="{% url 'gestor:movimento_delete' form.instance.pk %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i> Excluir
+          </a>
+          {% endif %}
+        </div>
+        <div>
+          <a href="{% url 'gestor:movimento_list' %}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-times me-1"></i> Cancelar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> {% if form.instance.pk %}Salvar Alterações{% else %}Criar Movimento{% endif %}
+          </button>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-$(document).ready(function() {
-    // Auto-submit nos selects de filtro
-    $('#ano, #mes, #unidade, #natureza').change(function() {
-        $(this).closest('form').submit();
-    });
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-completar fornecedor baseado no histórico
+    const historicoInput = document.getElementById('{{ form.historico.id_for_label }}');
+    const fornecedorSelect = document.getElementById('{{ form.fornecedor.id_for_label }}');
     
-    // Enter para submeter busca
-    $('#search, #centro_custo').on('keypress', function(e) {
-        if (e.which === 13) {
-            $(this).closest('form').submit();
+    if (historicoInput && fornecedorSelect) {
+        historicoInput.addEventListener('blur', function() {
+            const historico = this.value;
+            
+            // Buscar padrão de fornecedor no histórico
+            const match = historico.match(/- (\d+)\s+([A-Z\s&\.\-_]+?) -/);
+            
+            if (match) {
+                const codigoFornecedor = match[1];
+                
+                // Procurar fornecedor no select
+                for (let option of fornecedorSelect.options) {
+                    if (option.text.includes(codigoFornecedor)) {
+                        fornecedorSelect.value = option.value;
+                        
+                        // Mostrar feedback
+                        const feedback = document.createElement('div');
+                        feedback.className = 'alert alert-info alert-dismissible fade show mt-2';
+                        feedback.innerHTML = `
+                            <i class="fas fa-robot me-2"></i>
+                            Fornecedor identificado automaticamente: ${option.text}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        `;
+                        
+                        fornecedorSelect.parentElement.appendChild(feedback);
+                        
+                        // Remover feedback após 5 segundos
+                        setTimeout(() => {
+                            if (feedback.parentElement) {
+                                feedback.remove();
+                            }
+                        }, 5000);
+                        
+                        break;
+                    }
+                }
+            }
+        });
+    }
+    
+    // Preview do valor formatado
+    const valorInput = document.getElementById('{{ form.valor.id_for_label }}');
+    const naturezaSelect = document.getElementById('{{ form.natureza.id_for_label }}');
+    
+    function atualizarPreviewValor() {
+        if (!valorInput) return;
+        
+        const valor = parseFloat(valorInput.value) || 0;
+        const natureza = naturezaSelect ? naturezaSelect.value : '';
+        
+        let preview = document.querySelector('.valor-preview') || document.createElement('div');
+        preview.className = 'form-text valor-preview mt-1';
+        
+        if (valor !== 0) {
+            const valorFormatado = new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            }).format(Math.abs(valor));
+            
+            const cor = natureza === 'D' ? 'text-danger' : 'text-success';
+            const tipo = natureza === 'D' ? 'Débito' : 'Crédito';
+            preview.innerHTML = `<span class="${cor}"><strong>${tipo}:</strong> ${valorFormatado}</span>`;
+        } else {
+            preview.innerHTML = '';
         }
-    });
+        
+        if (!document.querySelector('.valor-preview')) {
+            valorInput.parentElement.parentElement.appendChild(preview);
+        }
+    }
+    
+    if (valorInput) {
+        valorInput.addEventListener('input', atualizarPreviewValor);
+    }
+    
+    if (naturezaSelect) {
+        naturezaSelect.addEventListener('change', atualizarPreviewValor);
+    }
+    
+    // Trigger inicial
+    atualizarPreviewValor();
 });
 </script>
 {% endblock %}

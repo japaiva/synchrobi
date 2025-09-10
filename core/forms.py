@@ -1222,23 +1222,17 @@ class FornecedorForm(forms.ModelForm):
         return fornecedor
 
 class MovimentoForm(forms.ModelForm):
-    """Formulário para criar/editar movimentos manualmente (caso necessário)"""
+    """Formulário para criar/editar movimentos - VERSÃO CORRIGIDA"""
     
     class Meta:
         model = Movimento
         fields = [
-            'mes', 'ano', 'data', 'unidade', 'centro_custo', 'conta_contabil',
-            'fornecedor', 'documento', 'natureza', 'valor', 'historico',
-            'codigo_projeto', 'gerador', 'rateio'
+            'data', 'natureza', 'valor', 'unidade', 'centro_custo', 'conta_contabil',
+            'fornecedor', 'documento', 'historico', 'codigo_projeto', 'gerador'
         ]
         
         widgets = {
-            'mes': forms.Select(attrs={'class': 'form-select'}),
-            'ano': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': 2020,
-                'max': 2030
-            }),
+            # Data no formato brasileiro
             'data': forms.DateInput(attrs={
                 'class': 'form-control',
                 'type': 'date'
@@ -1248,46 +1242,33 @@ class MovimentoForm(forms.ModelForm):
             'conta_contabil': forms.Select(attrs={'class': 'form-select'}),
             'fornecedor': forms.Select(attrs={'class': 'form-select'}),
             'documento': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Número do documento'
+                'class': 'form-control'
             }),
             'natureza': forms.Select(attrs={'class': 'form-select'}),
             'valor': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'step': '0.01',
-                'placeholder': '0.00'
+                'step': '0.01'
             }),
             'historico': forms.Textarea(attrs={
                 'class': 'form-control',
-                'rows': 3,
-                'placeholder': 'Histórico da movimentação'
+                'rows': 3
             }),
             'codigo_projeto': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Código do projeto (opcional)'
+                'class': 'form-control'
             }),
             'gerador': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Sistema gerador (opcional)'
+                'class': 'form-control'
             }),
-            'rateio': forms.Select(attrs={'class': 'form-select'}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Configurar choices do mês
-        self.fields['mes'].choices = [
+        # Configurar choices da natureza - APENAS D e C
+        self.fields['natureza'].choices = [
             ('', '--- Selecione ---'),
-            (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
-            (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
-            (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro')
-        ]
-        
-        # Configurar choices do rateio
-        self.fields['rateio'].choices = [
-            ('N', 'Não'),
-            ('S', 'Sim'),
+            ('D', 'Débito'),
+            ('C', 'Crédito'),
         ]
         
         # Filtrar querysets para apenas registros ativos
@@ -1297,8 +1278,6 @@ class MovimentoForm(forms.ModelForm):
         self.fields['fornecedor'].queryset = Fornecedor.objects.filter(ativo=True).order_by('razao_social')
         
         # Campos obrigatórios
-        self.fields['mes'].required = True
-        self.fields['ano'].required = True
         self.fields['data'].required = True
         self.fields['unidade'].required = True
         self.fields['centro_custo'].required = True
@@ -1307,70 +1286,83 @@ class MovimentoForm(forms.ModelForm):
         self.fields['valor'].required = True
         self.fields['historico'].required = True
         
-        # Help texts
-        self.fields['natureza'].help_text = "D=Débito, C=Crédito, A=Ambas"
-        self.fields['valor'].help_text = "Valor do movimento (use valores negativos para débitos)"
-        self.fields['fornecedor'].help_text = "Fornecedor (opcional)"
-        
+
+         
         # Empty labels para campos obrigatórios
         self.fields['unidade'].empty_label = "--- Selecione a Unidade ---"
         self.fields['centro_custo'].empty_label = "--- Selecione o Centro de Custo ---"
         self.fields['conta_contabil'].empty_label = "--- Selecione a Conta Contábil ---"
         self.fields['fornecedor'].empty_label = "--- Selecione o Fornecedor (opcional) ---"
-    
-    def clean_data(self):
-        """Validação da data"""
-        data = self.cleaned_data.get('data')
-        mes = self.cleaned_data.get('mes')
-        ano = self.cleaned_data.get('ano')
         
-        if data and mes and ano:
-            if data.month != mes or data.year != ano:
-                raise forms.ValidationError("Data deve estar no mês/ano selecionados.")
-        
-        return data
+        # Data padrão
+        if not self.instance.pk:
+            from datetime import date
+            self.fields['data'].initial = date.today()
     
     def clean_valor(self):
         """Validação do valor"""
         valor = self.cleaned_data.get('valor')
+        
+        if valor is None:
+            raise forms.ValidationError("Valor é obrigatório.")
         
         if valor == 0:
             raise forms.ValidationError("Valor não pode ser zero.")
         
         return valor
     
+    def clean_natureza(self):
+        """Validação da natureza"""
+        natureza = self.cleaned_data.get('natureza')
+        
+        if not natureza:
+            raise forms.ValidationError("Natureza é obrigatória.")
+        
+        if natureza not in ['D', 'C']:
+            raise forms.ValidationError("Natureza deve ser 'D' (Débito) ou 'C' (Crédito).")
+        
+        return natureza
+    
     def clean(self):
         """Validação geral"""
         cleaned_data = super().clean()
         
-        # Verificar se existe movimento duplicado no mesmo período
-        if not self.instance.pk:  # Apenas para novos movimentos
-            mes = cleaned_data.get('mes')
-            ano = cleaned_data.get('ano')
-            unidade = cleaned_data.get('unidade')
-            centro_custo = cleaned_data.get('centro_custo')
-            conta_contabil = cleaned_data.get('conta_contabil')
-            valor = cleaned_data.get('valor')
-            historico = cleaned_data.get('historico')
-            
-            if all([mes, ano, unidade, centro_custo, conta_contabil, valor, historico]):
-                duplicados = Movimento.objects.filter(
-                    mes=mes,
-                    ano=ano,
-                    unidade=unidade,
-                    centro_custo=centro_custo,
-                    conta_contabil=conta_contabil,
-                    valor=valor,
-                    historico=historico[:100]  # Primeiros 100 caracteres
-                )
-                
-                if duplicados.exists():
-                    raise forms.ValidationError(
-                        "Já existe um movimento muito similar no mesmo período. "
-                        "Verifique se não é uma duplicação."
-                    )
+        # Campos obrigatórios
+        data = cleaned_data.get('data')
+        valor = cleaned_data.get('valor')
+        historico = cleaned_data.get('historico')
+        
+        if not data:
+            raise forms.ValidationError({'data': 'Data é obrigatória.'})
+        
+        if valor is None:
+            raise forms.ValidationError({'valor': 'Valor é obrigatório.'})
+        
+        if not historico:
+            raise forms.ValidationError({'historico': 'Histórico é obrigatório.'})
         
         return cleaned_data
+    
+    def save(self, commit=True):
+        """Save customizado"""
+        movimento = super().save(commit=False)
+        
+        # Limpar dados
+        if movimento.historico:
+            movimento.historico = movimento.historico.strip()
+        
+        # Data já define mês e ano automaticamente no modelo
+        
+        if commit:
+            movimento.save()
+            
+            # Log
+            import logging
+            logger = logging.getLogger('synchrobi')
+            action = "atualizado" if self.instance.pk else "criado"
+            logger.info(f'Movimento {action}: {movimento.id} - {movimento.valor_formatado}')
+        
+        return movimento
 
 class MovimentoFiltroForm(forms.Form):
     """Formulário para filtros da lista de movimentos"""
