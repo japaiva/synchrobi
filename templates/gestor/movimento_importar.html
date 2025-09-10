@@ -68,76 +68,28 @@
       <div class="card mb-4">
         <div class="card-header bg-primary text-white">
           <h4 class="mb-0">
-            <i class="fas fa-file-import me-2"></i>
             Importação de Movimentos
           </h4>
-          <p class="mb-0 mt-2 small">
-            Importe movimentos a partir de arquivos Excel (.xlsx/.xls) para um período específico
-          </p>
         </div>
         <div class="card-body">
 
-          <!-- Estatísticas do Sistema -->
-          <div class="card stats-card mb-4">
-            <div class="card-body">
-              <h6 class="card-title text-white mb-3">
-                <i class="fas fa-chart-bar me-2"></i>Situação do Sistema
-              </h6>
-              <div class="row text-center">
-                <div class="col-md-2">
-                  <h4 class="text-white mb-1">{{ stats.unidades_ativas }}</h4>
-                  <small class="text-white-50">Unidades Ativas</small>
-                </div>
-                <div class="col-md-2">
-                  <h4 class="text-white mb-1">{{ stats.unidades_com_allstrategy }}</h4>
-                  <small class="text-white-50">Com All Strategy</small>
-                </div>
-                <div class="col-md-2">
-                  <h4 class="text-white mb-1">{{ stats.contas_externas_ativas }}</h4>
-                  <small class="text-white-50">Contas Externas</small>
-                </div>
-                <div class="col-md-2">
-                  <h4 class="text-white mb-1">{{ stats.centros_custo_ativos }}</h4>
-                  <small class="text-white-50">Centros de Custo</small>
-                </div>
-                <div class="col-md-2">
-                  <h4 class="text-white mb-1">{{ stats.fornecedores_ativos }}</h4>
-                  <small class="text-white-50">Fornecedores</small>
-                </div>
-                <div class="col-md-2">
-                  <h4 class="text-white mb-1">{{ stats.total_movimentos|floatformat:0 }}</h4>
-                  <small class="text-white-50">Movimentos</small>
-                </div>
-              </div>
-            </div>
-          </div>
-          
           <!-- Configuração do Período -->
           <div class="date-inputs">
             <h6 class="mb-3">
-              <i class="fas fa-calendar-alt me-2"></i>
               Período de Importação
             </h6>
             <div class="row">
               <div class="col-md-6">
                 <label for="data_inicio" class="form-label">
-                  <i class="fas fa-calendar-check me-1"></i>
                   Data de Início <span class="text-danger">*</span>
                 </label>
                 <input type="date" id="data_inicio" class="form-control" required>
-                <small class="form-text text-muted">
-                  Data inicial do período que será importado
-                </small>
               </div>
               <div class="col-md-6">
                 <label for="data_fim" class="form-label">
-                  <i class="fas fa-calendar-times me-1"></i>
                   Data de Fim <span class="text-danger">*</span>
                 </label>
                 <input type="date" id="data_fim" class="form-control" required>
-                <small class="form-text text-muted">
-                  Data final do período que será importado
-                </small>
               </div>
             </div>
             
@@ -145,19 +97,14 @@
             <div class="alert alert-warning mt-3 mb-0" id="avisoPerido" style="display: none;">
               <h6 class="alert-heading">
                 <i class="fas fa-exclamation-triangle me-2"></i>
-                Atenção: Dados serão substituídos
+                Atenção: Dados serão substituídos. Esta ação não pode ser desfeita.
               </h6>
-              <p class="mb-0">
-                Todos os movimentos existentes no período selecionado serão <strong>removidos</strong> 
-                antes da importação. Esta ação não pode ser desfeita.
-              </p>
             </div>
           </div>
           
           <!-- Upload Area -->
           <div class="upload-area" id="uploadArea">
             <div id="uploadContent">
-              <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
               <h5>Arraste o arquivo Excel aqui</h5>
               <p class="text-muted mb-3">ou clique para selecionar</p>
               <button type="button" class="btn btn-primary" id="selectFileBtn">
@@ -191,7 +138,7 @@
       <div class="card" id="previewCard" style="display: none;">
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">
-            <i class="fas fa-eye me-2"></i>Preview dos Dados
+            Preview dos Dados
           </h5>
           <div>
             <button type="button" class="btn btn-success" id="confirmarImportacao" disabled>
