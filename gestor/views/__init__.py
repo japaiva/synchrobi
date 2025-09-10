@@ -108,17 +108,26 @@ from .parametro import (
     api_parametro_valor
 )
 
-# Movimento - Importação e gestão de movimentos financeiros
+# Movimento - ATUALIZADO COM NOVAS FUNÇÕES DE IMPORTAÇÃO
 from .movimento import (
+    # CRUD básico de movimentos
     movimento_list,                      # Lista de movimentos com filtros
-    movimento_create,                    # Criar movimento (ADICIONADO)
-    movimento_update,                    # Editar movimento (ADICIONADO)
-    movimento_delete,                    # Excluir movimento (ADICIONADO)
-    movimento_export_excel,              # Exportar para Excel (ADICIONADO)
+    movimento_create,                    # Criar movimento
+    movimento_update,                    # Editar movimento
+    movimento_delete,                    # Excluir movimento
+    
+    # Importação inteligente de Excel
     movimento_importar,                  # Interface de importação
     api_preview_movimentos_excel,        # Preview antes da importação
     api_importar_movimentos_excel,       # Importação real do Excel
     api_validar_periodo_importacao,      # Validação de período
+    
+    # Exportação
+    movimento_export_excel,              # Exportar para Excel
+    
+    # Funções auxiliares de importação
+    extrair_fornecedor_do_historico,     # NOVA: Extrai fornecedor apenas pelo nome
+    processar_linha_excel_atualizada,    # NOVA: Processa linha com lógica correta
 )
 
 # Fornecedor - Gestão de fornecedores
@@ -146,10 +155,22 @@ from .fornecedor import (
 # - centrocusto.py → CRUD modais e árvore de centros de custo
 # - contacontabil.py → CRUD modais e árvore de contas contábeis
 # - contaexterna_inline.py → CRUD inline para códigos externos
-# - movimento.py → Importação e gestão de movimentos financeiros
+# - movimento.py → ✅ ATUALIZADO: Importação inteligente de Excel com período por datas
 # - fornecedor.py → Gestão completa de fornecedores
 # - usuario.py → Gestão de usuários
 # - parametro.py → Gestão de parâmetros
+#
+# ✅ NOVAS FUNCIONALIDADES DE MOVIMENTO IMPLEMENTADAS:
+# - Importação por período de datas (data_inicio/data_fim)
+# - Extração inteligente de fornecedores (apenas nomes, sem números)
+# - Busca de unidades por código All Strategy prioritária
+# - Busca de contas contábeis via códigos externos
+# - Preview detalhado antes da importação
+# - Validação em tempo real do período
+# - Limpeza automática de movimentos existentes
+# - Logs detalhados da importação
+# - Criação automática de fornecedores
+# - APIs específicas para cada etapa da importação
 #
 # PADRÃO DA NOVA ARQUITETURA:
 # 1. Visualização hierárquica integrada
@@ -157,6 +178,7 @@ from .fornecedor import (
 # 3. APIs específicas para validação e operações AJAX
 # 4. Templates responsivos e modernos
 # 5. JavaScript otimizado para UX fluida
+# 6. ✅ Importação inteligente com validações robustas
 #
 # FUNCIONALIDADES IMPLEMENTADAS:
 # ✅ Dashboard com estatísticas
@@ -165,29 +187,10 @@ from .fornecedor import (
 # ✅ Sistema de centros de custo com hierarquia
 # ✅ Contas contábeis com estrutura hierárquica
 # ✅ Códigos externos com edição inline
-# ✅ Importação inteligente de movimentos Excel
+# ✅ ⭐ IMPORTAÇÃO INTELIGENTE DE MOVIMENTOS EXCEL ATUALIZADA
 # ✅ Gestão completa de fornecedores
 # ✅ Sistema de usuários e parâmetros
 # ✅ APIs para validação em tempo real
 # ✅ Logs detalhados de auditoria
 # ✅ Exportação para Excel otimizada
 # ✅ Interface moderna e responsiva
-#
-# BENEFÍCIOS DA IMPLEMENTAÇÃO:
-# - Edição mais rápida e intuitiva
-# - Menos cliques para o usuário
-# - Interface mais limpa e moderna
-# - Performance melhorada
-# - Código mais simples e maintível
-# - UX moderna e responsiva
-# - Importação inteligente de dados
-# - Validações em tempo real
-# - Logs completos de auditoria
-# - Sistema escalável e bem documentado
-#
-# IMPORTS CORRIGIDOS E ADICIONADOS:
-# ✅ Adicionadas funções faltantes do movimento.py
-# ✅ Adicionadas APIs específicas de unidade
-# ✅ Organização mais clara por funcionalidade
-# ✅ Comentários detalhados para cada seção
-# ✅ Estrutura padronizada para todos os módulos
