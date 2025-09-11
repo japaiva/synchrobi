@@ -1,5 +1,4 @@
-// static/js/tree-manager.js - VERSÃO ATUALIZADA PARA HIERARQUIA DECLARADA
-// JavaScript unificado para gerenciamento de árvores hierárquicas com suporte a hierarquia declarada
+// static/js/tree-manager.js - VERSÃO ATUALIZADA COM TRATAMENTO ESPECÍFICO PARA CONTAS EXTERNAS
 
 class TreeManager {
     constructor(config) {
@@ -14,7 +13,7 @@ class TreeManager {
             hasCompanyField: config.hasCompanyField || false,
             hasDetailModal: config.hasDetailModal || false,
             useId: config.useId || false,
-            isDeclarativeHierarchy: config.isDeclarativeHierarchy || false, // NOVO: hierarquia declarada
+            isDeclarativeHierarchy: config.isDeclarativeHierarchy || false,
             relatedTableConfig: config.relatedTableConfig || null,
             ...config
         };
@@ -251,7 +250,6 @@ class TreeManager {
         const li = document.createElement('li');
         li.className = 'tree-item';
         
-        // Para hierarquia declarada, usar propriedade tem_filhos ou verificar array filhos
         const hasChildren = this.config.isDeclarativeHierarchy ? 
             (item.tem_filhos || (item.filhos && item.filhos.length > 0)) :
             (item.filhos && item.filhos.length > 0);
@@ -282,7 +280,6 @@ class TreeManager {
         const empresaInfo = this.config.hasCompanyField && item.empresa_sigla ? 
             `<small class="text-muted ms-2">(${item.empresa_sigla})</small>` : '';
         
-        // Para hierarquia declarada, usar sempre nivel do item
         const nivelDisplay = this.config.isDeclarativeHierarchy ? item.nivel : this.calculateLevel(item.codigo);
         
         const actionButtons = this.createActionButtons(item);
@@ -335,20 +332,33 @@ class TreeManager {
             </button>
         `;
         
-        // 3. Botão Genérico para Tabela Relacionada
+        // 3. Botão para Tabela Relacionada - COM TRATAMENTO ESPECÍFICO PARA CONTAS EXTERNAS
         if (this.config.relatedTableConfig) {
             const config = this.config.relatedTableConfig;
             const configKey = config.configKey;
-            const relatedConfig = window.relatedTableConfigs?.[configKey];
             
-            if (relatedConfig) {
+            // VERIFICAR SE É CONTAS EXTERNAS E SE EXISTE FUNÇÃO ESPECÍFICA
+            if (configKey === 'external_codes' && typeof window.openExternalAccountModal === 'function') {
+                // Usar implementação específica das contas externas
                 buttons += `
-                    <button class="btn btn-sm ${relatedConfig.buttonClass || 'btn-outline-warning'}" 
-                            onclick="openRelatedTableModal(event, '${item.codigo}', '${configKey}')" 
-                            title="${relatedConfig.buttonLabel || 'Itens Relacionados'}">
-                        <i class="${relatedConfig.buttonIcon || 'fas fa-list'}"></i>
+                    <button class="btn btn-sm btn-outline-warning" 
+                            onclick="window.openExternalAccountModal('${item.codigo}')" 
+                            title="Códigos Externos">
+                        <i class="fas fa-link"></i>
                     </button>
                 `;
+            } else {
+                // Usar implementação genérica para outros casos
+                const relatedConfig = window.relatedTableConfigs?.[configKey];
+                if (relatedConfig) {
+                    buttons += `
+                        <button class="btn btn-sm ${relatedConfig.buttonClass || 'btn-outline-warning'}" 
+                                onclick="openRelatedTableModal(event, '${item.codigo}', '${configKey}')" 
+                                title="${relatedConfig.buttonLabel || 'Itens Relacionados'}">
+                            <i class="${relatedConfig.buttonIcon || 'fas fa-list'}"></i>
+                        </button>
+                    `;
+                }
             }
         }
         
@@ -428,8 +438,6 @@ class TreeManager {
     }
     
     calculateLevel(codigo) {
-        // Para hierarquia declarada, usar nivel do item diretamente
-        // Esta função é mantida para compatibilidade com hierarquia baseada em código
         if (this.config.isDeclarativeHierarchy) {
             return 1; // Fallback, mas o nivel deve vir do item
         }
@@ -676,9 +684,70 @@ window.addNewRelatedItem = function(parentCode, configKey) {
     }
 };
 
+// FUNÇÃO ESPECÍFICA PARA CONTAS EXTERNAS - MANTER COMPATIBILIDADE
+window.openExternalAccountModal = function(contaCodigo) {
+    const modalId = 'relatedTableModal_external_codes';
+    let modal = document.getElementById(modalId);
+    
+    if (!modal) {
+        // Criar modal se não existir
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="fas fa-link me-2"></i>Códigos Externos - ${contaCodigo}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" id="${modalId}Body">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary mb-3"></div>
+                                <div>Carregando códigos externos...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        modal = document.getElementById(modalId);
+    }
+    
+    const body = document.getElementById(`${modalId}Body`);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Carregar conteúdo específico
+    fetch(`/gestor/contas-externas/?conta=${encodeURIComponent(contaCodigo)}`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+        }
+    })
+    .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        return response.text();
+    })
+    .then(html => {
+        body.innerHTML = html;
+    })
+    .catch(error => {
+        body.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Erro ao carregar códigos externos</h6>
+                <p class="mb-2">Erro: ${error.message}</p>
+                <button class="btn btn-sm btn-outline-danger" onclick="window.openExternalAccountModal('${contaCodigo}')">
+                    <i class="fas fa-retry me-1"></i> Tentar Novamente
+                </button>
+            </div>
+        `;
+    });
+};
+
 // CONFIGURAÇÕES GLOBAIS para diferentes tipos de tabelas relacionadas
 window.relatedTableConfigs = {
-    // Códigos Externos para Contas Contábeis
+    // Códigos Externos para Contas Contábeis - SERÁ IGNORADO EM FAVOR DA FUNÇÃO ESPECÍFICA
     "external_codes": {
         buttonLabel: "Códigos Externos",
         buttonIcon: "fas fa-link",
