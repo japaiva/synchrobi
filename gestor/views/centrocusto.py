@@ -1,4 +1,4 @@
-# gestor/views/centrocusto.py - CRUD corrigidas para modal
+# gestor/views/centrocusto.py - CORRIGIDO PARA HIERARQUIA DECLARADA
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -19,73 +19,17 @@ logger = logging.getLogger('synchrobi')
 
 @login_required
 def centrocusto_tree_view(request):
-    """Visualização hierárquica OTIMIZADA de centros de custo"""
-    
-    # OTIMIZAÇÃO 1: Query única otimizada
-    centros_queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
-    
-    # OTIMIZAÇÃO 2: Usar o mapa de hierarquia
-    def construir_arvore_otimizada():
-        # Método otimizado usando mapa de hierarquia
-        hierarchy_map, root_items = CentroCusto.build_hierarchy_map(centros_queryset)
-        
-        def construir_no_otimizado(centro):
-            children_data = hierarchy_map.get(centro.codigo, {}).get('children', [])
-            
-            return {
-                'codigo': centro.codigo,
-                'nome': centro.nome,
-                'tipo': centro.tipo,
-                'nivel': centro.nivel,
-                'ativo': centro.ativo,
-                'descricao': centro.descricao,
-                'tem_filhos': len(children_data) > 0,
-                'data_criacao': centro.data_criacao.isoformat() if centro.data_criacao else None,
-                'data_alteracao': centro.data_alteracao.isoformat() if centro.data_alteracao else None,
-                'filhos': [construir_no_otimizado(filho) for filho in sorted(children_data, key=lambda x: x.codigo)]
-            }
-        
-        return [construir_no_otimizado(raiz) for raiz in sorted(root_items, key=lambda x: x.codigo)]
-    
-    # OTIMIZAÇÃO 3: Calcular stats em uma passada
-    def calcular_stats_otimizado():
-        centros_list = list(centros_queryset)  # Uma única conversão
-        total_centros = len(centros_list)
-        
-        # Contadores em uma única iteração
-        stats_data = {
-            'total': total_centros,
-            'tipo_s': 0,
-            'tipo_a': 0,
-            'contas_por_nivel': {},
-            'niveis_existentes': set()
-        }
-        
-        for centro in centros_list:
-            # Contar por tipo (baseado no campo, não em cálculo)
-            if centro.tipo == 'S':
-                stats_data['tipo_s'] += 1
-            else:
-                stats_data['tipo_a'] += 1
-            
-            # Contar por nível
-            nivel = centro.nivel
-            stats_data['niveis_existentes'].add(nivel)
-            stats_data['contas_por_nivel'][str(nivel)] = stats_data['contas_por_nivel'].get(str(nivel), 0) + 1
-        
-        # Finalizar
-        niveis_list = sorted(stats_data['niveis_existentes'])
-        stats_data.update({
-            'nivel_max': max(niveis_list) if niveis_list else 0,
-            'nivel_min': min(niveis_list) if niveis_list else 0,
-            'niveis_existentes': niveis_list
-        })
-        
-        return stats_data
+    """Visualização hierárquica de centros de custo - HIERARQUIA DECLARADA"""
     
     try:
-        tree_data = construir_arvore_otimizada()
-        stats = calcular_stats_otimizado()
+        # Query única otimizada
+        centros_queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
+        
+        # Construir árvore usando hierarquia declarada
+        tree_data = construir_arvore_declarada(centros_queryset)
+        
+        # Calcular stats
+        stats = calcular_stats_centros(centros_queryset)
         
         context = {
             'tree_data_json': json.dumps(tree_data, ensure_ascii=False, indent=2),
@@ -104,25 +48,28 @@ def centrocusto_tree_view(request):
         
     except Exception as e:
         logger.error(f'Erro na construção da árvore de centros de custo: {str(e)}')
+        
         # Fallback simples
         context = {
             'tree_data_json': '[]',
             'stats': {'total': 0, 'tipo_s': 0, 'tipo_a': 0},
             'error_message': 'Erro ao carregar árvore de centros de custo',
-            # ... resto do context
+            'entity_name': 'Centros de Custo',
+            'entity_singular': 'Centro de Custo',
+            'create_url': 'gestor:centrocusto_create_modal',
+            'update_url_base': '/gestor/centros-custo/',
+            'tree_url': 'gestor:centrocusto_tree',
+            'api_tree_data_url': 'gestor:api_centrocusto_tree_data',
+            'breadcrumb': 'Centros de Custo',
+            'icon': 'fa-bullseye'
         }
         return render(request, 'gestor/centrocusto_tree_main.html', context)
 
-
-
-
 # ===== VIEWS MODAIS =====
-
-# gestor/views/centrocusto.py - View de edição corrigida (substituir apenas esta função)
 
 @login_required
 def centrocusto_update_modal(request, codigo):
-    """Editar centro de custo via modal - VERSÃO CORRIGIDA"""
+    """Editar centro de custo via modal - HIERARQUIA DECLARADA"""
     
     centro = get_object_or_404(CentroCusto, codigo=codigo)
     
@@ -133,15 +80,12 @@ def centrocusto_update_modal(request, codigo):
         
         if form.is_valid():
             try:
-                # USAR TRANSACTION EXPLÍCITA
                 from django.db import transaction
                 
                 with transaction.atomic():
-                    # Save normal
                     centro_editado = form.save()
                     logger.info(f"Centro de custo atualizado: {centro_editado.codigo} - {centro_editado.nome}")
                 
-                # Verificação simples após transação
                 centro_verificacao = CentroCusto.objects.get(codigo=codigo)
                 logger.info(f"Verificação final: {centro_verificacao.nome}")
                 
@@ -152,7 +96,8 @@ def centrocusto_update_modal(request, codigo):
                         'centro': {
                             'codigo': centro_verificacao.codigo,
                             'nome': centro_verificacao.nome,
-                            'tipo': centro_verificacao.tipo
+                            'tipo': centro_verificacao.tipo,
+                            'codigo_pai': centro_verificacao.codigo_pai or ''
                         }
                     })
                 
@@ -199,11 +144,9 @@ def centrocusto_update_modal(request, codigo):
         'is_create': False
     })
 
-# gestor/views/centrocusto.py - View de criação corrigida (substituir apenas esta função)
-
 @login_required
 def centrocusto_create_modal(request):
-    """Criar novo centro de custo via modal - VERSÃO CORRIGIDA"""
+    """Criar novo centro de custo via modal - HIERARQUIA DECLARADA"""
     
     if request.method == 'POST':
         logger.info(f"Criando novo centro de custo")
@@ -215,19 +158,15 @@ def centrocusto_create_modal(request):
             logger.info(f"Formulário válido. Dados: {form.cleaned_data}")
             
             try:
-                # USAR TRANSACTION EXPLÍCITA
                 from django.db import transaction
                 
                 with transaction.atomic():
-                    # Save normal
                     centro = form.save()
-                    logger.info(f"Centro de custo criado: {centro.codigo} - {centro.nome}")
+                    logger.info(f"Centro de custo criado: {centro.codigo} - {centro.nome} (Pai: {centro.codigo_pai or 'Raiz'})")
                 
-                # Verificação simples após transação
                 centro_verificacao = CentroCusto.objects.get(codigo=centro.codigo)
                 logger.info(f"Verificação: centro criado com sucesso - {centro_verificacao.nome}")
                 
-                # Resposta de sucesso
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return JsonResponse({
                         'success': True,
@@ -236,7 +175,8 @@ def centrocusto_create_modal(request):
                             'codigo': centro_verificacao.codigo,
                             'nome': centro_verificacao.nome,
                             'tipo': centro_verificacao.tipo,
-                            'nivel': centro_verificacao.nivel
+                            'nivel': centro_verificacao.nivel,
+                            'codigo_pai': centro_verificacao.codigo_pai or ''
                         }
                     })
                 
@@ -267,35 +207,21 @@ def centrocusto_create_modal(request):
     
     else:
         # GET request - mostrar formulário
-        form = CentroCustoForm()
+        initial_data = {}
         
         # Pré-preencher se veio de um pai
         codigo_pai = request.GET.get('codigo_pai')
-        sugestao_codigo = request.GET.get('sugestao')
-        
         if codigo_pai:
+            initial_data['codigo_pai'] = codigo_pai
+            
             try:
                 centro_pai = CentroCusto.objects.get(codigo=codigo_pai)
-                if sugestao_codigo:
-                    form.initial['codigo'] = sugestao_codigo
-                else:
-                    # Sugerir próximo código
-                    filhos_diretos = centro_pai.get_filhos_diretos()
-                    proxima_sequencia = filhos_diretos.count() + 1
-                    codigo_sugerido = f"{centro_pai.codigo}.{proxima_sequencia:02d}"
-                    form.initial['codigo'] = codigo_sugerido
-                
-                # Informações do pai para o template
-                form.pai_info = {
-                    'codigo': centro_pai.codigo,
-                    'nome': centro_pai.nome,
-                    'tipo_display': centro_pai.get_tipo_display()
-                }
                 logger.info(f"Criação com pai: {centro_pai.codigo} - {centro_pai.nome}")
             except CentroCusto.DoesNotExist:
                 logger.warning(f'Centro pai não encontrado: {codigo_pai}')
+        
+        form = CentroCustoForm(initial=initial_data)
     
-    # Renderizar modal
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return render(request, 'gestor/partials/centrocusto_form_modal.html', {
             'form': form,
@@ -303,7 +229,6 @@ def centrocusto_create_modal(request):
             'is_create': True
         })
     
-    # Fallback para requisições não-AJAX
     context = {
         'form': form,
         'title': 'Novo Centro de Custo',
@@ -311,14 +236,13 @@ def centrocusto_create_modal(request):
     }
     return render(request, 'gestor/centrocusto_form.html', context)
 
-
 @login_required
 @require_POST
 def centrocusto_delete_ajax(request, codigo):
-    """Deletar centro de custo via AJAX"""
+    """Deletar centro de custo via AJAX - HIERARQUIA DECLARADA"""
     centro = get_object_or_404(CentroCusto, codigo=codigo)
     
-    # Verificar se tem filhos
+    # Verificar se tem filhos usando hierarquia declarada
     if centro.tem_filhos:
         filhos_count = centro.get_filhos_diretos().count()
         return JsonResponse({
@@ -349,7 +273,7 @@ def centrocusto_delete_ajax(request, codigo):
 
 @login_required
 def api_centrocusto_tree_data(request):
-    """API OTIMIZADA para dados da árvore de centros de custo"""
+    """API para dados da árvore - HIERARQUIA DECLARADA"""
     
     try:
         # Obter filtros
@@ -358,17 +282,15 @@ def api_centrocusto_tree_data(request):
         tipo = request.GET.get('tipo', '')
         ativo = request.GET.get('ativo', '')
         
-        # OTIMIZAÇÃO: Query única com todos os filtros
+        # Query com filtros
         queryset = CentroCusto.objects.order_by('codigo')
         
-        # Aplicar filtros no banco de dados
         if ativo != '':
             queryset = queryset.filter(ativo=ativo.lower() == 'true')
         else:
             queryset = queryset.filter(ativo=True)
         
         if search:
-            from django.db.models import Q
             queryset = queryset.filter(
                 Q(codigo__icontains=search) |
                 Q(nome__icontains=search) |
@@ -381,42 +303,16 @@ def api_centrocusto_tree_data(request):
         if tipo:
             queryset = queryset.filter(tipo=tipo)
         
-        # OTIMIZAÇÃO: Usar mapa de hierarquia para dados filtrados
-        hierarchy_map, root_items = CentroCusto.build_hierarchy_map(queryset)
+        # Construir árvore
+        tree_data = construir_arvore_declarada(queryset)
         
-        def construir_no_api(centro):
-            children_data = hierarchy_map.get(centro.codigo, {}).get('children', [])
-            
-            return {
-                'codigo': centro.codigo,
-                'nome': centro.nome,
-                'tipo': centro.tipo,
-                'nivel': centro.nivel,
-                'ativo': centro.ativo,
-                'descricao': centro.descricao,
-                'tem_filhos': len(children_data) > 0,
-                'filhos': [construir_no_api(filho) for filho in sorted(children_data, key=lambda x: x.codigo)]
-            }
-        
-        tree_data = [construir_no_api(raiz) for raiz in sorted(root_items, key=lambda x: x.codigo)]
-        
-        # Stats dos dados filtrados
-        centros_filtrados = list(queryset)
-        total_filtrados = len(centros_filtrados)
-        sinteticos = sum(1 for c in centros_filtrados if c.tipo == 'S')
-        analiticos = total_filtrados - sinteticos
-        
-        stats = {
-            'total': total_filtrados,
-            'tipo_s': sinteticos,
-            'tipo_a': analiticos,
-            'nivel_max': max([c.nivel for c in centros_filtrados]) if centros_filtrados else 0,
-            'filtros_aplicados': {
-                'search': search,
-                'nivel': nivel,
-                'tipo': tipo,
-                'ativo': ativo
-            }
+        # Stats
+        stats = calcular_stats_centros(queryset)
+        stats['filtros_aplicados'] = {
+            'search': search,
+            'nivel': nivel,
+            'tipo': tipo,
+            'ativo': ativo
         }
         
         return JsonResponse({
@@ -434,46 +330,19 @@ def api_centrocusto_tree_data(request):
             'message': str(e)
         })
 
-# ===== VIEWS MANTIDAS PARA COMPATIBILIDADE =====
-
-@login_required
-def centrocusto_list(request):
-    """Lista de centros de custo com filtros - mantida para compatibilidade"""
-    # Redirecionar para a árvore
-    return redirect('gestor:centrocusto_tree')
-
-@login_required
-def centrocusto_create(request):
-    """Criar novo centro de custo - mantida para compatibilidade"""
-    return centrocusto_create_modal(request)
-
-@login_required
-def centrocusto_update(request, codigo):
-    """Editar centro de custo - mantida para compatibilidade"""
-    return centrocusto_update_modal(request, codigo)
-
-@login_required
-def centrocusto_delete(request, codigo):
-    """Deletar centro de custo - mantida para compatibilidade"""
-    if request.method == 'POST':
-        return centrocusto_delete_ajax(request, codigo)
-    
-    # Para GET, redirecionar para árvore
-    return redirect('gestor:centrocusto_tree')
-
 @login_required
 def api_validar_codigo_centrocusto(request):
-    """API para validar código de centro de custo em tempo real"""
+    """API para validar código - HIERARQUIA DECLARADA"""
     codigo = request.GET.get('codigo', '').strip()
     centro_codigo = request.GET.get('atual', None)
     
     if not codigo:
         return JsonResponse({'valid': False, 'error': 'Código é obrigatório'})
     
-    # Verificar formato
+    # Verificar formato básico
     import re
-    if not re.match(r'^[\d\.]+$', codigo):
-        return JsonResponse({'valid': False, 'error': 'Código deve conter apenas números e pontos'})
+    if not re.match(r'^[\w\.-]+$', codigo):
+        return JsonResponse({'valid': False, 'error': 'Código deve conter apenas letras, números, pontos e hífens'})
     
     # Verificar duplicação
     query = CentroCusto.objects.filter(codigo=codigo)
@@ -483,28 +352,145 @@ def api_validar_codigo_centrocusto(request):
     if query.exists():
         return JsonResponse({'valid': False, 'error': 'Já existe um centro de custo com este código'})
     
-    # Verificar hierarquia
-    info = {'valid': True}
-    
-    if '.' in codigo:
-        temp_centro = CentroCusto(codigo=codigo)
-        pai = temp_centro.encontrar_pai_hierarquico()
-        
-        if pai:
-            info['pai'] = {
-                'codigo': pai.codigo,
-                'nome': pai.nome,
-                'tipo_display': pai.get_tipo_display()
-            }
-        else:
-            partes = codigo.split('.')
-            codigo_pai = '.'.join(partes[:-1])
-            info['valid'] = False
-            info['error'] = f'Centro de custo pai com código "{codigo_pai}" não existe'
-    else:
-        info['pai'] = None
-    
-    # Calcular nível
-    info['nivel'] = codigo.count('.') + 1
+    # Para hierarquia declarada, pai será selecionado no formulário
+    info = {
+        'valid': True,
+        'message': 'Código válido'
+    }
     
     return JsonResponse(info)
+
+# ===== FUNÇÕES AUXILIARES =====
+
+def construir_arvore_declarada(queryset):
+    """Constrói árvore hierárquica usando campo codigo_pai"""
+    
+    centros_list = list(queryset)
+    centros_dict = {centro.codigo: centro for centro in centros_list}
+    
+    # Mapear filhos por pai
+    filhos_por_pai = {}
+    centros_raiz = []
+    
+    for centro in centros_list:
+        if centro.codigo_pai:
+            # Tem pai - adicionar à lista de filhos do pai
+            if centro.codigo_pai not in filhos_por_pai:
+                filhos_por_pai[centro.codigo_pai] = []
+            filhos_por_pai[centro.codigo_pai].append(centro)
+        else:
+            # É raiz
+            centros_raiz.append(centro)
+    
+    def construir_no(centro):
+        """Constrói um nó da árvore recursivamente"""
+        filhos = filhos_por_pai.get(centro.codigo, [])
+        filhos_ordenados = sorted(filhos, key=lambda x: x.codigo)
+        
+        return {
+            'codigo': centro.codigo,
+            'nome': centro.nome,
+            'tipo': centro.tipo,
+            'nivel': centro.nivel,
+            'ativo': centro.ativo,
+            'descricao': centro.descricao,
+            'codigo_pai': centro.codigo_pai or '',
+            'tem_filhos': len(filhos) > 0,
+            'data_criacao': centro.data_criacao.isoformat() if centro.data_criacao else None,
+            'data_alteracao': centro.data_alteracao.isoformat() if centro.data_alteracao else None,
+            'filhos': [construir_no(filho) for filho in filhos_ordenados]
+        }
+    
+    # Construir árvore a partir das raízes
+    centros_raiz_ordenados = sorted(centros_raiz, key=lambda x: x.codigo)
+    return [construir_no(raiz) for raiz in centros_raiz_ordenados]
+
+def calcular_stats_centros(queryset):
+    """Calcula estatísticas dos centros de custo"""
+    centros_list = list(queryset)
+    total = len(centros_list)
+    
+    if total == 0:
+        return {
+            'total': 0,
+            'tipo_s': 0,
+            'tipo_a': 0,
+            'nivel_max': 0,
+            'contas_por_nivel': {}
+        }
+    
+    # Contadores
+    tipo_s = sum(1 for c in centros_list if c.tipo == 'S')
+    tipo_a = sum(1 for c in centros_list if c.tipo == 'A')
+    
+    # Níveis
+    niveis = [c.nivel for c in centros_list]
+    nivel_max = max(niveis)
+    nivel_min = min(niveis)
+    
+    # Contar por nível
+    contas_por_nivel = {}
+    for nivel in range(nivel_min, nivel_max + 1):
+        count = sum(1 for n in niveis if n == nivel)
+        contas_por_nivel[str(nivel)] = count
+    
+    return {
+        'total': total,
+        'tipo_s': tipo_s,
+        'tipo_a': tipo_a,
+        'nivel_max': nivel_max,
+        'nivel_min': nivel_min,
+        'contas_por_nivel': contas_por_nivel,
+        'niveis_existentes': sorted(list(set(niveis)))
+    }
+
+# ===== VIEWS MANTIDAS PARA COMPATIBILIDADE =====
+
+@login_required
+def centrocusto_list(request):
+    """Lista de centros de custo - redireciona para árvore"""
+    return redirect('gestor:centrocusto_tree')
+
+@login_required
+def centrocusto_create(request):
+    """Criar centro de custo - compatibilidade"""
+    return centrocusto_create_modal(request)
+
+@login_required
+def centrocusto_update(request, codigo):
+    """Editar centro de custo - compatibilidade"""
+    return centrocusto_update_modal(request, codigo)
+
+@login_required
+def centrocusto_delete(request, codigo):
+    """Deletar centro de custo - compatibilidade"""
+    if request.method == 'POST':
+        return centrocusto_delete_ajax(request, codigo)
+    return redirect('gestor:centrocusto_tree')
+
+@login_required
+def api_centro_custo_detalhes(request, codigo):
+    """API para obter detalhes de um centro de custo"""
+    try:
+        centro = get_object_or_404(CentroCusto, codigo=codigo, ativo=True)
+        
+        return JsonResponse({
+            'success': True,
+            'centro': {
+                'codigo': centro.codigo,
+                'nome': centro.nome,
+                'tipo': centro.tipo,
+                'nivel': centro.nivel,
+                'ativo': centro.ativo,
+                'descricao': centro.descricao,
+                'codigo_pai': centro.codigo_pai or '',
+                'tem_filhos': centro.tem_filhos
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f'Erro ao buscar detalhes do centro {codigo}: {str(e)}')
+        return JsonResponse({
+            'success': False,
+            'error': 'Centro de custo não encontrado'
+        })

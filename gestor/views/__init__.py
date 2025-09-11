@@ -31,9 +31,7 @@ from .unidade_tree import (
     unidade_tree_view,               # View principal da árvore (PRINCIPAL)
     unidade_tree_data,               # API com filtros avançados
     unidade_tree_search,             # API de busca rápida
-    unidade_tree_export,             # API de export
-    build_tree_structure,            # Função auxiliar (compatibilidade)
-    calculate_tree_stats             # Função auxiliar (compatibilidade)
+    unidade_tree_export,             # API de exportação para Excel
 )
 
 # Centro Custo - Nova arquitetura focada na árvore
@@ -49,6 +47,7 @@ from .centrocusto import (
     # APIs para árvore
     api_centrocusto_tree_data,       # API com filtros avançados
     api_validar_codigo_centrocusto,  # API para validação de código
+    api_centro_custo_detalhes,       # API para detalhes do centro de custo
     
     # Views mantidas para compatibilidade (redirecionam)
     centrocusto_list,                # Redireciona para árvore

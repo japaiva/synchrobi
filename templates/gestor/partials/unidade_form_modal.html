@@ -1,4 +1,4 @@
-<!-- gestor/templates/gestor/partials/unidade_form_modal.html -->
+<!-- gestor/templates/gestor/partials/unidade_form_modal.html - AJUSTADO PARA HIERARQUIA DECLARADA -->
 <form method="post" action="{% if is_create %}{% url 'gestor:unidade_create_modal' %}{% else %}{% url 'gestor:unidade_update_modal' unidade.id %}{% endif %}" novalidate>
     {% csrf_token %}
 
@@ -10,16 +10,15 @@
         </div>
     {% endif %}
     
-    <!-- Informações do Pai (se existir) -->
-    {% if form.pai_info %}
-    <div class="alert alert-info mb-4">
+    <!-- Informações do Pai Selecionado -->
+    <div class="alert alert-info mb-4" id="pai-info" style="display: none;">
         <h6 class="alert-heading mb-2">
             <i class="fas fa-sitemap me-2"></i>Unidade Superior
         </h6>
-        <strong>{{ form.pai_info.codigo }}</strong> - {{ form.pai_info.nome }}
-        <br>
+        <div id="pai-detalhes">
+            <!-- Será preenchido via JavaScript -->
+        </div>
     </div>
-    {% endif %}
     
     <!-- Informações Principais -->
     <div class="card shadow-sm mb-4">
@@ -31,26 +30,51 @@
         </div>
         <div class="card-body">
             <div class="row g-3">
-                <!-- Primeira linha: Código, Empresa e Código All Strategy -->
-                <div class="col-md-4">
+                <!-- Primeira linha: Código e Unidade Pai -->
+                <div class="col-md-6">
                     <label for="{{ form.codigo.id_for_label }}" class="form-label">
                         Código Hierárquico <span class="text-danger">*</span>
                     </label>
                     {{ form.codigo }}
                     {% if form.codigo.errors %}
-                        <div class="text-danger small mt-1">
+                        <div class="invalid-feedback d-block">
                             {% for error in form.codigo.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
+                    <div class="form-text">{{ form.codigo.help_text }}</div>
                 </div>
                 
+                <div class="col-md-6">
+                    <label for="{{ form.codigo_pai.id_for_label }}" class="form-label">
+                        Unidade Pai
+                    </label>
+                    {{ form.codigo_pai }}
+                    {% if form.codigo_pai.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.codigo_pai.errors %}{{ error }}{% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="form-text">{{ form.codigo_pai.help_text }}</div>
+                    
+                    <!-- Validação em tempo real do pai -->
+                    <div id="validacao-pai" class="mt-2" style="display: none;">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" id="loading-pai" style="display: none;">
+                                <span class="visually-hidden">Validando...</span>
+                            </div>
+                            <div id="resultado-pai"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Segunda linha: Empresa, Código All Strategy e Tipo -->
                 <div class="col-md-4">
                     <label for="{{ form.empresa.id_for_label }}" class="form-label">
                         Empresa <span class="text-danger">*</span>
                     </label>
                     {{ form.empresa }}
                     {% if form.empresa.errors %}
-                        <div class="text-danger small mt-1">
+                        <div class="invalid-feedback d-block">
                             {% for error in form.empresa.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
@@ -62,34 +86,33 @@
                     </label>
                     {{ form.codigo_allstrategy }}
                     {% if form.codigo_allstrategy.errors %}
-                        <div class="text-danger small mt-1">
+                        <div class="invalid-feedback d-block">
                             {% for error in form.codigo_allstrategy.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
                 </div>
                 
-                <!-- Segunda linha: Informação da Hierarquia e Tipo -->
-                <div class="col-md-6">
-                    <label class="form-label">Unidade Superior</label>
-                    <div class="form-control bg-light" id="unidade-pai-info">
-                        {% if form.instance.pk and form.instance.pai %}
-                            {{ form.instance.pai.codigo }} - {{ form.instance.pai.nome }}
-                        {% elif form.instance.pk %}
-                            <span class="badge bg-primary">Unidade Raiz</span>
-                        {% else %}
-                            <span class="text-muted">Será determinada pelo código</span>
-                        {% endif %}
-                    </div>
-                </div>
-                
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label for="{{ form.tipo.id_for_label }}" class="form-label">
                         Tipo <span class="text-danger">*</span>
                     </label>
                     {{ form.tipo }}
                     {% if form.tipo.errors %}
-                        <div class="text-danger small mt-1">
+                        <div class="invalid-feedback d-block">
                             {% for error in form.tipo.errors %}{{ error }}{% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Terceira linha: Nome e Ativa -->
+                <div class="col-md-9">
+                    <label for="{{ form.nome.id_for_label }}" class="form-label">
+                        Nome da Unidade <span class="text-danger">*</span>
+                    </label>
+                    {{ form.nome }}
+                    {% if form.nome.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.nome.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
                 </div>
@@ -102,21 +125,8 @@
                         </label>
                     </div>
                     {% if form.ativa.errors %}
-                        <div class="text-danger small mt-1">
+                        <div class="invalid-feedback d-block">
                             {% for error in form.ativa.errors %}{{ error }}{% endfor %}
-                        </div>
-                    {% endif %}
-                </div>
-                
-                <!-- Terceira linha: Nome -->
-                <div class="col-md-12">
-                    <label for="{{ form.nome.id_for_label }}" class="form-label">
-                        Nome da Unidade <span class="text-danger">*</span>
-                    </label>
-                    {{ form.nome }}
-                    {% if form.nome.errors %}
-                        <div class="text-danger small mt-1">
-                            {% for error in form.nome.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
                 </div>
@@ -140,7 +150,7 @@
                     </label>
                     {{ form.descricao }}
                     {% if form.descricao.errors %}
-                        <div class="text-danger small mt-1">
+                        <div class="invalid-feedback d-block">
                             {% for error in form.descricao.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
@@ -149,7 +159,7 @@
         </div>
     </div>
     
-    <!-- Validação em Tempo Real -->
+    <!-- Validação em Tempo Real do Código -->
     <div id="validacao-codigo" class="alert" style="display: none;">
         <div class="d-flex align-items-center">
             <div class="spinner-border spinner-border-sm me-2" role="status" id="loading-validacao" style="display: none;">
@@ -173,7 +183,7 @@
             <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">
                 <i class="fas fa-times me-1"></i> Cancelar
             </button>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" id="submitBtn">
                 <i class="fas fa-save me-1"></i> 
                 {% if is_create %}Criar Unidade{% else %}Salvar Alterações{% endif %}
             </button>
@@ -184,36 +194,104 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const codigoInput = document.getElementById('{{ form.codigo.id_for_label }}');
-    const codigoAllStrategyInput = document.getElementById('{{ form.codigo_allstrategy.id_for_label }}');
-    const unidadePaiInfo = document.getElementById('unidade-pai-info');
+    const paiInput = document.getElementById('{{ form.codigo_pai.id_for_label }}');
+    const nomeInput = document.getElementById('{{ form.nome.id_for_label }}');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    const paiInfo = document.getElementById('pai-info');
+    const paiDetalhes = document.getElementById('pai-detalhes');
     const validacaoDiv = document.getElementById('validacao-codigo');
     const loadingValidacao = document.getElementById('loading-validacao');
     const resultadoValidacao = document.getElementById('resultado-validacao');
     
-    let validacaoTimeout = null;
+    // Elementos para validação do pai
+    const validacaoPaiDiv = document.getElementById('validacao-pai');
+    const loadingPai = document.getElementById('loading-pai');
+    const resultadoPai = document.getElementById('resultado-pai');
     
-    function atualizarInfoHierarquia() {
-        const codigo = codigoInput.value.trim();
-        
-        if (!codigo) {
-            unidadePaiInfo.innerHTML = '<span class="text-muted">Digite o código para ver</span>';
+    let validacaoTimeout = null;
+    let validacaoPaiTimeout = null;
+    let codigoValido = {% if form.instance.pk %}true{% else %}false{% endif %};
+    let paiValido = true; // Vazio é válido
+    
+    function validarPai(codigoPai) {
+        if (!codigoPai) {
+            // Vazio é válido (raiz)
+            validacaoPaiDiv.style.display = 'none';
+            paiInfo.style.display = 'none';
+            paiValido = true;
+            atualizarBotaoSubmit();
             return;
         }
         
-        // Validação em tempo real
-        clearTimeout(validacaoTimeout);
-        validacaoTimeout = setTimeout(() => {
-            validarCodigo(codigo);
-        }, 500);
+        // Mostrar loading
+        validacaoPaiDiv.style.display = 'block';
+        validacaoPaiDiv.className = 'mt-2 alert alert-info';
+        loadingPai.style.display = 'inline-block';
+        resultadoPai.textContent = 'Validando unidade pai...';
         
-        // Atualização visual imediata
-        if (codigo.includes('.')) {
-            const partes = codigo.split('.');
-            const codigoPai = partes.slice(0, -1).join('.');
-            unidadePaiInfo.innerHTML = `Código pai: <strong>${codigoPai}</strong>`;
-        } else {
-            unidadePaiInfo.innerHTML = '<span class="badge bg-primary">Unidade Raiz</span>';
-        }
+        // Fazer requisição AJAX para validar
+        fetch(`{% url 'gestor:api_validar_codigo' %}?codigo=${encodeURIComponent(codigoPai)}`)
+        .then(response => response.json())
+        .then(data => {
+            loadingPai.style.display = 'none';
+            
+            if (data.valid) {
+                // Buscar detalhes da unidade pai
+                fetch(`/gestor/api/unidade/${encodeURIComponent(codigoPai)}/`)
+                .then(response => response.json())
+                .then(paiData => {
+                    if (paiData.success) {
+                        const pai = paiData.unidade;
+                        
+                        // Verificar se é sintético
+                        if (pai.tipo === 'A') {
+                            validacaoPaiDiv.className = 'mt-2 alert alert-warning';
+                            resultadoPai.innerHTML = `⚠️ "${pai.codigo} - ${pai.nome}" é analítico. Só unidades sintéticas podem ter sub-unidades.`;
+                            paiValido = false;
+                        } else {
+                            validacaoPaiDiv.className = 'mt-2 alert alert-success';
+                            resultadoPai.innerHTML = `✓ "${pai.codigo} - ${pai.nome}" (Sintético)`;
+                            paiValido = true;
+                            
+                            // Mostrar info do pai
+                            paiDetalhes.innerHTML = `
+                                <strong>${pai.codigo}</strong> - ${pai.nome}
+                                <br><small class="text-muted">Tipo: Sintético</small>
+                            `;
+                            paiInfo.style.display = 'block';
+                        }
+                    } else {
+                        validacaoPaiDiv.className = 'mt-2 alert alert-danger';
+                        resultadoPai.innerHTML = `✗ Unidade pai não encontrada`;
+                        paiValido = false;
+                        paiInfo.style.display = 'none';
+                    }
+                    
+                    atualizarBotaoSubmit();
+                })
+                .catch(error => {
+                    validacaoPaiDiv.className = 'mt-2 alert alert-danger';
+                    resultadoPai.innerHTML = `✗ Unidade pai não encontrada`;
+                    paiValido = false;
+                    paiInfo.style.display = 'none';
+                    atualizarBotaoSubmit();
+                });
+            } else {
+                validacaoPaiDiv.className = 'mt-2 alert alert-danger';
+                resultadoPai.innerHTML = `✗ ${data.error}`;
+                paiValido = false;
+                paiInfo.style.display = 'none';
+                atualizarBotaoSubmit();
+            }
+        })
+        .catch(error => {
+            loadingPai.style.display = 'none';
+            validacaoPaiDiv.className = 'mt-2 alert alert-warning';
+            resultadoPai.textContent = 'Erro ao validar unidade pai';
+            paiValido = false;
+            atualizarBotaoSubmit();
+        });
     }
     
     function validarCodigo(codigo) {
@@ -226,7 +304,7 @@ document.addEventListener('DOMContentLoaded', function() {
         resultadoValidacao.textContent = 'Validando código...';
         
         const unidadeId = {% if form.instance.pk %}{{ form.instance.pk }}{% else %}null{% endif %};
-        let url = `{{ CONFIG.apiValidarCodigoUrl }}?codigo=${encodeURIComponent(codigo)}`;
+        let url = `{% url 'gestor:api_validar_codigo' %}?codigo=${encodeURIComponent(codigo)}`;
         if (unidadeId) {
             url += `&id=${unidadeId}`;
         }
@@ -238,64 +316,95 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (data.valid) {
                 validacaoDiv.className = 'alert alert-success';
-                let msg = `✓ Código válido (Nível ${data.nivel})`;
-                
-                if (data.pai) {
-                    msg += ` - Pai: ${data.pai.codigo}`;
-                    unidadePaiInfo.innerHTML = `
-                        <strong>${data.pai.codigo}</strong> - ${data.pai.nome}
-                        <br><small class="text-muted">${data.pai.tipo_display}</small>
-                    `;
-                } else {
-                    msg += ' - Unidade Raiz';
-                    unidadePaiInfo.innerHTML = '<span class="badge bg-primary">Unidade Raiz</span>';
-                }
-                
-                resultadoValidacao.innerHTML = msg;
+                resultadoValidacao.innerHTML = `✓ ${data.message || 'Código válido'}`;
                 codigoInput.classList.remove('is-invalid');
                 codigoInput.classList.add('is-valid');
+                codigoValido = true;
             } else {
                 validacaoDiv.className = 'alert alert-danger';
                 resultadoValidacao.innerHTML = `✗ ${data.error}`;
                 codigoInput.classList.remove('is-valid');
                 codigoInput.classList.add('is-invalid');
+                codigoValido = false;
             }
+            
+            atualizarBotaoSubmit();
         })
         .catch(error => {
             loadingValidacao.style.display = 'none';
             validacaoDiv.className = 'alert alert-warning';
             resultadoValidacao.textContent = 'Erro ao validar código';
-            console.error('Erro na validação:', error);
+            codigoValido = false;
+            atualizarBotaoSubmit();
         });
     }
     
-    function sugerirCodigoAllStrategy() {
+    function atualizarBotaoSubmit() {
         const codigo = codigoInput.value.trim();
+        const nome = nomeInput.value.trim();
         
-        if (codigo && !codigoAllStrategyInput.value) {
-            const partes = codigo.split('.');
-            const ultimoSegmento = partes[partes.length - 1];
-            if (ultimoSegmento && /^\d+$/.test(ultimoSegmento)) {
-                codigoAllStrategyInput.placeholder = `Sugestão: ${ultimoSegmento}`;
-            }
+        // Habilitar se campos obrigatórios estão preenchidos E validações OK
+        const podeSubmeter = codigoValido && codigo && nome && paiValido;
+        submitBtn.disabled = !podeSubmeter;
+        
+        if (!podeSubmeter) {
+            submitBtn.classList.add('disabled');
+        } else {
+            submitBtn.classList.remove('disabled');
         }
     }
     
     // Eventos
-    codigoInput.addEventListener('input', function() {
-        atualizarInfoHierarquia();
-        sugerirCodigoAllStrategy();
-        
-        // Limpar validações anteriores
-        this.classList.remove('is-valid', 'is-invalid');
-        validacaoDiv.style.display = 'none';
-    });
+    if (paiInput) {
+        paiInput.addEventListener('input', function() {
+            // Limpar validações anteriores
+            this.classList.remove('is-valid', 'is-invalid');
+            
+            // Validação em tempo real
+            clearTimeout(validacaoPaiTimeout);
+            validacaoPaiTimeout = setTimeout(() => {
+                validarPai(this.value.trim());
+            }, 500);
+        });
+    }
+    
+    if (codigoInput) {
+        codigoInput.addEventListener('input', function() {
+            // Limpar validações anteriores
+            this.classList.remove('is-valid', 'is-invalid');
+            validacaoDiv.style.display = 'none';
+            codigoValido = false;
+            
+            // Validação em tempo real
+            clearTimeout(validacaoTimeout);
+            validacaoTimeout = setTimeout(() => {
+                if (this.value.trim()) {
+                    validarCodigo(this.value.trim());
+                }
+            }, 500);
+            
+            atualizarBotaoSubmit();
+        });
+    }
+    
+    if (nomeInput) {
+        nomeInput.addEventListener('input', function() {
+            atualizarBotaoSubmit();
+        });
+    }
     
     // Inicializar
-    atualizarInfoHierarquia();
+    if (paiInput.value.trim()) {
+        validarPai(paiInput.value.trim());
+    }
+    atualizarBotaoSubmit();
     
-    // Foco no primeiro campo
-    codigoInput.focus();
+    // Foco no primeiro campo disponível
+    if (codigoInput && !codigoInput.hasAttribute('readonly')) {
+        codigoInput.focus();
+    } else if (nomeInput) {
+        nomeInput.focus();
+    }
 });
 
 // Função para excluir do modal
@@ -305,12 +414,19 @@ function deleteFromModal(unidadeId, nome) {
     }
     
     // Fechar modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('unidadeModal'));
-    if (modal) {
-        modal.hide();
+    const modalElement = document.querySelector('.modal.show');
+    if (modalElement) {
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+            modal.hide();
+        }
     }
     
     // Chamar função global de exclusão
-    deleteUnidade(null, unidadeId, nome);
+    if (typeof deleteUnidade === 'function') {
+        deleteUnidade(null, unidadeId, nome);
+    } else {
+        alert('Função de exclusão não encontrada');
+    }
 }
 </script>

@@ -54,6 +54,7 @@ urlpatterns = [
     # APIs para árvore de centros de custo
     path('api/centros-custo/tree-data/', views.api_centrocusto_tree_data, name='api_centrocusto_tree_data'),
     path('api/centros-custo/validar-codigo/', views.api_validar_codigo_centrocusto, name='api_validar_codigo_centrocusto'),
+    path('api/centro-custo/<str:codigo>/', views.api_centro_custo_detalhes, name='api_centro_custo_detalhes'),
     
     # Views mantidas para compatibilidade (redirecionam para árvore ou modais)
     path('centros-custo/lista/', views.centrocusto_list, name='centrocusto_list'),

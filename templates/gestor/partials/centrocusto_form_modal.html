@@ -1,4 +1,4 @@
-<!-- gestor/templates/gestor/partials/centrocusto_form_modal.html -->
+<!-- gestor/templates/gestor/partials/centrocusto_form_modal.html - COM VALIDAÇÃO EM TEMPO REAL -->
 <form method="post" action="{% if is_create %}{% url 'gestor:centrocusto_create_modal' %}{% else %}{% url 'gestor:centrocusto_update_modal' centrocusto.codigo %}{% endif %}" novalidate>
     {% csrf_token %}
 
@@ -10,16 +10,15 @@
         </div>
     {% endif %}
     
-    <!-- Informações do Pai (se existir) -->
-    {% if form.pai_info %}
-    <div class="alert alert-info mb-4">
+    <!-- Informações do Pai Selecionado -->
+    <div class="alert alert-info mb-4" id="pai-info" style="display: none;">
         <h6 class="alert-heading mb-2">
             <i class="fas fa-bullseye me-2"></i>Centro de Custo Superior
         </h6>
-        <strong>{{ form.pai_info.codigo }}</strong> - {{ form.pai_info.nome }}
-        <br>
+        <div id="pai-detalhes">
+            <!-- Será preenchido via JavaScript -->
+        </div>
     </div>
-    {% endif %}
     
     <!-- Informações Principais -->
     <div class="card shadow-sm mb-4">
@@ -31,10 +30,10 @@
         </div>
         <div class="card-body">
             <div class="row g-3">
-                <!-- Primeira linha: Código e Tipo -->
+                <!-- Primeira linha: Código e Centro Pai -->
                 <div class="col-md-6">
                     <label for="{{ form.codigo.id_for_label }}" class="form-label">
-                        Código Hierárquico <span class="text-danger">*</span>
+                        Código do Centro <span class="text-danger">*</span>
                     </label>
                     {{ form.codigo }}
                     {% if form.codigo.errors %}
@@ -42,9 +41,34 @@
                             {% for error in form.codigo.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
+                    <div class="form-text">{{ form.codigo.help_text }}</div>
                 </div>
                 
-                <div class="col-md-3">
+                <div class="col-md-6">
+                    <label for="{{ form.codigo_pai.id_for_label }}" class="form-label">
+                        Centro Pai
+                    </label>
+                    {{ form.codigo_pai }}
+                    {% if form.codigo_pai.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.codigo_pai.errors %}{{ error }}{% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="form-text">{{ form.codigo_pai.help_text }}</div>
+                    
+                    <!-- Validação em tempo real do pai -->
+                    <div id="validacao-pai" class="mt-2" style="display: none;">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" id="loading-pai" style="display: none;">
+                                <span class="visually-hidden">Validando...</span>
+                            </div>
+                            <div id="resultado-pai"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Segunda linha: Tipo e Ativo -->
+                <div class="col-md-6">
                     <label for="{{ form.tipo.id_for_label }}" class="form-label">
                         Tipo <span class="text-danger">*</span>
                     </label>
@@ -54,9 +78,10 @@
                             {% for error in form.tipo.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
+                    <div class="form-text">{{ form.tipo.help_text }}</div>
                 </div>
                 
-                <div class="col-md-3">
+                <div class="col-md-6">
                     <div class="form-check form-switch mt-4">
                         {{ form.ativo }}
                         <label class="form-check-label" for="{{ form.ativo.id_for_label }}">
@@ -68,20 +93,6 @@
                             {% for error in form.ativo.errors %}{{ error }}{% endfor %}
                         </div>
                     {% endif %}
-                </div>
-                
-                <!-- Segunda linha: Informação da Hierarquia -->
-                <div class="col-md-12">
-                    <label class="form-label">Centro de Custo Superior</label>
-                    <div class="form-control bg-light" id="centro-pai-info">
-                        {% if form.instance.pk and form.instance.pai %}
-                            {{ form.instance.pai.codigo }} - {{ form.instance.pai.nome }}
-                        {% elif form.instance.pk %}
-                            <span class="badge bg-primary">Centro Raiz</span>
-                        {% else %}
-                            <span class="text-muted">Será determinado pelo código</span>
-                        {% endif %}
-                    </div>
                 </div>
                 
                 <!-- Terceira linha: Nome -->
@@ -125,7 +136,22 @@
         </div>
     </div>
     
-    <!-- Validação em Tempo Real -->
+    <!-- Visualização da Hierarquia -->
+    <div class="card shadow-sm mb-4" id="hierarchy-preview" style="display: none;">
+        <div class="card-header bg-info text-white">
+            <h6 class="card-title mb-0">
+                <i class="fas fa-sitemap me-2"></i>
+                Prévia da Hierarquia
+            </h6>
+        </div>
+        <div class="card-body">
+            <div id="hierarchy-tree">
+                <!-- Será preenchido via JavaScript -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Validação em Tempo Real do Código -->
     <div id="validacao-codigo" class="alert" style="display: none;">
         <div class="d-flex align-items-center">
             <div class="spinner-border spinner-border-sm me-2" role="status" id="loading-validacao" style="display: none;">
@@ -138,9 +164,9 @@
     <!-- Botões de ação -->
     <div class="d-flex justify-content-between align-items-center">
         <div>
-            {% if not is_create and form.instance.pk %}
+            {% if not is_create and centrocusto %}
             <button type="button" class="btn btn-outline-danger" 
-                    onclick="deleteFromModal('{{ form.instance.codigo }}', '{{ form.instance.nome|escapejs }}')">
+                    onclick="deleteFromModal('{{ centrocusto.codigo }}', '{{ centrocusto.nome|escapejs }}')">
                 <i class="fas fa-trash me-1"></i> Excluir
             </button>
             {% endif %}
@@ -160,45 +186,161 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const codigoInput = document.getElementById('{{ form.codigo.id_for_label }}');
-    const centroPaiInfo = document.getElementById('centro-pai-info');
+    const paiInput = document.getElementById('{{ form.codigo_pai.id_for_label }}');
+    const tipoSelect = document.getElementById('{{ form.tipo.id_for_label }}');
+    const nomeInput = document.getElementById('{{ form.nome.id_for_label }}');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    const paiInfo = document.getElementById('pai-info');
+    const paiDetalhes = document.getElementById('pai-detalhes');
+    const hierarchyPreview = document.getElementById('hierarchy-preview');
+    const hierarchyTree = document.getElementById('hierarchy-tree');
     const validacaoDiv = document.getElementById('validacao-codigo');
     const loadingValidacao = document.getElementById('loading-validacao');
     const resultadoValidacao = document.getElementById('resultado-validacao');
-    const submitBtn = document.getElementById('submitBtn');
+    
+    // Elementos para validação do pai
+    const validacaoPaiDiv = document.getElementById('validacao-pai');
+    const loadingPai = document.getElementById('loading-pai');
+    const resultadoPai = document.getElementById('resultado-pai');
     
     let validacaoTimeout = null;
+    let validacaoPaiTimeout = null;
     let codigoValido = {% if form.instance.pk %}true{% else %}false{% endif %};
+    let paiValido = true; // Vazio é válido
     
-    function atualizarInfoHierarquia() {
-        const codigo = codigoInput.value.trim();
-        
-        if (!codigo) {
-            centroPaiInfo.innerHTML = '<span class="text-muted">Digite o código para ver</span>';
-            codigoValido = false;
+    function validarPai(codigoPai) {
+        if (!codigoPai) {
+            // Vazio é válido (raiz)
+            validacaoPaiDiv.style.display = 'none';
+            paiInfo.style.display = 'none';
+            paiValido = true;
             atualizarBotaoSubmit();
+            atualizarPreviewHierarquia();
             return;
         }
         
-        // Validação em tempo real
-        clearTimeout(validacaoTimeout);
-        validacaoTimeout = setTimeout(() => {
-            validarCodigo(codigo);
-        }, 500);
+        // Mostrar loading
+        validacaoPaiDiv.style.display = 'block';
+        validacaoPaiDiv.className = 'mt-2 alert alert-info';
+        loadingPai.style.display = 'inline-block';
+        resultadoPai.textContent = 'Validando centro pai...';
         
-        // Atualização visual imediata
-        if (codigo.includes('.')) {
-            const partes = codigo.split('.');
-            const codigoPai = partes.slice(0, -1).join('.');
-            centroPaiInfo.innerHTML = `Código pai: <strong>${codigoPai}</strong>`;
-        } else {
-            centroPaiInfo.innerHTML = '<span class="badge bg-primary">Centro Raiz</span>';
+        // Fazer requisição AJAX para validar
+        fetch(`{% url 'gestor:api_validar_codigo_centrocusto' %}?codigo=${encodeURIComponent(codigoPai)}`)
+        .then(response => response.json())
+        .then(data => {
+            loadingPai.style.display = 'none';
+            
+            if (data.valid) {
+                // Buscar detalhes do centro pai
+                fetch(`/gestor/api/centro-custo/${encodeURIComponent(codigoPai)}/`)
+                .then(response => response.json())
+                .then(paiData => {
+                    if (paiData.success) {
+                        const pai = paiData.centro;
+                        
+                        // Verificar se é sintético
+                        if (pai.tipo === 'A') {
+                            validacaoPaiDiv.className = 'mt-2 alert alert-warning';
+                            resultadoPai.innerHTML = `⚠️ "${pai.codigo} - ${pai.nome}" é analítico. Só centros sintéticos podem ter sub-centros.`;
+                            paiValido = false;
+                        } else {
+                            validacaoPaiDiv.className = 'mt-2 alert alert-success';
+                            resultadoPai.innerHTML = `✓ "${pai.codigo} - ${pai.nome}" (Sintético)`;
+                            paiValido = true;
+                            
+                            // Mostrar info do pai
+                            paiDetalhes.innerHTML = `
+                                <strong>${pai.codigo}</strong> - ${pai.nome}
+                                <br><small class="text-muted">Tipo: Sintético</small>
+                            `;
+                            paiInfo.style.display = 'block';
+                        }
+                    } else {
+                        validacaoPaiDiv.className = 'mt-2 alert alert-danger';
+                        resultadoPai.innerHTML = `✗ Centro pai não encontrado`;
+                        paiValido = false;
+                        paiInfo.style.display = 'none';
+                    }
+                    
+                    atualizarBotaoSubmit();
+                    atualizarPreviewHierarquia();
+                })
+                .catch(error => {
+                    validacaoPaiDiv.className = 'mt-2 alert alert-danger';
+                    resultadoPai.innerHTML = `✗ Centro pai não encontrado`;
+                    paiValido = false;
+                    paiInfo.style.display = 'none';
+                    atualizarBotaoSubmit();
+                });
+            } else {
+                validacaoPaiDiv.className = 'mt-2 alert alert-danger';
+                resultadoPai.innerHTML = `✗ ${data.error}`;
+                paiValido = false;
+                paiInfo.style.display = 'none';
+                atualizarBotaoSubmit();
+            }
+        })
+        .catch(error => {
+            loadingPai.style.display = 'none';
+            validacaoPaiDiv.className = 'mt-2 alert alert-warning';
+            resultadoPai.textContent = 'Erro ao validar centro pai';
+            paiValido = false;
+            atualizarBotaoSubmit();
+        });
+    }
+    
+    function atualizarPreviewHierarquia() {
+        const codigo = codigoInput.value.trim();
+        const nome = nomeInput.value.trim() || 'Novo Centro';
+        const tipo = tipoSelect.value;
+        const codigoPai = paiInput.value.trim();
+        
+        if (!codigo) {
+            hierarchyPreview.style.display = 'none';
+            return;
         }
+        
+        let htmlTree = '';
+        
+        // Mostrar hierarquia
+        if (codigoPai && paiValido) {
+            htmlTree = `
+                <div class="hierarchy-level">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="fas fa-bullseye text-warning me-2"></i>
+                        <strong>${codigoPai}</strong> - [Centro Pai]
+                        <span class="badge bg-warning text-dark ms-2">Sintético</span>
+                    </div>
+                    <div class="hierarchy-level ms-4">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-arrow-right text-primary me-2"></i>
+                            <strong>${codigo}</strong> - ${nome}
+                            ${tipo ? `<span class="badge ${tipo === 'S' ? 'bg-warning text-dark' : 'bg-success'} ms-2">${tipo === 'S' ? 'Sintético' : 'Analítico'}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            htmlTree = `
+                <div class="hierarchy-level">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-home text-primary me-2"></i>
+                        <strong>${codigo}</strong> - ${nome}
+                        <span class="badge bg-primary ms-2">Centro Raiz</span>
+                        ${tipo ? `<span class="badge ${tipo === 'S' ? 'bg-warning text-dark' : 'bg-success'} ms-2">${tipo === 'S' ? 'Sintético' : 'Analítico'}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        hierarchyTree.innerHTML = htmlTree;
+        hierarchyPreview.style.display = 'block';
     }
     
     function validarCodigo(codigo) {
         if (!codigo) return;
-        
-        console.log('Validando código:', codigo);
         
         // Mostrar loading
         validacaoDiv.style.display = 'block';
@@ -215,25 +357,11 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(url)
         .then(response => response.json())
         .then(data => {
-            console.log('Resultado da validação:', data);
             loadingValidacao.style.display = 'none';
             
             if (data.valid) {
                 validacaoDiv.className = 'alert alert-success';
-                let msg = `✓ Código válido (Nível ${data.nivel})`;
-                
-                if (data.pai) {
-                    msg += ` - Pai: ${data.pai.codigo}`;
-                    centroPaiInfo.innerHTML = `
-                        <strong>${data.pai.codigo}</strong> - ${data.pai.nome}
-                        <br><small class="text-muted">${data.pai.tipo_display}</small>
-                    `;
-                } else {
-                    msg += ' - Centro Raiz';
-                    centroPaiInfo.innerHTML = '<span class="badge bg-primary">Centro Raiz</span>';
-                }
-                
-                resultadoValidacao.innerHTML = msg;
+                resultadoValidacao.innerHTML = `✓ ${data.message}`;
                 codigoInput.classList.remove('is-invalid');
                 codigoInput.classList.add('is-valid');
                 codigoValido = true;
@@ -248,7 +376,6 @@ document.addEventListener('DOMContentLoaded', function() {
             atualizarBotaoSubmit();
         })
         .catch(error => {
-            console.error('Erro na validação:', error);
             loadingValidacao.style.display = 'none';
             validacaoDiv.className = 'alert alert-warning';
             resultadoValidacao.textContent = 'Erro ao validar código';
@@ -259,10 +386,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function atualizarBotaoSubmit() {
         const codigo = codigoInput.value.trim();
-        const nome = document.getElementById('{{ form.nome.id_for_label }}').value.trim();
+        const nome = nomeInput.value.trim();
+        const tipo = tipoSelect.value;
         
-        // Desabilitar se código não é válido ou campos obrigatórios estão vazios
-        const podeSubmeter = codigoValido && codigo && nome;
+        // Habilitar se campos obrigatórios estão preenchidos E validações OK
+        const podeSubmeter = codigoValido && codigo && nome && tipo && paiValido;
         submitBtn.disabled = !podeSubmeter;
         
         if (!podeSubmeter) {
@@ -273,27 +401,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Eventos
-    codigoInput.addEventListener('input', function() {
-        atualizarInfoHierarquia();
-        
-        // Limpar validações anteriores
-        this.classList.remove('is-valid', 'is-invalid');
-        validacaoDiv.style.display = 'none';
-        codigoValido = false;
-        atualizarBotaoSubmit();
-    });
+    if (paiInput) {
+        paiInput.addEventListener('input', function() {
+            // Limpar validações anteriores
+            this.classList.remove('is-valid', 'is-invalid');
+            
+            // Validação em tempo real
+            clearTimeout(validacaoPaiTimeout);
+            validacaoPaiTimeout = setTimeout(() => {
+                validarPai(this.value.trim());
+            }, 500);
+        });
+    }
     
-    // Monitorar campo nome também
-    document.getElementById('{{ form.nome.id_for_label }}').addEventListener('input', atualizarBotaoSubmit);
+    if (codigoInput) {
+        codigoInput.addEventListener('input', function() {
+            // Limpar validações anteriores
+            this.classList.remove('is-valid', 'is-invalid');
+            validacaoDiv.style.display = 'none';
+            codigoValido = false;
+            
+            // Validação em tempo real
+            clearTimeout(validacaoTimeout);
+            validacaoTimeout = setTimeout(() => {
+                if (this.value.trim()) {
+                    validarCodigo(this.value.trim());
+                }
+            }, 500);
+            
+            atualizarPreviewHierarquia();
+            atualizarBotaoSubmit();
+        });
+    }
+    
+    if (nomeInput) {
+        nomeInput.addEventListener('input', function() {
+            atualizarPreviewHierarquia();
+            atualizarBotaoSubmit();
+        });
+    }
+    
+    if (tipoSelect) {
+        tipoSelect.addEventListener('change', function() {
+            atualizarPreviewHierarquia();
+            atualizarBotaoSubmit();
+        });
+    }
     
     // Inicializar
-    atualizarInfoHierarquia();
+    if (paiInput.value.trim()) {
+        validarPai(paiInput.value.trim());
+    }
+    atualizarPreviewHierarquia();
     atualizarBotaoSubmit();
     
-    // Foco no primeiro campo
-    codigoInput.focus();
+    // Foco no primeiro campo disponível
+    if (codigoInput && !codigoInput.hasAttribute('readonly')) {
+        codigoInput.focus();
+    } else if (nomeInput) {
+        nomeInput.focus();
+    }
     
-    console.log('Modal de centro de custo inicializado');
+    console.log('Modal de centro de custo com validação em tempo real inicializado');
 });
 
 // Função para excluir do modal
@@ -303,12 +472,19 @@ function deleteFromModal(codigo, nome) {
     }
     
     // Fechar modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('centroCustoModal'));
-    if (modal) {
-        modal.hide();
+    const modalElement = document.querySelector('.modal.show');
+    if (modalElement) {
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+            modal.hide();
+        }
     }
     
     // Chamar função global de exclusão
-    deleteCentroCusto(null, codigo, nome);
+    if (typeof deleteCentroCusto === 'function') {
+        deleteCentroCusto(null, codigo, nome);
+    } else {
+        alert('Função de exclusão não encontrada');
+    }
 }
 </script>

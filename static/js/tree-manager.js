@@ -1,5 +1,5 @@
-// static/js/tree-manager.js - VERSÃO COMPLETA
-// JavaScript unificado para gerenciamento de árvores hierárquicas com suporte a tabelas relacionadas
+// static/js/tree-manager.js - VERSÃO ATUALIZADA PARA HIERARQUIA DECLARADA
+// JavaScript unificado para gerenciamento de árvores hierárquicas com suporte a hierarquia declarada
 
 class TreeManager {
     constructor(config) {
@@ -14,7 +14,8 @@ class TreeManager {
             hasCompanyField: config.hasCompanyField || false,
             hasDetailModal: config.hasDetailModal || false,
             useId: config.useId || false,
-            relatedTableConfig: config.relatedTableConfig || null, // NOVA FUNCIONALIDADE
+            isDeclarativeHierarchy: config.isDeclarativeHierarchy || false, // NOVO: hierarquia declarada
+            relatedTableConfig: config.relatedTableConfig || null,
             ...config
         };
         
@@ -250,13 +251,17 @@ class TreeManager {
         const li = document.createElement('li');
         li.className = 'tree-item';
         
-        const hasChildren = item.filhos && item.filhos.length > 0;
+        // Para hierarquia declarada, usar propriedade tem_filhos ou verificar array filhos
+        const hasChildren = this.config.isDeclarativeHierarchy ? 
+            (item.tem_filhos || (item.filhos && item.filhos.length > 0)) :
+            (item.filhos && item.filhos.length > 0);
+            
         const isExpanded = this.expandedNodes.has(item.codigo);
         const typeClass = item.tipo === 'A' ? 'analytic' : 'synthetic';
         
         li.innerHTML = this.createNodeHTML(item, hasChildren, isExpanded, typeClass);
         
-        if (hasChildren && isExpanded) {
+        if (hasChildren && isExpanded && item.filhos) {
             const childrenUl = li.querySelector('.tree-children');
             if (childrenUl) {
                 const childrenFragment = document.createDocumentFragment();
@@ -277,10 +282,13 @@ class TreeManager {
         const empresaInfo = this.config.hasCompanyField && item.empresa_sigla ? 
             `<small class="text-muted ms-2">(${item.empresa_sigla})</small>` : '';
         
+        // Para hierarquia declarada, usar sempre nivel do item
+        const nivelDisplay = this.config.isDeclarativeHierarchy ? item.nivel : this.calculateLevel(item.codigo);
+        
         const actionButtons = this.createActionButtons(item);
         
         return `
-            <div class="tree-node level-${item.nivel} ${typeClass}">
+            <div class="tree-node level-${nivelDisplay} ${typeClass}">
                 <div class="tree-info">
                     <div class="tree-content">
                         ${hasChildren ? 
@@ -327,7 +335,7 @@ class TreeManager {
             </button>
         `;
         
-        // 3. NOVO: Botão Genérico para Tabela Relacionada
+        // 3. Botão Genérico para Tabela Relacionada
         if (this.config.relatedTableConfig) {
             const config = this.config.relatedTableConfig;
             const configKey = config.configKey;
@@ -417,6 +425,15 @@ class TreeManager {
             }
         };
         expandRecursive(data);
+    }
+    
+    calculateLevel(codigo) {
+        // Para hierarquia declarada, usar nivel do item diretamente
+        // Esta função é mantida para compatibilidade com hierarquia baseada em código
+        if (this.config.isDeclarativeHierarchy) {
+            return 1; // Fallback, mas o nivel deve vir do item
+        }
+        return codigo.count('.') + 1;
     }
     
     refreshTree() {

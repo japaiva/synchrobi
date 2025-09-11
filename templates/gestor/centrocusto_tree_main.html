@@ -1,4 +1,4 @@
-<!-- ===== 2. CENTROCUSTO_TREE_MAIN.HTML ===== -->
+<!-- gestor/templates/gestor/centrocusto_tree_main.html - HIERARQUIA DECLARADA -->
 {% extends 'gestor/base_gestor.html' %}
 {% load static %}
 
@@ -46,8 +46,8 @@
                 <div class="col-md-8">
                     <input type="text" id="tree-search" class="form-control" placeholder="Buscar centro de custo...">
                 </div>
-                <div class="col-md-8">
-                    <!-- Espaço vazio para manter alinhamento -->
+                <div class="col-md-4">
+                    <!-- Espaço para filtros futuros -->
                 </div>
             </div>
         </div>
@@ -107,7 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
         entityName: 'Centro de Custo',
         hasCompanyField: false,
         hasDetailModal: false,
-        useId: false
+        useId: false,
+        isDeclarativeHierarchy: true  // NOVO: indica hierarquia declarada
     };
     treeManager = new TreeManager(config);
 });

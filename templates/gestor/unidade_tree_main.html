@@ -1,4 +1,4 @@
-<!-- ===== 1. UNIDADE_TREE_MAIN.HTML ===== -->
+<!-- gestor/templates/gestor/unidade_tree_main.html - HIERARQUIA DECLARADA -->
 {% extends 'gestor/base_gestor.html' %}
 {% load static %}
 
@@ -44,8 +44,8 @@
                 <div class="col-md-8">
                     <input type="text" id="tree-search" class="form-control" placeholder="🔍 Buscar unidade...">
                 </div>
-                <div class="col-md-8">
-                    <!-- Espaço vazio para manter alinhamento -->
+                <div class="col-md-4">
+                    <!-- Espaço para filtros futuros -->
                 </div>
             </div>
         </div>
@@ -105,7 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
         entityName: 'Unidade',
         hasCompanyField: true,
         hasDetailModal: true,
-        useId: true
+        useId: true,
+        isDeclarativeHierarchy: true  // ADICIONADO: indica hierarquia declarada
     };
     treeManager = new TreeManager(config);
 });

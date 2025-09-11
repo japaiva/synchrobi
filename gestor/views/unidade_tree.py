@@ -1,4 +1,4 @@
-# gestor/views/unidade_tree.py - Atualizado para arquitetura focada na árvore
+# gestor/views/unidade_tree.py - Atualizado para hierarquia declarada
 
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -12,75 +12,16 @@ logger = logging.getLogger('synchrobi')
 
 @login_required
 def unidade_tree_view(request):
-    """Visualização hierárquica principal de unidades organizacionais"""
+    """Visualização hierárquica principal de unidades organizacionais - HIERARQUIA DECLARADA"""
     
     # Buscar todas as unidades ativas
     unidades = Unidade.objects.filter(ativa=True).select_related('empresa').order_by('codigo')
     
-    # Construir estrutura de árvore usando hierarquia dinâmica
-    def construir_arvore_completa():
-        def construir_no(unidade):
-            filhos_diretos = unidade.get_filhos_diretos().order_by('codigo')
-            return {
-                'id': unidade.id,
-                'codigo': unidade.codigo,
-                'codigo_allstrategy': unidade.codigo_allstrategy,
-                'nome': unidade.nome,
-                'tipo': unidade.tipo,
-                'nivel': unidade.nivel,
-                'ativa': unidade.ativa,
-                'empresa_sigla': unidade.empresa.sigla if unidade.empresa else '',
-                'empresa_nome': unidade.empresa.nome_display if unidade.empresa else '',
-                'descricao': unidade.descricao,
-                'tem_filhos': unidade.tem_filhos,
-                'data_criacao': unidade.data_criacao.isoformat() if unidade.data_criacao else None,
-                'data_alteracao': unidade.data_alteracao.isoformat() if unidade.data_alteracao else None,
-                'filhos': [construir_no(filho) for filho in filhos_diretos]
-            }
-        
-        # Buscar raízes (nível 1) e construir árvore completa
-        raizes = [u for u in unidades if u.nivel == 1]
-        return [construir_no(raiz) for raiz in raizes]
-    
-    tree_data = construir_arvore_completa()
+    # Construir estrutura de árvore usando hierarquia declarada
+    tree_data = construir_arvore_declarada(unidades)
     
     # Calcular estatísticas detalhadas
-    def calcular_stats():
-        unidades_list = list(unidades)
-        total_unidades = len(unidades_list)
-        
-        # Contar por tipo
-        unidades_sinteticas = sum(1 for u in unidades_list if u.tem_filhos)
-        unidades_analiticas = total_unidades - unidades_sinteticas
-        
-        # Contar por nível
-        niveis_existentes = sorted(set(u.nivel for u in unidades_list))
-        contas_por_nivel = {
-            str(nivel): len([u for u in unidades_list if u.nivel == nivel]) 
-            for nivel in niveis_existentes
-        }
-        
-        # Contar por empresa
-        empresas_stats = {}
-        for unidade in unidades_list:
-            if unidade.empresa:
-                sigla = unidade.empresa.sigla
-                if sigla not in empresas_stats:
-                    empresas_stats[sigla] = 0
-                empresas_stats[sigla] += 1
-        
-        return {
-            'total': total_unidades,
-            'tipo_s': unidades_sinteticas,
-            'tipo_a': unidades_analiticas,
-            'nivel_max': max(niveis_existentes) if niveis_existentes else 0,
-            'nivel_min': min(niveis_existentes) if niveis_existentes else 0,
-            'contas_por_nivel': contas_por_nivel,
-            'empresas_stats': empresas_stats,
-            'niveis_existentes': niveis_existentes
-        }
-    
-    stats = calcular_stats()
+    stats = calcular_stats_unidades(unidades)
     
     context = {
         'tree_data_json': json.dumps(tree_data, ensure_ascii=False, indent=2),
@@ -100,7 +41,7 @@ def unidade_tree_view(request):
 
 @login_required
 def unidade_tree_data(request):
-    """API para dados da árvore de unidades com filtros avançados"""
+    """API para dados da árvore de unidades com filtros avançados - HIERARQUIA DECLARADA"""
     
     try:
         # Obter filtros da requisição
@@ -137,60 +78,17 @@ def unidade_tree_data(request):
         if empresa:
             queryset = queryset.filter(empresa__sigla=empresa)
         
-        # Construir árvore filtrada
-        def construir_arvore_filtrada():
-            unidades_filtradas = list(queryset)
-            
-            def construir_no(unidade):
-                # Buscar filhos que também passaram pelo filtro
-                filhos_filtrados = [
-                    u for u in unidades_filtradas 
-                    if u.pai and u.pai.id == unidade.id
-                ]
-                
-                return {
-                    'id': unidade.id,
-                    'codigo': unidade.codigo,
-                    'codigo_allstrategy': unidade.codigo_allstrategy,
-                    'nome': unidade.nome,
-                    'tipo': unidade.tipo,
-                    'nivel': unidade.nivel,
-                    'ativa': unidade.ativa,
-                    'empresa_sigla': unidade.empresa.sigla if unidade.empresa else '',
-                    'empresa_nome': unidade.empresa.nome_display if unidade.empresa else '',
-                    'descricao': unidade.descricao,
-                    'tem_filhos': len(filhos_filtrados) > 0,
-                    'filhos': [construir_no(filho) for filho in sorted(filhos_filtrados, key=lambda x: x.codigo)]
-                }
-            
-            # Encontrar raízes (unidades sem pai ou com pai fora do filtro)
-            raizes = []
-            for unidade in unidades_filtradas:
-                if unidade.nivel == 1 or not any(u.id == unidade.pai.id for u in unidades_filtradas if unidade.pai):
-                    raizes.append(unidade)
-            
-            return [construir_no(raiz) for raiz in sorted(raizes, key=lambda x: x.codigo)]
-        
-        tree_data = construir_arvore_filtrada()
+        # Construir árvore filtrada usando hierarquia declarada
+        tree_data = construir_arvore_declarada(queryset)
         
         # Calcular estatísticas dos dados filtrados
-        unidades_filtradas = list(queryset)
-        total_filtradas = len(unidades_filtradas)
-        sinteticas_filtradas = sum(1 for u in unidades_filtradas if u.tem_filhos)
-        analiticas_filtradas = total_filtradas - sinteticas_filtradas
-        
-        stats = {
-            'total': total_filtradas,
-            'tipo_s': sinteticas_filtradas,
-            'tipo_a': analiticas_filtradas,
-            'nivel_max': max([u.nivel for u in unidades_filtradas]) if unidades_filtradas else 0,
-            'filtros_aplicados': {
-                'search': search,
-                'nivel': nivel,
-                'tipo': tipo,
-                'empresa': empresa,
-                'ativa': ativa
-            }
+        stats = calcular_stats_unidades(queryset)
+        stats['filtros_aplicados'] = {
+            'search': search,
+            'nivel': nivel,
+            'tipo': tipo,
+            'empresa': empresa,
+            'ativa': ativa
         }
         
         return JsonResponse({
@@ -208,6 +106,106 @@ def unidade_tree_data(request):
             'message': str(e)
         })
 
+def construir_arvore_declarada(queryset):
+    """Constrói árvore hierárquica usando campo codigo_pai"""
+    
+    # Converter para lista
+    unidades_list = list(queryset)
+    
+    # Mapear unidades por código
+    unidades_dict = {unidade.codigo: unidade for unidade in unidades_list}
+    
+    # Mapear filhos por pai
+    filhos_por_pai = {}
+    unidades_raiz = []
+    
+    for unidade in unidades_list:
+        if unidade.codigo_pai:
+            # Tem pai - adicionar à lista de filhos do pai
+            if unidade.codigo_pai not in filhos_por_pai:
+                filhos_por_pai[unidade.codigo_pai] = []
+            filhos_por_pai[unidade.codigo_pai].append(unidade)
+        else:
+            # É raiz
+            unidades_raiz.append(unidade)
+    
+    def construir_no(unidade):
+        """Constrói um nó da árvore recursivamente"""
+        filhos = filhos_por_pai.get(unidade.codigo, [])
+        filhos_ordenados = sorted(filhos, key=lambda x: x.codigo)
+        
+        return {
+            'id': unidade.id,
+            'codigo': unidade.codigo,
+            'codigo_allstrategy': unidade.codigo_allstrategy,
+            'nome': unidade.nome,
+            'tipo': unidade.tipo,
+            'nivel': unidade.nivel,
+            'ativa': unidade.ativa,
+            'empresa_sigla': unidade.empresa.sigla if unidade.empresa else '',
+            'empresa_nome': unidade.empresa.nome_display if unidade.empresa else '',
+            'descricao': unidade.descricao,
+            'codigo_pai': unidade.codigo_pai or '',
+            'tem_filhos': len(filhos) > 0,
+            'data_criacao': unidade.data_criacao.isoformat() if unidade.data_criacao else None,
+            'data_alteracao': unidade.data_alteracao.isoformat() if unidade.data_alteracao else None,
+            'filhos': [construir_no(filho) for filho in filhos_ordenados]
+        }
+    
+    # Construir árvore a partir das raízes
+    unidades_raiz_ordenadas = sorted(unidades_raiz, key=lambda x: x.codigo)
+    return [construir_no(raiz) for raiz in unidades_raiz_ordenadas]
+
+def calcular_stats_unidades(queryset):
+    """Calcula estatísticas das unidades"""
+    unidades_list = list(queryset)
+    total = len(unidades_list)
+    
+    if total == 0:
+        return {
+            'total': 0,
+            'tipo_s': 0,
+            'tipo_a': 0,
+            'nivel_max': 0,
+            'contas_por_nivel': {}
+        }
+    
+    # Contadores
+    tipo_s = sum(1 for u in unidades_list if u.tem_filhos)
+    tipo_a = total - tipo_s
+    
+    # Níveis
+    niveis = [u.nivel for u in unidades_list]
+    nivel_max = max(niveis)
+    nivel_min = min(niveis)
+    
+    # Contar por nível
+    contas_por_nivel = {}
+    for nivel in range(nivel_min, nivel_max + 1):
+        count = sum(1 for n in niveis if n == nivel)
+        contas_por_nivel[str(nivel)] = count
+    
+    # Contar por empresa
+    empresas_stats = {}
+    for unidade in unidades_list:
+        if unidade.empresa:
+            sigla = unidade.empresa.sigla
+            if sigla not in empresas_stats:
+                empresas_stats[sigla] = 0
+            empresas_stats[sigla] += 1
+    
+    return {
+        'total': total,
+        'tipo_s': tipo_s,
+        'tipo_a': tipo_a,
+        'nivel_max': nivel_max,
+        'nivel_min': nivel_min,
+        'contas_por_nivel': contas_por_nivel,
+        'empresas_stats': empresas_stats,
+        'niveis_existentes': sorted(list(set(niveis)))
+    }
+
+# Manter outras funções existentes para compatibilidade
 @login_required
 def unidade_tree_search(request):
     """API específica para busca rápida na árvore"""
@@ -235,7 +233,7 @@ def unidade_tree_search(request):
         results = []
         for unidade in unidades:
             # Construir caminho hierárquico para contexto
-            caminho = unidade.get_caminho_hierarquico()
+            caminho = unidade.get_caminho_completo()
             caminho_texto = ' > '.join([f"{u.codigo} {u.nome}" for u in caminho])
             
             results.append({
@@ -283,35 +281,16 @@ def unidade_tree_export(request):
         
         if formato == 'json':
             # Export JSON estruturado
-            def construir_no_export(unidade):
-                filhos = unidade.get_filhos_diretos()
-                if not apenas_ativas:
-                    filhos = filhos.filter(ativa=True)
-                
-                return {
-                    'codigo': unidade.codigo,
-                    'codigo_allstrategy': unidade.codigo_allstrategy,
-                    'nome': unidade.nome,
-                    'tipo': unidade.tipo,
-                    'tipo_display': unidade.get_tipo_display(),
-                    'nivel': unidade.nivel,
-                    'ativa': unidade.ativa,
-                    'empresa_sigla': unidade.empresa.sigla if unidade.empresa else None,
-                    'empresa_nome': unidade.empresa.nome_display if unidade.empresa else None,
-                    'descricao': unidade.descricao,
-                    'data_criacao': unidade.data_criacao.isoformat() if unidade.data_criacao else None,
-                    'filhos': [construir_no_export(filho) for filho in filhos.order_by('codigo')]
-                }
+            tree_data = construir_arvore_declarada(queryset)
             
-            raizes = [u for u in queryset if u.nivel == 1]
             export_data = {
                 'metadata': {
                     'export_date': timezone.now().isoformat(),
                     'total_unidades': queryset.count(),
                     'apenas_ativas': apenas_ativas,
-                    'formato': 'hierarquico'
+                    'formato': 'hierarquico_declarado'
                 },
-                'unidades': [construir_no_export(raiz) for raiz in raizes]
+                'unidades': tree_data
             }
             
             response = JsonResponse(export_data, json_dumps_params={'ensure_ascii': False, 'indent': 2})
@@ -330,13 +309,10 @@ def unidade_tree_export(request):
             writer = csv.writer(response)
             writer.writerow([
                 'Código', 'Código All Strategy', 'Nome', 'Tipo', 'Nível', 
-                'Ativa', 'Empresa', 'Descrição', 'Caminho Hierárquico'
+                'Ativa', 'Empresa', 'Descrição', 'Código Pai'
             ])
             
             for unidade in queryset:
-                caminho = unidade.get_caminho_hierarquico()
-                caminho_texto = ' > '.join([u.nome for u in caminho])
-                
                 writer.writerow([
                     unidade.codigo,
                     unidade.codigo_allstrategy or '',
@@ -346,7 +322,7 @@ def unidade_tree_export(request):
                     'Sim' if unidade.ativa else 'Não',
                     unidade.empresa.sigla if unidade.empresa else '',
                     unidade.descricao or '',
-                    caminho_texto
+                    unidade.codigo_pai or ''
                 ])
             
             return response
@@ -365,36 +341,3 @@ def unidade_tree_export(request):
             'error': 'Erro no export',
             'message': str(e)
         })
-
-# Funções auxiliares mantidas para compatibilidade
-def build_tree_structure(queryset=None):
-    """Constrói estrutura de árvore - mantida para compatibilidade"""
-    if queryset is None:
-        queryset = Unidade.objects.filter(ativa=True).select_related('empresa')
-    
-    def construir_no(unidade):
-        filhos_diretos = unidade.get_filhos_diretos()
-        return {
-            'unidade': unidade,
-            'filhos': [construir_no(filho) for filho in filhos_diretos.order_by('codigo')]
-        }
-    
-    raizes = [u for u in queryset if u.nivel == 1]
-    return [construir_no(raiz) for raiz in raizes]
-
-def calculate_tree_stats(queryset=None):
-    """Calcula estatísticas da árvore - mantida para compatibilidade"""
-    if queryset is None:
-        queryset = Unidade.objects.filter(ativa=True)
-    
-    unidades_list = list(queryset)
-    total = len(unidades_list)
-    sinteticas = sum(1 for u in unidades_list if u.tem_filhos)
-    analiticas = total - sinteticas
-    
-    return {
-        'total': total,
-        'tipo_s': sinteticas,
-        'tipo_a': analiticas,
-        'nivel_max': max([u.nivel for u in unidades_list]) if unidades_list else 0
-    }

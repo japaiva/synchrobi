@@ -1,4 +1,4 @@
-# gestor/views/contacontabil.py - CRUD com Modal Hierárquico
+# gestor/views/contacontabil.py - CRUD com Modal Hierárquico - HIERARQUIA DECLARADA
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -19,68 +19,16 @@ logger = logging.getLogger('synchrobi')
 
 @login_required
 def contacontabil_tree_view(request):
-    """Visualização hierárquica OTIMIZADA de contas contábeis"""
-    
-    # OTIMIZAÇÃO 1: Query única otimizada
-    contas_queryset = ContaContabil.objects.filter(ativa=True).order_by('codigo')
-    
-    # OTIMIZAÇÃO 2: Usar o mapa de hierarquia
-    def construir_arvore_otimizada():
-        hierarchy_map, root_items = ContaContabil.build_hierarchy_map(contas_queryset)
-        
-        def construir_no_otimizado(conta):
-            children_data = hierarchy_map.get(conta.codigo, {}).get('children', [])
-            
-            return {
-                'codigo': conta.codigo,
-                'nome': conta.nome,
-                'tipo': conta.tipo,
-                'nivel': conta.nivel,
-                'ativa': conta.ativa,
-                'descricao': conta.descricao,
-                'tem_filhos': len(children_data) > 0,
-                'data_criacao': conta.data_criacao.isoformat() if conta.data_criacao else None,
-                'data_alteracao': conta.data_alteracao.isoformat() if conta.data_alteracao else None,
-                'filhos': [construir_no_otimizado(filho) for filho in sorted(children_data, key=lambda x: x.codigo)]
-            }
-        
-        return [construir_no_otimizado(raiz) for raiz in sorted(root_items, key=lambda x: x.codigo)]
-    
-    # OTIMIZAÇÃO 3: Calcular stats em uma passada
-    def calcular_stats_otimizado():
-        contas_list = list(contas_queryset)
-        total_contas = len(contas_list)
-        
-        stats_data = {
-            'total': total_contas,
-            'tipo_s': 0,
-            'tipo_a': 0,
-            'contas_por_nivel': {},
-            'niveis_existentes': set()
-        }
-        
-        for conta in contas_list:
-            if conta.tipo == 'S':
-                stats_data['tipo_s'] += 1
-            else:
-                stats_data['tipo_a'] += 1
-            
-            nivel = conta.nivel
-            stats_data['niveis_existentes'].add(nivel)
-            stats_data['contas_por_nivel'][str(nivel)] = stats_data['contas_por_nivel'].get(str(nivel), 0) + 1
-        
-        niveis_list = sorted(stats_data['niveis_existentes'])
-        stats_data.update({
-            'nivel_max': max(niveis_list) if niveis_list else 0,
-            'nivel_min': min(niveis_list) if niveis_list else 0,
-            'niveis_existentes': niveis_list
-        })
-        
-        return stats_data
+    """Visualização hierárquica de contas contábeis - HIERARQUIA DECLARADA"""
     
     try:
-        tree_data = construir_arvore_otimizada()
-        stats = calcular_stats_otimizado()
+        # Query única otimizada
+        contas_queryset = ContaContabil.objects.filter(ativa=True).order_by('codigo')
+        
+        # Construir árvore usando hierarquia declarada (importar de contacontabil_tree.py)
+        from .contacontabil_tree import construir_arvore_declarada, calcular_stats_contas
+        tree_data = construir_arvore_declarada(contas_queryset)
+        stats = calcular_stats_contas(contas_queryset)
         
         context = {
             'tree_data_json': json.dumps(tree_data, ensure_ascii=False, indent=2),
@@ -99,10 +47,20 @@ def contacontabil_tree_view(request):
         
     except Exception as e:
         logger.error(f'Erro na construção da árvore de contas contábeis: {str(e)}')
+        
+        # Fallback simples
         context = {
             'tree_data_json': '[]',
             'stats': {'total': 0, 'tipo_s': 0, 'tipo_a': 0},
             'error_message': 'Erro ao carregar árvore de contas contábeis',
+            'entity_name': 'Contas Contábeis',
+            'entity_singular': 'Conta Contábil',
+            'create_url': 'gestor:contacontabil_create_modal',
+            'update_url_base': '/gestor/contas-contabeis/',
+            'tree_url': 'gestor:contacontabil_tree',
+            'api_tree_data_url': 'gestor:api_contacontabil_tree_data',
+            'breadcrumb': 'Contas Contábeis',
+            'icon': 'fa-calculator'
         }
         return render(request, 'gestor/contacontabil_tree_main.html', context)
 
@@ -320,14 +278,16 @@ def contacontabil_delete_ajax(request, codigo):
 
 @login_required
 def api_contacontabil_tree_data(request):
-    """API OTIMIZADA para dados da árvore de contas contábeis"""
+    """API para dados da árvore - HIERARQUIA DECLARADA"""
     
     try:
+        # Obter filtros
         search = request.GET.get('search', '').strip()
         nivel = request.GET.get('nivel', '')
         tipo = request.GET.get('tipo', '')
         ativa = request.GET.get('ativa', '')
         
+        # Query com filtros
         queryset = ContaContabil.objects.order_by('codigo')
         
         if ativa != '':
@@ -336,7 +296,6 @@ def api_contacontabil_tree_data(request):
             queryset = queryset.filter(ativa=True)
         
         if search:
-            from django.db.models import Q
             queryset = queryset.filter(
                 Q(codigo__icontains=search) |
                 Q(nome__icontains=search) |
@@ -349,40 +308,16 @@ def api_contacontabil_tree_data(request):
         if tipo:
             queryset = queryset.filter(tipo=tipo)
         
-        hierarchy_map, root_items = ContaContabil.build_hierarchy_map(queryset)
+        # Construir árvore
+        from .contacontabil_tree import construir_arvore_declarada, calcular_stats_contas
+        tree_data = construir_arvore_declarada(queryset)
+        stats = calcular_stats_contas(queryset)
         
-        def construir_no_api(conta):
-            children_data = hierarchy_map.get(conta.codigo, {}).get('children', [])
-            
-            return {
-                'codigo': conta.codigo,
-                'nome': conta.nome,
-                'tipo': conta.tipo,
-                'nivel': conta.nivel,
-                'ativa': conta.ativa,
-                'descricao': conta.descricao,
-                'tem_filhos': len(children_data) > 0,
-                'filhos': [construir_no_api(filho) for filho in sorted(children_data, key=lambda x: x.codigo)]
-            }
-        
-        tree_data = [construir_no_api(raiz) for raiz in sorted(root_items, key=lambda x: x.codigo)]
-        
-        contas_filtradas = list(queryset)
-        total_filtradas = len(contas_filtradas)
-        sinteticas = sum(1 for c in contas_filtradas if c.tipo == 'S')
-        analiticas = total_filtradas - sinteticas
-        
-        stats = {
-            'total': total_filtradas,
-            'tipo_s': sinteticas,
-            'tipo_a': analiticas,
-            'nivel_max': max([c.nivel for c in contas_filtradas]) if contas_filtradas else 0,
-            'filtros_aplicados': {
-                'search': search,
-                'nivel': nivel,
-                'tipo': tipo,
-                'ativa': ativa
-            }
+        stats['filtros_aplicados'] = {
+            'search': search,
+            'nivel': nivel,
+            'tipo': tipo,
+            'ativa': ativa
         }
         
         return JsonResponse({
@@ -402,17 +337,19 @@ def api_contacontabil_tree_data(request):
 
 @login_required
 def api_validar_codigo_contacontabil(request):
-    """API para validar código de conta contábil em tempo real"""
+    """API para validar código de conta contábil em tempo real - HIERARQUIA DECLARADA"""
     codigo = request.GET.get('codigo', '').strip()
     conta_codigo = request.GET.get('atual', None)
     
     if not codigo:
         return JsonResponse({'valid': False, 'error': 'Código é obrigatório'})
     
+    # Verificar formato básico
     import re
     if not re.match(r'^[\d\.]+$', codigo):
         return JsonResponse({'valid': False, 'error': 'Código deve conter apenas números e pontos'})
     
+    # Verificar duplicação
     query = ContaContabil.objects.filter(codigo=codigo)
     if conta_codigo:
         query = query.exclude(codigo=conta_codigo)
@@ -420,27 +357,28 @@ def api_validar_codigo_contacontabil(request):
     if query.exists():
         return JsonResponse({'valid': False, 'error': 'Já existe uma conta contábil com este código'})
     
-    info = {'valid': True}
+    # Para hierarquia declarada, pai será selecionado no formulário
+    info = {
+        'valid': True,
+        'message': 'Código válido',
+        'nivel': codigo.count('.') + 1
+    }
     
+    # Sugerir pai automaticamente baseado no código (opcional)
     if '.' in codigo:
-        temp_conta = ContaContabil(codigo=codigo)
-        pai = temp_conta.encontrar_pai_hierarquico()
+        partes = codigo.split('.')
+        codigo_pai_sugerido = '.'.join(partes[:-1])
         
-        if pai:
-            info['pai'] = {
-                'codigo': pai.codigo,
-                'nome': pai.nome,
-                'tipo_display': pai.get_tipo_display()
-            }
-        else:
-            partes = codigo.split('.')
-            codigo_pai = '.'.join(partes[:-1])
-            info['valid'] = False
-            info['error'] = f'Conta contábil pai com código "{codigo_pai}" não existe'
-    else:
-        info['pai'] = None
-    
-    info['nivel'] = codigo.count('.') + 1
+        try:
+            pai_sugerido = ContaContabil.objects.get(codigo=codigo_pai_sugerido, ativa=True)
+            if pai_sugerido.tipo == 'S':  # Só se for sintético
+                info['pai_sugerido'] = {
+                    'codigo': pai_sugerido.codigo,
+                    'nome': pai_sugerido.nome,
+                    'tipo': pai_sugerido.tipo
+                }
+        except ContaContabil.DoesNotExist:
+            pass
     
     return JsonResponse(info)
 

@@ -1,4 +1,4 @@
-# core/models/hierarquicos.py - MODELOS HIERÁRQUICOS
+# core/models/hierarquicos.py - HIERARQUIA DECLARADA SIMPLES PARA TODOS
 
 import logging
 import re
@@ -6,36 +6,119 @@ from django.db import models
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 
-from .base import HierarquiaDinamicaMixin
 from .empresa import Empresa
 
 logger = logging.getLogger('synchrobi')
 
-# ===== MODELO UNIDADE COM HIERARQUIA DINÂMICA =====
+# ===== CLASSE BASE PARA HIERARQUIA DECLARADA =====
 
-class Unidade(models.Model, HierarquiaDinamicaMixin):
-    """Unidade organizacional com hierarquia dinâmica baseada em código"""
+class HierarchiaDeclaradaMixin:
+    """Mixin para modelos com hierarquia declarada (campo pai explícito)"""
+    
+    @property
+    def pai(self):
+        """Retorna o item pai baseado no campo codigo_pai"""
+        if not hasattr(self, 'codigo_pai') or not self.codigo_pai:
+            return None
+        
+        try:
+            return self.__class__.objects.get(codigo=self.codigo_pai)
+        except self.__class__.DoesNotExist:
+            return None
+    
+    def get_filhos_diretos(self):
+        """Retorna filhos diretos"""
+        # CORREÇÃO MÍNIMA: detectar campo ativo correto
+        active_field = 'ativo' if hasattr(self, 'ativo') else 'ativa'
+        filter_dict = {'codigo_pai': self.codigo, active_field: True}
+        return self.__class__.objects.filter(**filter_dict).order_by('codigo')
+    
+    def get_todos_filhos(self):
+        """Retorna todos os descendentes (recursivo)"""
+        filhos = []
+        
+        def coletar_filhos(item):
+            filhos_diretos = item.get_filhos_diretos()
+            for filho in filhos_diretos:
+                filhos.append(filho)
+                coletar_filhos(filho)
+        
+        coletar_filhos(self)
+        return filhos
+    
+    def get_caminho_completo(self):
+        """Retorna caminho da raiz até este item"""
+        caminho = []
+        atual = self
+        
+        while atual:
+            caminho.insert(0, atual)
+            atual = atual.pai
+        
+        return caminho
+    
+    @property
+    def tem_filhos(self):
+        """Verifica se tem filhos"""
+        # CORREÇÃO MÍNIMA: detectar campo ativo correto
+        active_field = 'ativo' if hasattr(self, 'ativo') else 'ativa'
+        filter_dict = {'codigo_pai': self.codigo, active_field: True}
+        return self.__class__.objects.filter(**filter_dict).exists()
+    
+    def deduzir_pai_automaticamente(self):
+        """Deduz pai baseado no código (para preenchimento automático)"""
+        if '.' not in self.codigo:
+            return None  # É raiz
+        
+        partes = self.codigo.split('.')
+        
+        # Tentar diferentes possibilidades de pai
+        for i in range(len(partes) - 1, 0, -1):
+            codigo_pai_candidato = '.'.join(partes[:i])
+            
+            try:
+                pai = self.__class__.objects.get(codigo=codigo_pai_candidato)
+                return pai.codigo
+            except self.__class__.DoesNotExist:
+                continue
+        
+        return None
+
+# ===== MODELO UNIDADE COM HIERARQUIA DECLARADA =====
+
+class Unidade(models.Model, HierarchiaDeclaradaMixin):
+    """Unidade organizacional com hierarquia declarada"""
 
     TIPO_CHOICES = [
         ('S', 'Sintético'),
         ('A', 'Analítico'),
     ]
 
+    codigo = models.CharField(max_length=50, unique=True, verbose_name="Código")
+    nome = models.CharField(max_length=255, verbose_name="Nome da Unidade")
+    
+    # HIERARQUIA DECLARADA
+    codigo_pai = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        verbose_name="Código da Unidade Pai",
+        help_text="Código da unidade superior na hierarquia (deixe vazio para raiz)"
+    )
+    
+    codigo_allstrategy = models.CharField(
+        max_length=20, 
+        blank=True, 
+        verbose_name="Código All Strategy",
+        db_index=True
+    )
+    
     tipo = models.CharField(
         max_length=1, 
         choices=TIPO_CHOICES, 
         default='A',
         verbose_name="Tipo"
     )
-
-    codigo = models.CharField(max_length=50, unique=True, verbose_name="Código")
-    codigo_allstrategy = models.CharField(
-        max_length=20, 
-        blank=True, 
-        verbose_name="Código All Strategy",
-        db_index=True  # ÍNDICE PARA BUSCA RÁPIDA
-    )
-    nome = models.CharField(max_length=255, verbose_name="Nome da Unidade")
     
     empresa = models.ForeignKey(
         Empresa,
@@ -51,65 +134,58 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
     descricao = models.TextField(blank=True, verbose_name="Descrição")
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
-    sincronizado_allstrategy = models.BooleanField(default=False, verbose_name="Sincronizado All Strategy")
-    data_ultima_sincronizacao = models.DateTimeField(null=True, blank=True, verbose_name="Última Sincronização")
     
     def clean(self):
-        """Validação baseada apenas no código"""
+        """Validação"""
         super().clean()
         
-        # Validar formato do código
         if not re.match(r'^[\d\.]+$', self.codigo):
             raise ValidationError({
                 'codigo': 'Código deve conter apenas números e pontos'
             })
         
-        # Verificar se pai existe (se código tem pontos)
-        if '.' in self.codigo:
-            pai = self.encontrar_pai_hierarquico()
-            if not pai:
+        # Validar pai se fornecido
+        if self.codigo_pai:
+            try:
+                pai = Unidade.objects.get(codigo=self.codigo_pai)
+                if pai.tipo == 'A':
+                    raise ValidationError({
+                        'codigo_pai': f'A unidade pai "{pai.codigo} - {pai.nome}" é analítica e não pode ter sub-unidades.'
+                    })
+            except Unidade.DoesNotExist:
                 raise ValidationError({
-                    'codigo': f'Nenhuma unidade pai foi encontrada para o código "{self.codigo}". '
-                             f'Certifique-se de que existe pelo menos uma unidade superior.'
-                })
-        
-        # Validar código All Strategy se fornecido
-        if self.codigo_allstrategy:
-            # Verificar duplicação do código All Strategy apenas se não vazio
-            query = Unidade.objects.filter(codigo_allstrategy=self.codigo_allstrategy, ativa=True)
-            if self.pk:
-                query = query.exclude(pk=self.pk)
-            
-            if query.exists():
-                raise ValidationError({
-                    'codigo_allstrategy': f'Já existe uma unidade ativa com código All Strategy "{self.codigo_allstrategy}"'
+                    'codigo_pai': f'Unidade pai com código "{self.codigo_pai}" não existe'
                 })
     
     def save(self, *args, **kwargs):
-        """Save simplificado - apenas calcula nível"""
+        """Save com preenchimento automático do pai"""
         
-        # Calcular nível baseado no número de pontos
-        self.nivel = self.codigo.count('.') + 1
+        # PREENCHIMENTO AUTOMÁTICO: se codigo_pai está vazio, tentar deduzir
+        if not self.codigo_pai:
+            pai_deduzido = self.deduzir_pai_automaticamente()
+            if pai_deduzido:
+                self.codigo_pai = pai_deduzido
+        
+        # Calcular nível baseado na hierarquia
+        if self.codigo_pai:
+            try:
+                pai = Unidade.objects.get(codigo=self.codigo_pai)
+                self.nivel = pai.nivel + 1
+            except Unidade.DoesNotExist:
+                self.nivel = 1
+        else:
+            self.nivel = 1
         
         # Limpar código All Strategy se vazio
         if not self.codigo_allstrategy:
             self.codigo_allstrategy = ''
         
-        # Validar
         self.full_clean()
-        
         super().save(*args, **kwargs)
-        
-        # Limpar cache relacionado
-        self._limpar_cache()
-    
-    # MÉTODOS DE BUSCA OTIMIZADOS PARA IMPORTAÇÃO
     
     @classmethod
     def buscar_por_codigo_allstrategy(cls, codigo_allstrategy, apenas_ativas=True):
-        """
-        Busca unidade pelo código All Strategy (otimizado com índice)
-        """
+        """Busca unidade pelo código All Strategy"""
         if not codigo_allstrategy:
             return None
         
@@ -117,75 +193,47 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
             query = cls.objects.filter(codigo_allstrategy=codigo_allstrategy)
             if apenas_ativas:
                 query = query.filter(ativa=True)
-            
-            return query.first()  # Usar first() para evitar exceção se não encontrar
-            
+            return query.first()
         except Exception as e:
             logger.error(f'Erro ao buscar unidade por código All Strategy {codigo_allstrategy}: {str(e)}')
             return None
     
     @classmethod
     def buscar_unidade_para_movimento(cls, codigo_unidade):
-        """
-        Busca unidade para movimentação - primeiro por All Strategy, depois por código normal
-        """
-        # Tentar primeiro por código All Strategy (mais comum para movimentos)
+        """Busca unidade para movimentação"""
         unidade = cls.buscar_por_codigo_allstrategy(str(codigo_unidade))
-        
         if unidade:
             return unidade
         
-        # Se não encontrou, tentar por código normal
         try:
             return cls.objects.get(codigo=str(codigo_unidade), ativa=True)
         except cls.DoesNotExist:
             logger.warning(f'Unidade não encontrada para código: {codigo_unidade}')
             return None
     
-    def _limpar_cache(self):
-        """Limpa cache relacionado a esta unidade"""
-        cache_keys = [
-            f'unidade_hierarchy_{self.id}',
-            f'unidade_children_{self.id}',
-            'unidades_ativas_tree'
-        ]
-        
-        pai = self.pai
-        if pai:
-            cache_keys.append(f'unidade_children_{pai.id}')
-        
-        for key in cache_keys:
-            cache.delete(key)
-    
-    # Propriedades para compatibilidade com código existente
+    # Propriedades para compatibilidade
     @property
     def unidade_pai(self):
-        """Compatibilidade: retorna pai dinâmico"""
         return self.pai
     
     @property
     def sub_unidades(self):
-        """Compatibilidade: retorna filhos diretos como queryset"""
         return self.get_filhos_diretos()
     
     @property
     def tem_sub_unidades(self):
-        """Compatibilidade: verifica se tem filhos"""
         return self.tem_filhos
     
     @property
     def e_sintetico(self):
-        """Verifica se é sintético (tem sub-unidades)"""
         return self.tipo == 'S'
     
     @property
     def e_analitico(self):
-        """Verifica se é analítico (folha da árvore)"""
         return self.tipo == 'A'
     
     @property
     def codigo_display(self):
-        """Código para exibição (All Strategy se analítico, codigo se sintético)"""
         if self.e_analitico and self.codigo_allstrategy:
             return self.codigo_allstrategy
         return self.codigo
@@ -200,17 +248,17 @@ class Unidade(models.Model, HierarquiaDinamicaMixin):
         ordering = ['codigo']
         indexes = [
             models.Index(fields=['codigo']),
-            models.Index(fields=['codigo_allstrategy']),  # ÍNDICE PRINCIPAL PARA BUSCA
+            models.Index(fields=['codigo_pai']),
+            models.Index(fields=['codigo_allstrategy']),
             models.Index(fields=['ativa']),
             models.Index(fields=['nivel']),
             models.Index(fields=['empresa']),
-            models.Index(fields=['codigo_allstrategy', 'ativa']),  # ÍNDICE COMPOSTO OTIMIZADO
         ]
 
-# ===== MODELO CENTRO DE CUSTO COM TIPO EDITÁVEL =====
+# ===== MODELO CENTRO DE CUSTO COM HIERARQUIA DECLARADA =====
 
-class CentroCusto(models.Model, HierarquiaDinamicaMixin):
-    """Centro de custo com hierarquia dinâmica baseada em código"""
+class CentroCusto(models.Model, HierarchiaDeclaradaMixin):
+    """Centro de custo com hierarquia declarada"""
     
     TIPO_CHOICES = [
         ('S', 'Sintético'),
@@ -221,7 +269,15 @@ class CentroCusto(models.Model, HierarquiaDinamicaMixin):
     nome = models.CharField(max_length=255, verbose_name="Nome do Centro de Custo")
     descricao = models.TextField(blank=True, verbose_name="Descrição")
     
-    # CAMPO TIPO EDITÁVEL - NÃO É CALCULADO
+    # HIERARQUIA DECLARADA
+    codigo_pai = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True,
+        verbose_name="Código do Centro Pai",
+        help_text="Código do centro de custo superior na hierarquia (deixe vazio para raiz)"
+    )
+    
     tipo = models.CharField(
         max_length=1, 
         choices=TIPO_CHOICES, 
@@ -236,54 +292,59 @@ class CentroCusto(models.Model, HierarquiaDinamicaMixin):
     data_alteracao = models.DateTimeField(auto_now=True)
     
     def clean(self):
-        """Validação baseada no código e regras de negócio"""
+        """Validação"""
         super().clean()
         
-        if not re.match(r'^[\d\.]+$', self.codigo):
+        if not re.match(r'^[\w\.-]+$', self.codigo):
             raise ValidationError({
-                'codigo': 'Código deve conter apenas números e pontos'
+                'codigo': 'Código deve conter apenas letras, números, pontos e hífens'
             })
         
-        if '.' in self.codigo:
-            pai = self.encontrar_pai_hierarquico()
-            if not pai:
+        # Validar pai se fornecido
+        if self.codigo_pai:
+            try:
+                pai = CentroCusto.objects.get(codigo=self.codigo_pai)
+                if pai.tipo == 'A':
+                    raise ValidationError({
+                        'codigo_pai': f'O centro pai "{pai.codigo} - {pai.nome}" é analítico e não pode ter sub-centros.'
+                    })
+            except CentroCusto.DoesNotExist:
                 raise ValidationError({
-                    'codigo': f'Nenhum centro pai foi encontrado para o código "{self.codigo}".'
+                    'codigo_pai': f'Centro de custo pai com código "{self.codigo_pai}" não existe'
                 })
-            
-            # VALIDAÇÃO IMPORTANTE: pai deve ser sintético para aceitar filhos
-            if pai.tipo == 'A':
-                raise ValidationError({
-                    'codigo': f'O centro pai "{pai.codigo} - {pai.nome}" é analítico e não pode ter sub-centros. '
-                             f'Altere o tipo do centro pai para "Sintético" primeiro.'
-                })
-        
-        # VALIDAÇÃO: não pode alterar para analítico se já tem filhos
-        if self.pk and self.tipo == 'A' and self.tem_filhos:
-            raise ValidationError({
-                'tipo': 'Não é possível alterar para "Analítico" pois este centro possui sub-centros. '
-                       'Remova os sub-centros primeiro ou mantenha como "Sintético".'
-            })
     
     def save(self, *args, **kwargs):
-        """Save com validação"""
-        self.nivel = self.codigo.count('.') + 1
+        """Save com preenchimento automático do pai"""
+        
+        # PREENCHIMENTO AUTOMÁTICO: se codigo_pai está vazio, tentar deduzir
+        if not self.codigo_pai:
+            pai_deduzido = self.deduzir_pai_automaticamente()
+            if pai_deduzido:
+                self.codigo_pai = pai_deduzido
+        
+        # Calcular nível baseado na hierarquia
+        if self.codigo_pai:
+            try:
+                pai = CentroCusto.objects.get(codigo=self.codigo_pai)
+                self.nivel = pai.nivel + 1
+            except CentroCusto.DoesNotExist:
+                self.nivel = 1
+        else:
+            self.nivel = 1
+        
         self.full_clean()
         super().save(*args, **kwargs)
     
-    # Propriedades baseadas APENAS no campo tipo (não em cálculos)
+    # Propriedades baseadas no campo tipo
     @property
     def e_sintetico(self):
-        """Verifica se é sintético (baseado APENAS no campo tipo)"""
         return self.tipo == 'S'
     
     @property
     def e_analitico(self):
-        """Verifica se é analítico (baseado APENAS no campo tipo)"""
         return self.tipo == 'A'
     
     def get_tipo_display(self):
-        """Retorna o nome do tipo para exibição"""
         return 'Sintético' if self.tipo == 'S' else 'Analítico'
     
     # Propriedades para compatibilidade
@@ -309,15 +370,16 @@ class CentroCusto(models.Model, HierarquiaDinamicaMixin):
         ordering = ['codigo']
         indexes = [
             models.Index(fields=['codigo']),
+            models.Index(fields=['codigo_pai']),
             models.Index(fields=['ativo']),
             models.Index(fields=['nivel']),
             models.Index(fields=['tipo']),
         ]
 
-# ===== MODELO CONTA CONTÁBIL COM TIPO EDITÁVEL =====
+# ===== MODELO CONTA CONTÁBIL COM HIERARQUIA DECLARADA =====
 
-class ContaContabil(models.Model, HierarquiaDinamicaMixin):
-    """Conta contábil com hierarquia dinâmica baseada em código"""
+class ContaContabil(models.Model, HierarchiaDeclaradaMixin):
+    """Conta contábil com hierarquia declarada"""
     
     TIPO_CHOICES = [
         ('S', 'Sintético'),
@@ -328,7 +390,15 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
     nome = models.CharField(max_length=255, verbose_name="Nome da Conta")
     descricao = models.TextField(blank=True, verbose_name="Descrição")
     
-    # CAMPO TIPO EDITÁVEL - NÃO É CALCULADO
+    # HIERARQUIA DECLARADA
+    codigo_pai = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True,
+        verbose_name="Código da Conta Pai",
+        help_text="Código da conta contábil superior na hierarquia (deixe vazio para raiz)"
+    )
+    
     tipo = models.CharField(
         max_length=1, 
         choices=TIPO_CHOICES, 
@@ -343,7 +413,7 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
     data_alteracao = models.DateTimeField(auto_now=True)
     
     def clean(self):
-        """Validação baseada no código e regras de negócio"""
+        """Validação"""
         super().clean()
         
         if not re.match(r'^[\d\.]+$', self.codigo):
@@ -351,46 +421,51 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
                 'codigo': 'Código deve conter apenas números e pontos'
             })
         
-        if '.' in self.codigo:
-            pai = self.encontrar_pai_hierarquico()
-            if not pai:
+        # Validar pai se fornecido
+        if self.codigo_pai:
+            try:
+                pai = ContaContabil.objects.get(codigo=self.codigo_pai)
+                if pai.tipo == 'A':
+                    raise ValidationError({
+                        'codigo_pai': f'A conta pai "{pai.codigo} - {pai.nome}" é analítica e não pode ter sub-contas.'
+                    })
+            except ContaContabil.DoesNotExist:
                 raise ValidationError({
-                    'codigo': f'Nenhuma conta pai foi encontrada para o código "{self.codigo}".'
+                    'codigo_pai': f'Conta contábil pai com código "{self.codigo_pai}" não existe'
                 })
-            
-            # VALIDAÇÃO IMPORTANTE: pai deve ser sintético para aceitar filhos
-            if pai.tipo == 'A':
-                raise ValidationError({
-                    'codigo': f'A conta pai "{pai.codigo} - {pai.nome}" é analítica e não pode ter sub-contas. '
-                             f'Altere o tipo da conta pai para "Sintético" primeiro.'
-                })
-        
-        # VALIDAÇÃO: não pode alterar para analítico se já tem filhos
-        if self.pk and self.tipo == 'A' and self.tem_filhos:
-            raise ValidationError({
-                'tipo': 'Não é possível alterar para "Analítico" pois esta conta possui sub-contas. '
-                       'Remova as sub-contas primeiro ou mantenha como "Sintético".'
-            })
     
     def save(self, *args, **kwargs):
-        """Save com validação"""
-        self.nivel = self.codigo.count('.') + 1
+        """Save com preenchimento automático do pai"""
+        
+        # PREENCHIMENTO AUTOMÁTICO: se codigo_pai está vazio, tentar deduzir
+        if not self.codigo_pai:
+            pai_deduzido = self.deduzir_pai_automaticamente()
+            if pai_deduzido:
+                self.codigo_pai = pai_deduzido
+        
+        # Calcular nível baseado na hierarquia
+        if self.codigo_pai:
+            try:
+                pai = ContaContabil.objects.get(codigo=self.codigo_pai)
+                self.nivel = pai.nivel + 1
+            except ContaContabil.DoesNotExist:
+                self.nivel = 1
+        else:
+            self.nivel = 1
+        
         self.full_clean()
         super().save(*args, **kwargs)
     
-    # Propriedades baseadas APENAS no campo tipo (não em cálculos)
+    # Propriedades baseadas no campo tipo
     @property
     def e_sintetico(self):
-        """Verifica se é sintético (baseado APENAS no campo tipo)"""
         return self.tipo == 'S'
     
     @property
     def e_analitico(self):
-        """Verifica se é analítico (baseado APENAS no campo tipo)"""
         return self.tipo == 'A'
     
     def get_tipo_display(self):
-        """Retorna o nome do tipo para exibição"""
         return 'Sintético' if self.tipo == 'S' else 'Analítico'
     
     # Propriedades para compatibilidade
@@ -408,7 +483,6 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
     
     @property
     def aceita_lancamento(self):
-        """Apenas contas analíticas aceitam lançamento"""
         return self.e_analitico
     
     def __str__(self):
@@ -421,6 +495,7 @@ class ContaContabil(models.Model, HierarquiaDinamicaMixin):
         ordering = ['codigo']
         indexes = [
             models.Index(fields=['codigo']),
+            models.Index(fields=['codigo_pai']),
             models.Index(fields=['ativa']),
             models.Index(fields=['nivel']),
             models.Index(fields=['tipo']),

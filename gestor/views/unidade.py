@@ -163,11 +163,11 @@ def unidade_detail_modal(request, pk):
     """Detalhes da unidade via modal"""
     unidade = get_object_or_404(Unidade, pk=pk)
     
-    # Informações hierárquicas
+    # Informações hierárquicas - CORRIGIDO para hierarquia declarada
     sub_unidades = unidade.get_filhos_diretos().order_by('codigo')
-    caminho = unidade.get_caminho_hierarquico()
-    total_descendentes = len(unidade.get_todos_filhos_recursivo(include_self=False))
-    unidades_operacionais = len(unidade.get_unidades_operacionais())
+    caminho = unidade.get_caminho_completo()  # ✓ Método correto
+    total_descendentes = len(unidade.get_todos_filhos())  # ✓ Método correto
+    unidades_operacionais = sub_unidades.filter(tipo='A').count()  # ✓ Lógica simples
     
     context = {
         'unidade': unidade,
@@ -267,7 +267,7 @@ def api_unidade_tree_data(request):
 
 @login_required
 def api_validar_codigo(request):
-    """API para validar código de unidade em tempo real"""
+    """API para validar código de unidade em tempo real - HIERARQUIA DECLARADA"""
     codigo = request.GET.get('codigo', '').strip()
     unidade_id = request.GET.get('id', None)
     
@@ -287,32 +287,29 @@ def api_validar_codigo(request):
     if query.exists():
         return JsonResponse({'valid': False, 'error': 'Já existe uma unidade com este código'})
     
-    # Verificar hierarquia
-    info = {'valid': True}
+    # Para hierarquia declarada, pai será selecionado no formulário
+    info = {
+        'valid': True,
+        'message': 'Código válido',
+        'nivel': codigo.count('.') + 1
+    }
     
+    # Sugerir pai automaticamente baseado no código (opcional)
     if '.' in codigo:
-        temp_unidade = Unidade(codigo=codigo)
-        pai = temp_unidade.encontrar_pai_hierarquico()
+        partes = codigo.split('.')
+        codigo_pai_sugerido = '.'.join(partes[:-1])
         
-        if pai:
-            info['pai'] = {
-                'id': pai.id,
-                'codigo': pai.codigo,
-                'nome': pai.nome,
-                'tipo_display': pai.get_tipo_display()
+        try:
+            pai_sugerido = Unidade.objects.get(codigo=codigo_pai_sugerido, ativa=True)
+            info['pai_sugerido'] = {
+                'codigo': pai_sugerido.codigo,
+                'nome': pai_sugerido.nome,
+                'tipo': pai_sugerido.tipo
             }
-        else:
-            partes = codigo.split('.')
-            codigo_pai = '.'.join(partes[:-1])
-            info['valid'] = False
-            info['error'] = f'Unidade pai com código "{codigo_pai}" não existe'
-    else:
-        info['pai'] = None
-    
-    info['nivel'] = codigo.count('.') + 1
+        except Unidade.DoesNotExist:
+            pass
     
     return JsonResponse(info)
-# ===== MANTER EM gestor/views/unidade.py =====
 
 @login_required
 def api_buscar_unidade_multiplos_criterios(request):
@@ -345,7 +342,7 @@ def api_buscar_unidade_multiplos_criterios(request):
         
         results = []
         for unidade in unidades:
-            caminho = unidade.get_caminho_hierarquico()
+            caminho = unidade.get_caminho_completo()  # ✓ CORRIGIDO
             caminho_texto = ' > '.join([f"{u.codigo_display}" for u in caminho])
             
             results.append({

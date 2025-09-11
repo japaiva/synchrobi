@@ -1,4 +1,4 @@
-<!-- gestor/templates/gestor/contacontabil_tree_main.html - CORRIGIDO -->
+<!-- gestor/templates/gestor/contacontabil_tree_main.html - HIERARQUIA DECLARADA -->
 {% extends 'gestor/base_gestor.html' %}
 {% load static %}
 
@@ -47,7 +47,7 @@
                     <input type="text" id="tree-search" class="form-control" placeholder="Buscar conta contábil...">
                 </div>
                 <div class="col-md-4">
-
+                    <!-- Espaço para filtros futuros -->
                 </div>
             </div>
         </div>
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hasCompanyField: false,
         hasDetailModal: false,
         useId: false,
-        // CORREÇÃO: Adicionada vírgula e fechamento correto
+        isDeclarativeHierarchy: true,  // ADICIONADO: indica hierarquia declarada
         relatedTableConfig: {
             configKey: 'external_codes'
         }
