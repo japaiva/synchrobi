@@ -1,4 +1,4 @@
-# gestor/views/movimento.py - VERSÃO COMPLETA COM EXPORTAÇÃO E IMPORTAÇÃO POR DATAS
+# gestor/views/movimento.py - VERSÃO COMPLETA CORRIGIDA
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -8,12 +8,14 @@ from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum, Count
 from django.utils import timezone
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import logging
 import pandas as pd
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 import io
+import decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from core.models import Movimento, Unidade, CentroCusto, ContaContabil, ContaExterna, Fornecedor
 from core.forms import MovimentoForm
@@ -92,6 +94,12 @@ def extrair_fornecedor_do_historico(historico):
 def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
     """
     Processa uma linha do Excel com a estrutura correta identificada
+    CORRIGIDA PARA TRATAR VALORES DECIMAIS CORRETAMENTE
+    
+    REGRA SIMPLES:
+    - Converter valores para positivo (usar abs)
+    - Manter natureza do arquivo (D/C)
+    - Garantir 2 casas decimais
     """
     try:
         # Extrair dados da linha baseado na estrutura real
@@ -103,11 +111,26 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
         codigo_conta_contabil = linha_dados.get('Cód. da conta contábil')  # Ex: 6303010017
         documento = linha_dados.get('Documento', '')
         natureza = linha_dados.get('Natureza (D/C/A)', 'D')
-        valor = linha_dados.get('Valor', 0)
+        valor_bruto = linha_dados.get('Valor', 0)
         historico = linha_dados.get('Histórico', '')
         codigo_projeto = linha_dados.get('Cód. do projeto', '')
         gerador = linha_dados.get('Gerador', '')
         rateio = linha_dados.get('Rateio', 'N')
+        
+        # === CORREÇÃO SIMPLES DE VALOR ===
+        # Apenas converter valor para positivo e garantir 2 casas decimais
+        if valor_bruto is None or valor_bruto == '':
+            valor = Decimal('0.00')
+        else:
+            try:
+                # Converter para Decimal, usar valor absoluto e arredondar para 2 casas
+                valor_decimal = Decimal(str(valor_bruto))
+                valor = abs(valor_decimal).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except (ValueError, decimal.InvalidOperation):
+                raise ValueError(f'Valor inválido: {valor_bruto}')
+        
+        # Manter natureza original do arquivo
+        natureza_final = natureza or 'D'
         
         # === BUSCAR UNIDADE PELO CÓDIGO ALL STRATEGY ===
         unidade = Unidade.buscar_por_codigo_allstrategy(str(codigo_unidade))
@@ -150,6 +173,14 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
             data = data.date()
         elif isinstance(data, datetime):
             data = data.date()
+        elif isinstance(data, (int, float)):
+            # Excel pode retornar data como número serial
+            try:
+                # Excel serial date (1 = 1900-01-01)
+                excel_epoch = date(1900, 1, 1)
+                data = excel_epoch + timedelta(days=int(data) - 2)  # -2 para corrigir o bug do Excel
+            except:
+                raise ValueError(f'Formato de data inválido: {data}')
         
         # === CRIAR MOVIMENTO ===
         movimento = Movimento.objects.create(
@@ -161,8 +192,8 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
             conta_contabil=conta_contabil,
             fornecedor=fornecedor,
             documento=str(documento) if documento else '',
-            natureza=natureza,
-            valor=float(valor) if valor else 0,
+            natureza=natureza_final,  # Usar a natureza do arquivo
+            valor=valor,  # Usar o valor já convertido (sempre positivo)
             historico=historico,
             codigo_projeto=str(codigo_projeto) if codigo_projeto else '',
             gerador=str(gerador) if gerador else '',
@@ -177,6 +208,38 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
         error_msg = f'Linha {numero_linha}: {str(e)}'
         logger.error(f'Erro ao processar movimento: {error_msg}')
         return None, error_msg
+
+def corrigir_estrutura_excel(arquivo):
+    """
+    Corrige problemas na estrutura do Excel antes do processamento
+    """
+    try:
+        # Ler arquivo com cabeçalho na linha 1 (baseado na análise do arquivo real)
+        df = pd.read_excel(arquivo, engine='openpyxl', header=0)
+        
+        # Verificar se as colunas necessárias existem
+        colunas_necessarias = [
+            'Mês', 'Ano', 'Data', 'Cód. da unidade', 'Cód. do centro de custo',
+            'Cód. da conta contábil', 'Natureza (D/C/A)', 'Valor', 'Histórico'
+        ]
+        
+        colunas_faltando = [col for col in colunas_necessarias if col not in df.columns]
+        if colunas_faltando:
+            raise ValueError(f'Colunas obrigatórias faltando: {", ".join(colunas_faltando)}')
+        
+        # Corrigir apenas os valores para positivo, manter natureza
+        if 'Valor' in df.columns:
+            # Converter todos os valores para positivo com 2 casas decimais
+            df['Valor'] = df['Valor'].apply(lambda x: round(abs(float(x)), 2) if pd.notna(x) else 0.00)
+        
+        # Remover linhas completamente vazias
+        df = df.dropna(how='all')
+        
+        return df
+        
+    except Exception as e:
+        logger.error(f'Erro ao corrigir estrutura do Excel: {str(e)}')
+        raise
 
 # === VIEWS PRINCIPAIS ===
 
@@ -588,7 +651,7 @@ def movimento_importar(request):
 @login_required
 @require_POST
 def api_preview_movimentos_excel(request):
-    """API para preview dos movimentos - ATUALIZADA PARA DATAS"""
+    """API para preview dos movimentos - CORRIGIDA PARA VALORES DECIMAIS"""
     
     try:
         if 'arquivo' not in request.FILES:
@@ -611,21 +674,11 @@ def api_preview_movimentos_excel(request):
         if not arquivo.name.endswith(('.xlsx', '.xls')):
             return JsonResponse({'success': False, 'error': 'Arquivo deve ser Excel (.xlsx ou .xls)'})
         
-        # Ler arquivo Excel - CABEÇALHO NA LINHA 1
-        df = pd.read_excel(arquivo, engine='openpyxl', header=0)
-        
-        # Validar colunas obrigatórias baseadas na estrutura real
-        colunas_obrigatorias = [
-            'Mês', 'Ano', 'Data', 'Cód. da unidade', 'Cód. do centro de custo',
-            'Cód. da conta contábil', 'Natureza (D/C/A)', 'Valor', 'Histórico'
-        ]
-        
-        colunas_faltando = [col for col in colunas_obrigatorias if col not in df.columns]
-        if colunas_faltando:
-            return JsonResponse({
-                'success': False,
-                'error': f'Colunas obrigatórias faltando: {", ".join(colunas_faltando)}'
-            })
+        # Usar função para corrigir estrutura do Excel
+        try:
+            df = corrigir_estrutura_excel(arquivo)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Erro na estrutura do arquivo: {str(e)}'})
         
         # Filtrar dados pelo período especificado (verificar apenas as primeiras 15 linhas para preview)
         preview_linhas = df.head(15).to_dict('records')
@@ -670,6 +723,32 @@ def api_preview_movimentos_excel(request):
                     resultado['warnings'].append(f'Data {data_linha} fora do período {data_inicio} a {data_fim}')
             except:
                 resultado['errors'].append('Data inválida')
+            
+            # Verificar e corrigir valor (simples: converter para positivo)
+            valor_linha = linha.get('Valor', 0)
+            natureza_linha = linha.get('Natureza (D/C/A)', 'D')
+            
+            try:
+                if valor_linha is not None:
+                    valor_float = float(valor_linha)
+                    valor_corrigido = round(abs(valor_float), 2)  # Sempre positivo
+                    
+                    explicacao = f"Valor {valor_float} → {valor_corrigido} (natureza: {natureza_linha})"
+                else:
+                    valor_corrigido = 0.00
+                    explicacao = "Valor vazio → 0.00"
+                
+                resultado['dados']['valor'] = valor_corrigido
+                resultado['dados']['natureza'] = natureza_linha
+                resultado['validacoes']['valor'] = {
+                    'valido': True,
+                    'valor_original': valor_linha,
+                    'valor_corrigido': valor_corrigido,
+                    'explicacao': explicacao
+                }
+            except (ValueError, TypeError):
+                resultado['errors'].append(f'Valor inválido: {valor_linha}')
+                resultado['validacoes']['valor'] = {'valido': False}
             
             # Validar unidade pelo código All Strategy
             codigo_unidade = linha.get('Cód. da unidade')
@@ -780,7 +859,7 @@ def api_preview_movimentos_excel(request):
 @login_required
 @require_POST
 def api_importar_movimentos_excel(request):
-    """API para importação real dos movimentos - ATUALIZADA PARA DATAS"""
+    """API para importação real dos movimentos - CORRIGIDA PARA VALORES DECIMAIS"""
     
     try:
         # Receber parâmetros
@@ -814,8 +893,11 @@ def api_importar_movimentos_excel(request):
             data__lte=data_fim
         ).delete()
         
-        # Ler e processar arquivo
-        df = pd.read_excel(arquivo, engine='openpyxl', header=0)
+        # Ler e corrigir arquivo
+        try:
+            df = corrigir_estrutura_excel(arquivo)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Erro na estrutura do arquivo: {str(e)}'})
         
         logger.info(f'Iniciando importação de {len(df)} linhas do arquivo {arquivo.name}')
         
@@ -829,36 +911,28 @@ def api_importar_movimentos_excel(request):
         
         for idx, linha in df.iterrows():
             try:
-                # Verificar se a linha está no período
-                data_linha = linha.get('Data')
-                if isinstance(data_linha, str):
-                    data_linha = datetime.strptime(data_linha, '%Y-%m-%d').date()
-                elif hasattr(data_linha, 'date'):
-                    data_linha = data_linha.date()
-                elif isinstance(data_linha, datetime):
-                    data_linha = data_linha.date()
-                
-                if not (data_inicio <= data_linha <= data_fim):
-                    linhas_fora_periodo += 1
-                    continue  # Pular linhas fora do período
-                
                 # Processar linha
                 linha_dict = linha.to_dict()
-                movimento, erro = processar_linha_excel_atualizada(linha_dict, idx + 2, arquivo.name)  # +2 porque linha 1 é cabeçalho
+                movimento, erro = processar_linha_excel_atualizada(linha_dict, idx + 2, arquivo.name)
                 
                 if movimento:
-                    movimentos_criados += 1
-                    
-                    # Rastrear fornecedores novos
-                    if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
-                        if movimento.fornecedor.codigo not in fornecedores_novos:
-                            fornecedores_novos.add(movimento.fornecedor.codigo)
-                            fornecedores_criados += 1
-                    
-                    # Log a cada 50 movimentos
-                    if movimentos_criados % 50 == 0:
-                        logger.info(f'Processados {movimentos_criados} movimentos...')
+                    # Verificar se está no período
+                    if data_inicio <= movimento.data <= data_fim:
+                        movimentos_criados += 1
                         
+                        # Rastrear fornecedores novos
+                        if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
+                            if movimento.fornecedor.codigo not in fornecedores_novos:
+                                fornecedores_novos.add(movimento.fornecedor.codigo)
+                                fornecedores_criados += 1
+                        
+                        # Log a cada 50 movimentos
+                        if movimentos_criados % 50 == 0:
+                            logger.info(f'Processados {movimentos_criados} movimentos...')
+                    else:
+                        # Remover movimento fora do período
+                        movimento.delete()
+                        linhas_fora_periodo += 1
                 else:
                     erros.append(erro)
                     

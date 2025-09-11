@@ -122,9 +122,12 @@ def fornecedor_update(request, codigo):
     }
     return render(request, 'gestor/fornecedor_form.html', context)
 
+
+# gestor/views/fornecedor.py - VIEW DELETE CORRIGIDA E SIMPLIFICADA
+
 @login_required
 def fornecedor_delete(request, codigo):
-    """Deletar fornecedor - PERMITE EXCLUSÃO MESMO COM MOVIMENTOS"""
+    """Deletar fornecedor - VERSÃO SIMPLIFICADA"""
     fornecedor = get_object_or_404(Fornecedor, codigo=codigo)
     
     # Contar movimentos associados (para informar o usuário)
@@ -143,15 +146,17 @@ def fornecedor_delete(request, codigo):
             
             fornecedor.delete()
             
-            # Mensagem de sucesso com aviso sobre movimentos
+            # CORREÇÃO: Mensagem de sucesso CORRETA
             if movimentos_count > 0:
                 messages.warning(
-                    f'Fornecedor "{razao_social}" excluído com sucesso! '
-                    f'ATENÇÃO: {movimentos_count} movimento(s) ficaram sem referência de fornecedor.'
+                    request,  # ADICIONADO: request como primeiro parâmetro
+                    f'Fornecedor "{razao_social}" excluído! '
+                    f'Atenção: {movimentos_count} movimento(s) ficaram sem referência de fornecedor.'
                 )
             else:
                 messages.success(
-                    f'Fornecedor "{razao_social}" (código: {codigo_fornecedor}) excluído com sucesso!'
+                    request,  # ADICIONADO: request como primeiro parâmetro
+                    f'Fornecedor "{razao_social}" excluído com sucesso!'
                 )
             
             logger.info(f'Fornecedor excluído: {codigo_fornecedor} - {razao_social} por {request.user}')

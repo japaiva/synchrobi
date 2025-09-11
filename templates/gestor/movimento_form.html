@@ -38,27 +38,6 @@
         </div>
         <div class="card-body">
           
-          <!-- Aviso para movimentos importados -->
-          {% if form.instance.pk and form.instance.arquivo_origem %}
-            <div class="alert alert-info mb-3">
-              <h6 class="alert-heading">
-                <i class="fas fa-file-excel me-2"></i>Movimento Importado
-              </h6>
-              <p class="mb-0">
-                Este movimento foi importado via Excel. Você pode editar os dados conforme necessário.
-              </p>
-              <div class="mt-2">
-                <small class="text-muted">
-                  <strong>Arquivo:</strong> {{ form.instance.arquivo_origem }}
-                  {% if form.instance.linha_origem %}
-                    (linha {{ form.instance.linha_origem }})
-                  {% endif %}
-                  <br>
-                  <strong>Data de importação:</strong> {{ form.instance.data_importacao|date:"d/m/Y H:i" }}
-                </small>
-              </div>
-            </div>
-          {% endif %}
           
           <!-- Primeira linha: Data, Natureza, Valor -->
           <div class="row g-3 mb-3">
@@ -211,64 +190,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Estatísticas (apenas para edição) -->
-      {% if form.instance.pk %}
-        <div class="card shadow-sm mb-4">
-          <div class="card-header bg-light">
-            <h6 class="card-title mb-0">
-              <i class="fas fa-info-circle me-2"></i>
-              Informações do Sistema
-            </h6>
-          </div>
-          <div class="card-body">
-            <div class="row text-center">
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-primary mb-1">{{ form.instance.id }}</h4>
-                    <small class="text-muted">ID</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-success mb-1">
-                      {{ form.instance.periodo_display }}
-                    </h4>
-                    <small class="text-muted">Período</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-info mb-1">
-                      {{ form.instance.data_importacao|date:"d/m/Y" }}
-                    </h4>
-                    <small class="text-muted">Data Criação</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-warning mb-1">
-                      {% if form.instance.arquivo_origem %}
-                        <i class="fas fa-file-excel"></i>
-                      {% else %}
-                        <i class="fas fa-user"></i>
-                      {% endif %}
-                    </h4>
-                    <small class="text-muted">Origem</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      {% endif %}
 
       <!-- Botões de ação -->
       <div class="d-flex justify-content-between align-items-center">

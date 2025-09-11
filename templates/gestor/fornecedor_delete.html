@@ -1,4 +1,4 @@
-<!-- gestor/templates/gestor/fornecedor_delete.html -->
+<!-- gestor/templates/gestor/fornecedor_delete.html - VERSÃO SIMPLIFICADA -->
 {% extends 'gestor/base_gestor.html' %}
 
 {% block title %}Excluir Fornecedor | SynchroBI{% endblock %}
@@ -8,22 +8,20 @@
   <div class="card shadow">
     <div class="card-header bg-danger text-white">
       <h4 class="mb-0">
-        <i class="fas fa-exclamation-triangle me-2"></i>Confirmar Exclusão
+        <i class="fas fa-trash me-2"></i>Excluir Fornecedor
       </h4>
     </div>
     <div class="card-body">
       
       <div class="alert alert-warning">
-        <h5 class="alert-heading">
-          <i class="fas fa-exclamation-triangle me-2"></i>Atenção
-        </h5>
-        <p>
-          Você está prestes a excluir permanentemente o fornecedor:
+        <p class="mb-3">
+          <strong>Tem certeza que deseja excluir este fornecedor?</strong>
         </p>
-        <div class="bg-light p-3 rounded">
+        
+        <div class="bg-light p-3 rounded mb-3">
           <div class="row">
             <div class="col-md-8">
-              <strong class="d-block mb-2">{{ fornecedor.nome_display }}</strong>
+              <h5 class="mb-2">{{ fornecedor.nome_display }}</h5>
               <ul class="list-unstyled mb-0">
                 <li><strong>Código:</strong> {{ fornecedor.codigo }}</li>
                 <li><strong>Razão Social:</strong> {{ fornecedor.razao_social }}</li>
@@ -33,119 +31,62 @@
                 {% if fornecedor.cnpj_cpf %}
                 <li><strong>{{ fornecedor.tipo_pessoa }}:</strong> {{ fornecedor.cnpj_cpf_formatado }}</li>
                 {% endif %}
-                <li><strong>Status:</strong> 
-                  {% if fornecedor.ativo %}
-                    <span class="badge bg-success">Ativo</span>
-                  {% else %}
-                    <span class="badge bg-danger">Inativo</span>
-                  {% endif %}
-                  {% if fornecedor.criado_automaticamente %}
-                    <span class="badge bg-info ms-1">Criado Automaticamente</span>
-                  {% endif %}
-                </li>
                 {% if movimentos_count > 0 %}
-                <li><strong>Movimentos Associados:</strong> 
-                  <span class="badge bg-warning">{{ movimentos_count }}</span>
+                <li><strong>Movimentos:</strong> 
+                  <span class="badge bg-warning text-dark">{{ movimentos_count }}</span>
                 </li>
                 {% endif %}
               </ul>
             </div>
             <div class="col-md-4">
               {% if fornecedor.telefone %}
-                <div class="mb-2">
+                <div class="mb-1">
                   <i class="fas fa-phone text-muted me-1"></i>
                   {{ fornecedor.telefone }}
                 </div>
               {% endif %}
               {% if fornecedor.email %}
-                <div class="mb-2">
+                <div class="mb-1">
                   <i class="fas fa-envelope text-muted me-1"></i>
                   {{ fornecedor.email }}
-                </div>
-              {% endif %}
-              {% if fornecedor.endereco %}
-                <div class="small text-muted">
-                  <i class="fas fa-map-marker-alt me-1"></i>
-                  {{ fornecedor.endereco|truncatechars:50 }}
                 </div>
               {% endif %}
             </div>
           </div>
         </div>
         
-        <!-- Informações adicionais -->
-        {% if fornecedor.criado_automaticamente and fornecedor.origem_historico %}
-        <div class="mt-3">
-          <h6>Origem da Criação Automática:</h6>
-          <div class="bg-light p-2 rounded">
-            <small class="text-muted">{{ fornecedor.origem_historico }}</small>
-          </div>
-        </div>
-        {% endif %}
-        
         {% if movimentos_count > 0 %}
-        <div class="alert alert-info mt-3">
-          <h6 class="alert-heading">
-            <i class="fas fa-info-circle me-2"></i>Movimentos Associados
-          </h6>
-          <p class="mb-0">
-            Este fornecedor possui <strong>{{ movimentos_count }} movimento(s)</strong> associado(s). 
-            Ao excluir o fornecedor, os movimentos permanecerão no sistema, mas ficarão sem referência de fornecedor.
-          </p>
+        <div class="alert alert-info mb-3">
+          <i class="fas fa-info-circle me-2"></i>
+          Este fornecedor possui {{ movimentos_count }} movimento(s). Os movimentos permanecerão no sistema sem referência.
         </div>
         {% endif %}
         
-        <hr>
         <p class="mb-0 text-danger">
+          <i class="fas fa-exclamation-triangle me-1"></i>
           <strong>Esta ação não pode ser desfeita!</strong>
         </p>
       </div>
       
-      <!-- Endereço completo (se houver) -->
-      {% if fornecedor.endereco and fornecedor.endereco|length > 50 %}
-      <div class="card mb-3">
-        <div class="card-header bg-light">
-          <h6 class="mb-0">Endereço Completo</h6>
-        </div>
-        <div class="card-body">
-          <p class="mb-0">{{ fornecedor.endereco }}</p>
-        </div>
-      </div>
-      {% endif %}
-      
       <!-- Formulário de confirmação -->
       <form method="post" class="mt-4">
         {% csrf_token %}
-        <div class="form-check mb-3">
-          <input class="form-check-input" type="checkbox" id="confirmDelete" required>
-          <label class="form-check-label" for="confirmDelete">
-            Confirmo que desejo excluir permanentemente este fornecedor
-          </label>
-        </div>
         
-        {% if movimentos_count > 0 %}
-        <div class="form-check mb-3">
-          <input class="form-check-input" type="checkbox" id="confirmMovements" required>
-          <label class="form-check-label" for="confirmMovements">
-            Estou ciente que os {{ movimentos_count }} movimento(s) ficarão sem referência de fornecedor
-          </label>
-        </div>
-        {% endif %}
-        
-        <div class="d-flex justify-content-between">
+        <div class="d-flex justify-content-between align-items-center">
           <a href="{% url 'gestor:fornecedor_list' %}" class="btn btn-outline-secondary">
             <i class="fas fa-times me-1"></i> Cancelar
           </a>
-          <div>
+          
+          <div class="d-flex gap-2">
             {% if movimentos_count > 0 %}
-              <a href="{% url 'gestor:movimento_list' %}?fornecedor={{ fornecedor.codigo }}" class="btn btn-info me-2">
+              <a href="{% url 'gestor:movimento_list' %}?search={{ fornecedor.codigo }}" class="btn btn-info btn-sm">
                 <i class="fas fa-list me-1"></i> Ver Movimentos
               </a>
             {% endif %}
-            <a href="{% url 'gestor:fornecedor_update' fornecedor.codigo %}" class="btn btn-secondary me-2">
-              <i class="fas fa-edit me-1"></i> Editar ao Invés de Excluir
+            <a href="{% url 'gestor:fornecedor_update' fornecedor.codigo %}" class="btn btn-secondary">
+              <i class="fas fa-edit me-1"></i> Editar
             </a>
-            <button type="submit" class="btn btn-danger" id="btnExcluir" disabled>
+            <button type="submit" class="btn btn-danger" onclick="return confirmarExclusao()">
               <i class="fas fa-trash me-1"></i> Confirmar Exclusão
             </button>
           </div>
@@ -156,40 +97,17 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const checkboxConfirm = document.getElementById('confirmDelete');
-    const checkboxMovements = document.getElementById('confirmMovements');
-    const btnExcluir = document.getElementById('btnExcluir');
+function confirmarExclusao() {
+    const nomeFornecedor = '{{ fornecedor.razao_social|escapejs }}';
+    const movimentos = {{ movimentos_count }};
     
-    function updateButton() {
-        const confirmChecked = checkboxConfirm.checked;
-        const movementsChecked = checkboxMovements ? checkboxMovements.checked : true;
-        btnExcluir.disabled = !(confirmChecked && movementsChecked);
+    let mensagem = `Confirma a exclusão do fornecedor "${nomeFornecedor}"?`;
+    
+    if (movimentos > 0) {
+        mensagem += `\n\nAtenção: ${movimentos} movimento(s) ficarão sem referência de fornecedor.`;
     }
     
-    checkboxConfirm.addEventListener('change', updateButton);
-    if (checkboxMovements) {
-        checkboxMovements.addEventListener('change', updateButton);
-    }
-    
-    // Confirmação final antes do envio
-    document.querySelector('form').addEventListener('submit', function(e) {
-        const nomeFornecedor = '{{ fornecedor.razao_social|escapejs }}';
-        const movimentos = '{{ movimentos_count }}';
-        
-        let mensagem = `Tem CERTEZA ABSOLUTA que deseja excluir o fornecedor "${nomeFornecedor}"?`;
-        
-        if (movimentos > 0) {
-            mensagem += `\n\nISSO AFETARÁ ${movimentos} MOVIMENTO(S) NO SISTEMA!`;
-        }
-        
-        mensagem += '\n\nEsta ação é IRREVERSÍVEL!';
-        
-        if (!confirm(mensagem)) {
-            e.preventDefault();
-            return false;
-        }
-    });
-});
+    return confirm(mensagem);
+}
 </script>
 {% endblock %}
