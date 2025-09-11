@@ -1,362 +1,253 @@
-<!-- gestor/templates/gestor/partials/contaexterna_list_modal.html - VERSÃO COMPACTA COM EDIÇÃO INLINE -->
+<!-- VERSÃO FINAL - SEM BOTÕES EXTRAS DO TREE-MANAGER -->
 
-
-
-<!-- Lista dos códigos externos - COMPACTA -->
-<div style="max-height: 400px; overflow-y: auto;" class="external-list">
-    {% if page_obj %}
-        {% for externa in page_obj %}
-        <div class="external-item mb-2 p-2 border rounded" data-id="{{ externa.id }}">
-            <!-- Modo Visualização - UMA LINHA -->
-            <div class="view-mode">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="flex-grow-1 d-flex align-items-center">
-                        <code class="codigo-display me-2 bg-primary text-white px-2 py-1 rounded" style="font-size: 11px;">{{ externa.codigo_externo }}</code>
-                        <span class="nome-display fw-bold me-2">{{ externa.nome_externo }}</span>
-                    </div>
-                    
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-primary btn-edit" onclick="editInline({{ externa.id }})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button type="button" class="btn btn-outline-danger" onclick="deleteExternal({{ externa.id }}, '{{ externa.codigo_externo|escapejs }}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Modo Edição - UMA LINHA -->
-            <div class="edit-mode d-none">
-                <div class="d-flex align-items-center gap-2">
-                    <input type="text" class="form-control form-control-sm codigo-input" value="{{ externa.codigo_externo }}" placeholder="Código" style="width: 120px;">
-                    <input type="text" class="form-control form-control-sm nome-input flex-grow-1" value="{{ externa.nome_externo }}" placeholder="Nome">
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-success btn-save" onclick="saveInline({{ externa.id }})">
-                            <i class="fas fa-check"></i>
-                        </button>
-                        <button type="button" class="btn btn-secondary btn-cancel" onclick="cancelEdit({{ externa.id }})">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% empty %}
-        
-        <!-- Estado vazio -->
-        <div class="text-center py-4" id="empty-state">
-            <i class="fas fa-link text-muted mb-3" style="font-size: 2rem;"></i>
-            <h6 class="text-muted">Nenhum código externo</h6>
-            {% if filtros.conta_codigo %}
-            <p class="text-muted small mb-0">Esta conta ainda não possui códigos externos.</p>
-            {% endif %}
-        </div>
-        {% endfor %}
-    {% endif %}
+<div class="p-3">
+    <h6>Códigos Externos</h6>
     
-    <!-- Formulário para novo código (inicialmente oculto) - SIMPLES -->
-    <div class="external-item mb-2 p-2 border rounded d-none" id="new-external-form">
-        <div class="d-flex align-items-center gap-2">
-            <input type="text" class="form-control form-control-sm" id="new-codigo" placeholder="Código" style="width: 80px;">
-            <input type="text" class="form-control form-control-sm flex-grow-1" id="new-nome" placeholder="Descrição">
-            <div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-success" onclick="saveNew()" title="Salvar">
-                    <i class="fas fa-check"></i>
-                </button>
-                <button type="button" class="btn btn-secondary" onclick="cancelNew()" title="Cancelar">
-                    <i class="fas fa-times"></i>
-                </button>
+    {% for externa in page_obj %}
+    <div class="border p-2 mb-2" id="item-{{ externa.id }}">
+        
+        <!-- Visualização -->
+        <div id="view-{{ externa.id }}">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <strong>{{ externa.codigo_externo }}</strong> - {{ externa.nome_externo }}
+                </div>
+                <div>
+                    <button type="button" class="btn btn-sm btn-primary" 
+                            onclick="
+                                document.getElementById('view-{{ externa.id }}').style.display = 'none';
+                                document.getElementById('edit-{{ externa.id }}').style.display = 'block';
+                                console.log('Editando item {{ externa.id }}');
+                            ">
+                        Editar
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger ms-1" 
+                            onclick="
+                                if (confirm('Excluir código {{ externa.codigo_externo }}?')) {
+                                    fetch('{% url "gestor:api_contaexterna_delete" externa.id %}', {
+                                        method: 'POST',
+                                        headers: {
+                                            'X-CSRFToken': '{{ csrf_token }}',
+                                            'X-Requested-With': 'XMLHttpRequest'
+                                        }
+                                    })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.success) {
+                                            document.getElementById('item-{{ externa.id }}').remove();
+                                            alert('Excluído com sucesso!');
+                                        } else {
+                                            alert('Erro: ' + data.message);
+                                        }
+                                    })
+                                    .catch(error => {
+                                        alert('Erro de conexão');
+                                        console.error(error);
+                                    });
+                                }
+                            ">
+                        Excluir
+                    </button>
+                </div>
             </div>
         </div>
+
+        <!-- Edição -->
+        <div id="edit-{{ externa.id }}" style="display: none;">
+            <div class="row g-2">
+                <div class="col-4">
+                    <input type="text" id="codigo-{{ externa.id }}" class="form-control" 
+                           value="{{ externa.codigo_externo }}">
+                </div>
+                <div class="col-8">
+                    <input type="text" id="nome-{{ externa.id }}" class="form-control" 
+                           value="{{ externa.nome_externo }}">
+                </div>
+            </div>
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-success" 
+                        onclick="
+                            const codigo = document.getElementById('codigo-{{ externa.id }}').value.trim();
+                            const nome = document.getElementById('nome-{{ externa.id }}').value.trim();
+                            const errorDiv = document.getElementById('error-{{ externa.id }}');
+                            
+                            if (!codigo || !nome) {
+                                errorDiv.textContent = 'Código e nome são obrigatórios';
+                                errorDiv.style.display = 'block';
+                                return;
+                            }
+                            
+                            console.log('Salvando:', codigo, nome);
+                            
+                            const formData = new FormData();
+                            formData.append('codigo_externo', codigo);
+                            formData.append('nome_externo', nome);
+                            formData.append('conta_contabil', '{{ filtros.conta_codigo }}');
+                            formData.append('ativa', 'on');
+                            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                            
+                            fetch('{% url "gestor:contaexterna_update" externa.id %}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: formData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    const viewDiv = document.getElementById('view-{{ externa.id }}');
+                                    const strongElement = viewDiv.querySelector('strong');
+                                    if (strongElement) {
+                                        strongElement.textContent = codigo;
+                                        strongElement.nextSibling.textContent = ' - ' + nome;
+                                    }
+                                    
+                                    document.getElementById('edit-{{ externa.id }}').style.display = 'none';
+                                    document.getElementById('view-{{ externa.id }}').style.display = 'block';
+                                    errorDiv.style.display = 'none';
+                                    
+                                    alert('Salvo com sucesso!');
+                                } else {
+                                    errorDiv.textContent = data.message || 'Erro ao salvar';
+                                    errorDiv.style.display = 'block';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erro:', error);
+                                errorDiv.textContent = 'Erro de conexão';
+                                errorDiv.style.display = 'block';
+                            });
+                        ">
+                    Salvar
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" 
+                        onclick="
+                            document.getElementById('edit-{{ externa.id }}').style.display = 'none';
+                            document.getElementById('view-{{ externa.id }}').style.display = 'block';
+                            document.getElementById('error-{{ externa.id }}').style.display = 'none';
+                            console.log('Cancelando edição {{ externa.id }}');
+                        ">
+                    Cancelar
+                </button>
+            </div>
+            <div id="error-{{ externa.id }}" style="display: none; color: red; margin-top: 8px;"></div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="text-center py-4 text-muted">
+        <i class="fas fa-link mb-2" style="font-size: 2rem;"></i>
+        <p>Nenhum código externo cadastrado</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Apenas o botão Novo Código - SEM botões extras -->
+<div class="p-3 border-top">
+    <button type="button" class="btn btn-success btn-sm" 
+            onclick="
+                const form = document.getElementById('new-form');
+                const isVisible = form.style.display !== 'none';
+                form.style.display = isVisible ? 'none' : 'block';
+                if (!isVisible) {
+                    document.getElementById('new-codigo').focus();
+                }
+            ">
+        <i class="fas fa-plus me-1"></i> Novo Código
+    </button>
+    
+    <!-- Formulário para novo -->
+    <div id="new-form" class="mt-3" style="display: none;">
+        <div class="row g-2">
+            <div class="col-4">
+                <input type="text" id="new-codigo" class="form-control" placeholder="Código">
+            </div>
+            <div class="col-8">
+                <input type="text" id="new-nome" class="form-control" placeholder="Nome/Descrição">
+            </div>
+        </div>
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-success" 
+                    onclick="
+                        const codigo = document.getElementById('new-codigo').value.trim();
+                        const nome = document.getElementById('new-nome').value.trim();
+                        const errorDiv = document.getElementById('new-error');
+                        
+                        if (!codigo || !nome) {
+                            errorDiv.textContent = 'Código e nome são obrigatórios';
+                            errorDiv.style.display = 'block';
+                            return;
+                        }
+                        
+                        const formData = new FormData();
+                        formData.append('codigo_externo', codigo);
+                        formData.append('nome_externo', nome);
+                        formData.append('conta_contabil', '{{ filtros.conta_codigo }}');
+                        formData.append('ativa', 'on');
+                        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                        
+                        fetch('{% url "gestor:contaexterna_create" %}', {
+                            method: 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Limpar formulário
+                                document.getElementById('new-codigo').value = '';
+                                document.getElementById('new-nome').value = '';
+                                document.getElementById('new-form').style.display = 'none';
+                                errorDiv.style.display = 'none';
+                                
+                                // Recarregar apenas o conteúdo do modal
+                                if (typeof openExternalAccountModal === 'function') {
+                                    openExternalAccountModal('{{ filtros.conta_codigo }}');
+                                } else {
+                                    // Fallback: mostrar mensagem e manter na tela
+                                    alert('Código criado com sucesso! Recarregue o modal para ver o novo item.');
+                                }
+                            } else {
+                                errorDiv.textContent = data.message || 'Erro ao criar';
+                                errorDiv.style.display = 'block';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro:', error);
+                            errorDiv.textContent = 'Erro de conexão';
+                            errorDiv.style.display = 'block';
+                        });
+                    ">
+                Salvar
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" 
+                    onclick="
+                        document.getElementById('new-form').style.display = 'none';
+                        document.getElementById('new-error').style.display = 'none';
+                        document.getElementById('new-codigo').value = '';
+                        document.getElementById('new-nome').value = '';
+                    ">
+                Cancelar
+            </button>
+        </div>
+        <div id="new-error" style="display: none; color: red; margin-top: 8px;"></div>
     </div>
 </div>
 
-<style>
-.external-item {
-    background: #f8f9fa;
-    transition: all 0.2s ease;
-}
-
-.external-item:hover {
-    background: #e3f2fd;
-    transform: translateX(2px);
-}
-
-.external-item code {
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.btn-group-sm .btn {
-    padding: 4px 8px;
-    font-size: 12px;
-}
-
-.edit-mode input {
-    font-size: 12px;
-}
-
-.loading-inline {
-    opacity: 0.6;
-    pointer-events: none;
-}
-
-/* Garantir que tudo fique numa linha */
-.view-mode .d-flex,
-.edit-mode .d-flex {
-    white-space: nowrap;
-}
-
-.nome-display {
-    /* Remover limitações para mostrar descrição completa */
-}
-</style>
-
 <script>
-// Variáveis globais
-const contaCodigo = '{{ filtros.conta_codigo }}';
-const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-
-// Editar inline
-function editInline(id) {
-    const item = document.querySelector(`[data-id="${id}"]`);
-    const viewMode = item.querySelector('.view-mode');
-    const editMode = item.querySelector('.edit-mode');
-    
-    // Esconder modo visualização e mostrar edição
-    viewMode.classList.add('d-none');
-    editMode.classList.remove('d-none');
-    
-    // Focar no primeiro campo
-    editMode.querySelector('.codigo-input').focus();
-}
-
-// Cancelar edição
-function cancelEdit(id) {
-    const item = document.querySelector(`[data-id="${id}"]`);
-    const viewMode = item.querySelector('.view-mode');
-    const editMode = item.querySelector('.edit-mode');
-    
-    // Voltar para modo visualização
-    editMode.classList.add('d-none');
-    viewMode.classList.remove('d-none');
-    
-    // Restaurar valores originais
-    const codigoDisplay = item.querySelector('.codigo-display').textContent;
-    const nomeDisplay = item.querySelector('.nome-display').textContent;
-    
-    editMode.querySelector('.codigo-input').value = codigoDisplay;
-    editMode.querySelector('.nome-input').value = nomeDisplay;
-}
-
-// Salvar edição
-function saveInline(id) {
-    const item = document.querySelector(`[data-id="${id}"]`);
-    const editMode = item.querySelector('.edit-mode');
-    
-    const codigoInput = editMode.querySelector('.codigo-input');
-    const nomeInput = editMode.querySelector('.nome-input');
-    
-    const novoCodigo = codigoInput.value.trim();
-    const novoNome = nomeInput.value.trim();
-    
-    if (!novoCodigo || !novoNome) {
-        alert('Código e nome são obrigatórios!');
-        return;
-    }
-    
-    // Mostrar loading
-    item.classList.add('loading-inline');
-    
-    // Enviar requisição
-    fetch(`{% url "gestor:contaexterna_update" 0 %}`.replace('0', id), {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-            'conta_contabil': document.querySelector('#conta-contabil-id').value || '',
-            'codigo_externo': novoCodigo,
-            'nome_externo': novoNome,
-            'ativa': 'on'
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        item.classList.remove('loading-inline');
-        
-        if (data.success) {
-            // Atualizar visualização
-            item.querySelector('.codigo-display').textContent = novoCodigo;
-            item.querySelector('.nome-display').textContent = novoNome;
-            
-            // Voltar para modo visualização
-            cancelEdit(id);
-            
-            // Mostrar sucesso
-            showToast('Código atualizado com sucesso!', 'success');
-        } else {
-            alert(data.message || 'Erro ao salvar');
-        }
-    })
-    .catch(error => {
-        item.classList.remove('loading-inline');
-        alert('Erro: ' + error.message);
-    });
-}
-
-// Adicionar novo código
-function addNewExternal() {
-    const form = document.getElementById('new-external-form');
-    const emptyState = document.getElementById('empty-state');
-    
-    // Esconder estado vazio se existir
-    if (emptyState) {
-        emptyState.classList.add('d-none');
-    }
-    
-    // Mostrar formulário
-    form.classList.remove('d-none');
-    
-    // Limpar campos
-    document.getElementById('new-codigo').value = '';
-    document.getElementById('new-nome').value = '';
-    
-    // Focar no primeiro campo
-    document.getElementById('new-codigo').focus();
-}
-
-// Cancelar novo
-function cancelNew() {
-    const form = document.getElementById('new-external-form');
-    const emptyState = document.getElementById('empty-state');
-    
-    form.classList.add('d-none');
-    
-    // Se não há itens, mostrar estado vazio
-    if (document.querySelectorAll('[data-id]').length === 0 && emptyState) {
-        emptyState.classList.remove('d-none');
-    }
-}
-
-// Salvar novo
-function saveNew() {
-    const novoCodigo = document.getElementById('new-codigo').value.trim();
-    const novoNome = document.getElementById('new-nome').value.trim();
-    
-    if (!novoCodigo || !novoNome) {
-        alert('Código e nome são obrigatórios!');
-        return;
-    }
-    
-    if (!contaCodigo) {
-        alert('Conta contábil não identificada!');
-        return;
-    }
-    
-    // Mostrar loading
-    const form = document.getElementById('new-external-form');
-    form.classList.add('loading-inline');
-    
-    // Criar nova conta externa
-    fetch('{% url "gestor:contaexterna_create" %}', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-            'conta_contabil': contaCodigo,
-            'codigo_externo': novoCodigo,
-            'nome_externo': novoNome,
-            'ativa': 'on'
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        form.classList.remove('loading-inline');
-        
-        if (data.success) {
-            // Recarregar a lista
-            if (typeof openExternalAccountModal === 'function') {
-                openExternalAccountModal(contaCodigo);
+// Esconder botões duplicados do tree-manager
+document.addEventListener('DOMContentLoaded', function() {
+    // Esconder footer do modal se tiver botões duplicados
+    setTimeout(function() {
+        const modalFooter = document.querySelector('.modal-footer');
+        if (modalFooter) {
+            const newExternalBtn = modalFooter.querySelector('button[onclick*="addNewRelatedItem"]');
+            if (newExternalBtn && newExternalBtn.textContent.includes('Novo Código Externo')) {
+                modalFooter.style.display = 'none';
             }
-            
-            showToast('Código criado com sucesso!', 'success');
-        } else {
-            alert(data.message || 'Erro ao criar');
         }
-    })
-    .catch(error => {
-        form.classList.remove('loading-inline');
-        alert('Erro: ' + error.message);
-    });
-}
-
-// Excluir código
-function deleteExternal(id, codigo) {
-    if (!confirm(`Excluir código "${codigo}"?`)) return;
-    
-    fetch(`{% url "gestor:api_contaexterna_delete" 0 %}`.replace('0', id), {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Remover item da tela
-            document.querySelector(`[data-id="${id}"]`).remove();
-            
-            // Se não sobrou nenhum item, mostrar estado vazio
-            if (document.querySelectorAll('[data-id]').length === 0) {
-                const emptyState = document.getElementById('empty-state');
-                if (emptyState) {
-                    emptyState.classList.remove('d-none');
-                }
-            }
-            
-            showToast('Código excluído!', 'success');
-        } else {
-            alert(data.message || 'Erro ao excluir');
-        }
-    })
-    .catch(error => {
-        alert('Erro: ' + error.message);
-    });
-}
-
-// Toast simples
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type === 'success' ? 'success' : 'info'} position-fixed`;
-    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
-    toast.innerHTML = `
-        <div class="d-flex align-items-center">
-            <i class="fas fa-${type === 'success' ? 'check' : 'info'}-circle me-2"></i>
-            ${message}
-        </div>
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
-}
-
-// Campo oculto para ID da conta (se necessário)
-if (!document.getElementById('conta-contabil-id')) {
-    const hiddenField = document.createElement('input');
-    hiddenField.type = 'hidden';
-    hiddenField.id = 'conta-contabil-id';
-    hiddenField.value = contaCodigo;
-    document.body.appendChild(hiddenField);
-}
+    }, 100);
+});
 </script>
