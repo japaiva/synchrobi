@@ -135,7 +135,6 @@ from .fornecedor import (
     fornecedor_create,                   # Criar fornecedor
     fornecedor_update,                   # Editar fornecedor
     fornecedor_delete,                   # Excluir fornecedor
-    fornecedor_toggle_status,            # Ativar/desativar fornecedor
     
     # APIs para fornecedores
     api_validar_codigo_fornecedor,       # Validação de código

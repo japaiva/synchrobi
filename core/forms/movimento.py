@@ -4,7 +4,8 @@ from django import forms
 from django.db.models import Q
 
 from core.models import Movimento, Unidade, CentroCusto, ContaContabil, Fornecedor
-from .base import CustomDateInput, DateAwareModelForm
+from core.utils.view_utils import CustomDateInput, CustomDateTimeInput, DateAwareModelForm
+
 
 class MovimentoForm(DateAwareModelForm):
     """Formulário para criar/editar movimentos - VERSÃO CORRIGIDA"""

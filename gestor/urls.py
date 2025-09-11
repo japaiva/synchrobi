@@ -119,7 +119,6 @@ urlpatterns = [
     path('fornecedores/novo/', views.fornecedor_create, name='fornecedor_create'),
     path('fornecedores/<str:codigo>/editar/', views.fornecedor_update, name='fornecedor_update'),
     path('fornecedores/<str:codigo>/excluir/', views.fornecedor_delete, name='fornecedor_delete'),
-    path('fornecedores/<str:codigo>/toggle-status/', views.fornecedor_toggle_status, name='fornecedor_toggle_status'),
     
     # APIs Fornecedor
     path('api/fornecedor/validar-codigo/', views.api_validar_codigo_fornecedor, name='api_validar_codigo_fornecedor'),

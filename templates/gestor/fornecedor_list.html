@@ -68,13 +68,12 @@
         <thead class="table-light">
           <tr>
             <th style="width: 100px;">Código</th>
-            <th style="width: 300px;">Fornecedor</th>
+            <th style="width: 420px;">Fornecedor</th>
             <th style="width: 150px;">CNPJ/CPF</th>
-            <th style="width: 120px;">Contato</th>
             <th style="width: 60px;" class="text-center">Tipo</th>
             <th style="width: 40px;" class="text-center">Sts</th>
             <th style="width: 40px;" class="text-center">Movs</th>
-            <th style="width: 120px;" class="text-end">Ações</th>
+            <th style="width: 100px;" class="text-end">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -85,14 +84,7 @@
               </td>
               <td>
                 <div class="fw-bold">{{ fornecedor.razao_social|truncatechars:35 }}</div>
-                {% if fornecedor.nome_fantasia %}
-                  <div class="small text-muted">{{ fornecedor.nome_fantasia|truncatechars:30 }}</div>
-                {% endif %}
-                {% if fornecedor.criado_automaticamente %}
-                  <span class="badge bg-info" style="font-size: 0.65rem;">
-                    <i class="fas fa-robot me-1"></i>Auto
-                  </span>
-                {% endif %}
+
               </td>
               <td>
                 {% if fornecedor.cnpj_cpf %}
@@ -142,26 +134,11 @@
                     <i class="fas fa-edit"></i>
                   </a>
                   
-                  <a href="{% url 'gestor:fornecedor_toggle_status' fornecedor.codigo %}" 
-                     class="btn btn-sm btn-outline-{% if fornecedor.ativo %}warning{% else %}success{% endif %}" 
-                     title="{% if fornecedor.ativo %}Desativar{% else %}Ativar{% endif %}"
-                     onclick="return confirm('Confirma {% if fornecedor.ativo %}desativação{% else %}ativação{% endif %} do fornecedor?')">
-                    <i class="fas fa-{% if fornecedor.ativo %}pause{% else %}play{% endif %}"></i>
+                  <a href="{% url 'gestor:fornecedor_delete' fornecedor.codigo %}" 
+                     class="btn btn-sm btn-outline-danger" 
+                     title="Excluir">
+                    <i class="fas fa-trash-alt"></i>
                   </a>
-                  
-                  {% if fornecedor.movimentos.count == 0 %}
-                    <a href="{% url 'gestor:fornecedor_delete' fornecedor.codigo %}" 
-                       class="btn btn-sm btn-outline-danger" 
-                       title="Excluir">
-                      <i class="fas fa-trash-alt"></i>
-                    </a>
-                  {% else %}
-                    <button class="btn btn-sm btn-outline-secondary" 
-                            title="Não pode excluir - possui movimentos" 
-                            disabled>
-                      <i class="fas fa-ban"></i>
-                    </button>
-                  {% endif %}
                 </div>
               </td>
             </tr>

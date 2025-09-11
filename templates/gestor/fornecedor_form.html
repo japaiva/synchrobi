@@ -37,26 +37,7 @@
           </h6>
         </div>
         <div class="card-body">
-          
-          <!-- Aviso para fornecedores criados automaticamente -->
-          {% if form.instance.codigo and form.instance.criado_automaticamente %}
-            <div class="alert alert-info">
-              <h6 class="alert-heading">
-                <i class="fas fa-robot me-2"></i>Fornecedor Criado Automaticamente
-              </h6>
-              <p class="mb-0">
-                Este fornecedor foi criado automaticamente durante a importação de movimentos. 
-                Você pode complementar as informações e ajustar os dados conforme necessário.
-              </p>
-              {% if form.instance.origem_historico %}
-                <div class="mt-2">
-                  <small class="text-muted">
-                    <strong>Origem:</strong> {{ form.instance.origem_historico|truncatechars:100 }}
-                  </small>
-                </div>
-              {% endif %}
-            </div>
-          {% endif %}
+        
           
           <div class="row g-3">
             <!-- Primeira linha: Código e Status -->
@@ -223,72 +204,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Estatísticas (apenas para edição) -->
-      {% if form.instance.codigo %}
-        <div class="card shadow-sm mb-4">
-          <div class="card-header bg-light">
-            <h6 class="card-title mb-0">
-              <i class="fas fa-chart-line me-2"></i>
-              Estatísticas
-            </h6>
-          </div>
-          <div class="card-body">
-            <div class="row text-center">
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-primary mb-1">{{ form.instance.movimentos.count|default:0 }}</h4>
-                    <small class="text-muted">Movimentos</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-success mb-1">
-                      {% if form.instance.data_criacao %}
-                        {{ form.instance.data_criacao|date:"d/m/Y" }}
-                      {% else %}
-                        -
-                      {% endif %}
-                    </h4>
-                    <small class="text-muted">Data Criação</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-info mb-1">
-                      {% if form.instance.data_alteracao %}
-                        {{ form.instance.data_alteracao|date:"d/m/Y" }}
-                      {% else %}
-                        -
-                      {% endif %}
-                    </h4>
-                    <small class="text-muted">Última Alteração</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="card border-0 bg-light">
-                  <div class="card-body py-3">
-                    <h4 class="text-warning mb-1">
-                      {% if form.instance.criado_automaticamente %}
-                        <i class="fas fa-robot"></i>
-                      {% else %}
-                        <i class="fas fa-user"></i>
-                      {% endif %}
-                    </h4>
-                    <small class="text-muted">Tipo Criação</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      {% endif %}
 
       <!-- Botões de ação -->
       <div class="d-flex justify-content-between align-items-center">

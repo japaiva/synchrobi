@@ -1,4 +1,4 @@
-# gestor/views/fornecedor.py - Views completas para fornecedor
+# gestor/views/fornecedor.py - Views completas para fornecedor (SEM TOGGLE STATUS)
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -124,27 +124,39 @@ def fornecedor_update(request, codigo):
 
 @login_required
 def fornecedor_delete(request, codigo):
-    """Deletar fornecedor"""
+    """Deletar fornecedor - PERMITE EXCLUSÃO MESMO COM MOVIMENTOS"""
     fornecedor = get_object_or_404(Fornecedor, codigo=codigo)
     
-    # Verificar se tem movimentos associados
+    # Contar movimentos associados (para informar o usuário)
     movimentos_count = fornecedor.movimentos.count()
-    if movimentos_count > 0:
-        messages.error(
-            request, 
-            f'Não é possível excluir o fornecedor "{fornecedor.razao_social}" pois ele possui {movimentos_count} movimento(s) associado(s).'
-        )
-        return redirect('gestor:fornecedor_list')
     
     if request.method == 'POST':
         razao_social = fornecedor.razao_social
         codigo_fornecedor = fornecedor.codigo
         
         try:
+            # Log antes da exclusão
+            if movimentos_count > 0:
+                logger.warning(
+                    f'Fornecedor {codigo_fornecedor} - {razao_social} excluído com {movimentos_count} movimento(s) associado(s) por {request.user}'
+                )
+            
             fornecedor.delete()
-            messages.success(request, f'Fornecedor "{razao_social}" (código: {codigo_fornecedor}) excluído com sucesso!')
+            
+            # Mensagem de sucesso com aviso sobre movimentos
+            if movimentos_count > 0:
+                messages.warning(
+                    f'Fornecedor "{razao_social}" excluído com sucesso! '
+                    f'ATENÇÃO: {movimentos_count} movimento(s) ficaram sem referência de fornecedor.'
+                )
+            else:
+                messages.success(
+                    f'Fornecedor "{razao_social}" (código: {codigo_fornecedor}) excluído com sucesso!'
+                )
+            
             logger.info(f'Fornecedor excluído: {codigo_fornecedor} - {razao_social} por {request.user}')
             return redirect('gestor:fornecedor_list')
+            
         except Exception as e:
             messages.error(request, f'Erro ao excluir fornecedor: {str(e)}')
             logger.error(f'Erro ao excluir fornecedor {codigo_fornecedor}: {str(e)}')
@@ -156,28 +168,6 @@ def fornecedor_delete(request, codigo):
     }
     return render(request, 'gestor/fornecedor_delete.html', context)
 
-@login_required
-def fornecedor_toggle_status(request, codigo):
-    """Ativar/desativar fornecedor"""
-    fornecedor = get_object_or_404(Fornecedor, codigo=codigo)
-    
-    try:
-        fornecedor.ativo = not fornecedor.ativo
-        fornecedor.save()
-        
-        status_texto = 'ativado' if fornecedor.ativo else 'desativado'
-        messages.success(
-            request,
-            f'Fornecedor "{fornecedor.razao_social}" {status_texto} com sucesso!'
-        )
-        
-        logger.info(f'Fornecedor {fornecedor.codigo} {status_texto} por {request.user}')
-        
-    except Exception as e:
-        messages.error(request, f'Erro ao alterar status do fornecedor: {str(e)}')
-        logger.error(f'Erro ao alterar status do fornecedor {codigo}: {str(e)}')
-    
-    return redirect('gestor:fornecedor_list')
 
 # ===== API ENDPOINTS =====
 
