@@ -50,6 +50,11 @@ class FornecedorExtractorAvancado:
         if matches:
             return matches[-1].strip()
         
+        # PADRÃO 5: - número CPF NOME - (pessoas físicas - pegar o primeiro número)
+        matches = re.findall(r'[-–]\s*(\d+)\s+\d{2}\.\d{3}\.\d{3}\s+[A-ZÀ-Ÿ]', historico, re.IGNORECASE)
+        if matches:
+            return matches[-1].strip()
+        
         # FALLBACK: Qualquer sequência de 3+ dígitos
         numeros = re.findall(r'\b(\d{3,})\b', historico)
         if numeros:
@@ -759,6 +764,7 @@ def api_importar_movimentos_excel(request):
         fornecedores_criados = 0
         fornecedores_encontrados = 0
         erros = []
+        erros_tipos = {}  # Dicionário para agrupar tipos de erro
         
         fornecedores_novos = set()
         
@@ -785,12 +791,63 @@ def api_importar_movimentos_excel(request):
                         logger.info(f'Processados {movimentos_criados} movimentos...')
                         
                 elif erro:
-                    erros.append(erro)
+                    # Agrupar erros similares de forma inteligente
+                    if 'Conta contábil não encontrada:' in erro:
+                        tipo_base = 'Conta contábil não encontrada'
+                        codigo = erro.split(':')[1].strip().split(' ')[0]
+                        chave_erro = f"{tipo_base}:{codigo}"
+                    elif 'Centro de custo não encontrado:' in erro:
+                        tipo_base = 'Centro de custo não encontrado'
+                        codigo = erro.split(':')[1].strip().split(' ')[0]
+                        chave_erro = f"{tipo_base}:{codigo}"
+                    elif 'Unidade não encontrada:' in erro:
+                        tipo_base = 'Unidade não encontrada'
+                        codigo = erro.split(':')[1].strip().split(' ')[0]
+                        chave_erro = f"{tipo_base}:{codigo}"
+                    else:
+                        tipo_base = erro.split(' - linha')[0] if ' - linha' in erro else erro.split(':')[0] if ':' in erro else erro
+                        chave_erro = tipo_base
+                    
+                    if chave_erro not in erros_tipos:
+                        erros_tipos[chave_erro] = {
+                            'count': 1,
+                            'exemplo': erro,
+                            'tipo': tipo_base
+                        }
+                    else:
+                        erros_tipos[chave_erro]['count'] += 1
                     
             except Exception as e:
                 erro_msg = f'Linha {idx + 2}: Erro inesperado - {str(e)}'
-                erros.append(erro_msg)
-                logger.error(erro_msg)
+                tipo_erro = 'Erro inesperado'
+                
+                if tipo_erro not in erros_tipos:
+                    erros_tipos[tipo_erro] = {
+                        'count': 1,
+                        'exemplo': erro_msg,
+                        'tipo': tipo_erro
+                    }
+                    logger.error(erro_msg)
+                else:
+                    erros_tipos[tipo_erro]['count'] += 1
+        
+        # Converter erros agrupados para lista final
+        for chave, info in erros_tipos.items():
+            if info['count'] == 1:
+                erros.append(info['exemplo'])
+            else:
+                # Para múltiplas ocorrências, mostrar resumo
+                if info['tipo'] == 'Conta contábil não encontrada':
+                    codigo = chave.split(':')[1]
+                    erros.append(f"Conta contábil não encontrada: {codigo} ({info['count']} ocorrências)")
+                elif info['tipo'] == 'Centro de custo não encontrado':
+                    codigo = chave.split(':')[1]
+                    erros.append(f"Centro de custo não encontrado: {codigo} ({info['count']} ocorrências)")
+                elif info['tipo'] == 'Unidade não encontrada':
+                    codigo = chave.split(':')[1]
+                    erros.append(f"Unidade não encontrada: {codigo} ({info['count']} ocorrências)")
+                else:
+                    erros.append(f"{info['tipo']} ({info['count']} ocorrências)")
         
         logger.info(
             f'Importação MELHORADA concluída: {movimentos_criados} movimentos, '
