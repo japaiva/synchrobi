@@ -69,8 +69,6 @@
           <tr>
             <th style="width: 100px;">Código</th>
             <th style="width: 420px;">Fornecedor</th>
-            <th style="width: 150px;">CNPJ/CPF</th>
-            <th style="width: 60px;" class="text-center">Tipo</th>
             <th style="width: 40px;" class="text-center">Sts</th>
             <th style="width: 40px;" class="text-center">Movs</th>
             <th style="width: 100px;" class="text-end">Ações</th>
@@ -86,36 +84,7 @@
                 <div class="fw-bold">{{ fornecedor.razao_social|truncatechars:35 }}</div>
 
               </td>
-              <td>
-                {% if fornecedor.cnpj_cpf %}
-                  <code class="small">{{ fornecedor.cnpj_cpf_formatado }}</code>
-                  <div class="small text-muted">{{ fornecedor.tipo_pessoa }}</div>
-                {% else %}
-                  <span class="text-muted small">-</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if fornecedor.telefone %}
-                  <div class="small">
-                    <i class="fas fa-phone text-muted me-1"></i>{{ fornecedor.telefone }}
-                  </div>
-                {% endif %}
-                {% if fornecedor.email %}
-                  <div class="small">
-                    <i class="fas fa-envelope text-muted me-1"></i>{{ fornecedor.email|truncatechars:20 }}
-                  </div>
-                {% endif %}
-                {% if not fornecedor.telefone and not fornecedor.email %}
-                  <span class="text-muted small">-</span>
-                {% endif %}
-              </td>
-              <td class="text-center">
-                {% if fornecedor.criado_automaticamente %}
-                  <span class="badge bg-secondary" style="font-size: 0.7rem;">Auto</span>
-                {% else %}
-                  <span class="badge bg-primary" style="font-size: 0.7rem;">Manual</span>
-                {% endif %}
-              </td>
+
               <td class="text-center">
                 {% if fornecedor.ativo %}
                   <span class="badge bg-success">Ativo</span>

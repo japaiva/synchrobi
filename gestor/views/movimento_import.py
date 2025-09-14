@@ -1,4 +1,4 @@
-# gestor/views/movimento_import.py - FUNÇÕES DE IMPORTAÇÃO SEPARADAS
+# gestor/views/movimento_import.py - FUNÇÕES DE IMPORTAÇÃO COM MELHORIAS
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -10,6 +10,7 @@ from datetime import datetime, date, timedelta
 import logging
 import pandas as pd
 import decimal
+import re
 from decimal import Decimal, ROUND_HALF_UP
 
 from core.models import Movimento, Unidade, CentroCusto, ContaContabil, ContaExterna, Fornecedor
@@ -18,15 +19,37 @@ logger = logging.getLogger('synchrobi')
 
 # === FUNÇÕES AUXILIARES PARA IMPORTAÇÃO ===
 
+def extrair_numero_documento_do_historico(historico):
+    """
+    Extrai o número do documento do histórico - geralmente uma sequência de números antes do nome do fornecedor
+    Exemplo: "... - 826498 AUTOPEL AUTOMACAO COMERCIAL E INFORMATICA LTDA - ..."
+    Extrai: "826498"
+    """
+    if not historico:
+        return ''
+    
+    # Busca por "- NÚMERO NOME_COMPLETO -" e pega o NÚMERO
+    matches = re.findall(r'- (\d+)\s+[A-Z\s&\.\-_]+? -', historico)
+    
+    if matches:
+        # Pegar o último match (mais provável de ser o documento principal)
+        return matches[-1].strip()
+    
+    # Se não encontrou no padrão principal, tentar outros padrões
+    # Buscar sequências de números no histórico
+    numeros = re.findall(r'\b\d{5,}\b', historico)  # Números com 5+ dígitos
+    
+    if numeros:
+        return numeros[-1]  # Último número encontrado
+    
+    return ''
+
 def extrair_fornecedor_do_historico(historico):
     """
     Extrai fornecedor do histórico ignorando números (que são documentos).
     Exemplo: "... - 826498 AUTOPEL AUTOMACAO COMERCIAL E INFORMATICA LTDA - ..."
     Extrai apenas: "AUTOPEL AUTOMACAO COMERCIAL E INFORMATICA LTDA"
     """
-    import re
-    import hashlib
-    
     if not historico:
         return None
     
@@ -42,117 +65,69 @@ def extrair_fornecedor_do_historico(historico):
     if len(nome) < 3:  # Nome muito curto
         return None
     
-    # Limpar e normalizar o nome
     nome_limpo = nome.upper().strip()
     
-    # Gerar código automático baseado no nome (primeiras letras + hash)
-    # Pegar primeiras letras de cada palavra
-    palavras = nome_limpo.split()
-    iniciais = ''.join([palavra[0] for palavra in palavras if palavra])[:4]
-    
-    # Adicionar hash do nome para evitar duplicatas
-    hash_nome = hashlib.md5(nome_limpo.encode()).hexdigest()[:4].upper()
-    codigo_auto = f"{iniciais}{hash_nome}"
-    
-    # Verificar se fornecedor já existe pelo nome
+    # MUDANÇA: Verificar se fornecedor já existe pelo nome ANTES de criar novo
     try:
-        fornecedor = Fornecedor.objects.get(razao_social=nome_limpo)
-        logger.info(f'Fornecedor existente encontrado por nome: {fornecedor.codigo} - {nome_limpo}')
-        return fornecedor
+        fornecedor_existente = Fornecedor.objects.get(razao_social=nome_limpo)
+        logger.info(f'Fornecedor existente encontrado por nome: {fornecedor_existente.codigo} - {nome_limpo}')
+        return fornecedor_existente
     except Fornecedor.DoesNotExist:
         pass
     
-    # Verificar se código gerado já existe
-    codigo_final = codigo_auto
-    contador = 1
-    while Fornecedor.objects.filter(codigo=codigo_final).exists():
-        codigo_final = f"{codigo_auto}{contador:02d}"
-        contador += 1
-        if contador > 99:  # Limite de segurança
-            break
-    
-    # Criar novo fornecedor
+    # Se chegou aqui, precisa criar novo fornecedor
     try:
+        codigo_auto = Fornecedor.gerar_codigo_automatico(nome_limpo)
+        
         fornecedor = Fornecedor.objects.create(
-            codigo=codigo_final,
+            codigo=codigo_auto,
             razao_social=nome_limpo,
             criado_automaticamente=True,
             origem_historico=historico[:500]  # Limitar tamanho
         )
-        logger.info(f'Novo fornecedor criado: {codigo_final} - {nome_limpo}')
+        
+        logger.info(f'Novo fornecedor criado: {codigo_auto} - {nome_limpo}')
         return fornecedor
+        
     except Exception as e:
-        logger.error(f'Erro ao criar fornecedor {codigo_final}: {str(e)}')
+        logger.error(f'Erro ao criar fornecedor para {nome_limpo}: {str(e)}')
         return None
 
-def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
+def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, data_inicio, data_fim):
     """
-    Processa uma linha do Excel com a estrutura correta identificada
-    CORRIGIDA PARA TRATAR VALORES DECIMAIS CORRETAMENTE
+    Processa uma linha do Excel com validações aprimoradas
     
-    REGRA SIMPLES:
-    - Converter valores para positivo (usar abs)
-    - Manter natureza do arquivo (D/C)
-    - Garantir 2 casas decimais
+    MELHORIAS IMPLEMENTADAS:
+    - Não importa se não encontrar conta contábil via conta externa
+    - Não importa se não encontrar centro de custo
+    - Não importa se estiver fora do período de datas
+    - Extrai número do documento do histórico
+    - Só cria fornecedor se for novo
+    - Não grava "nan" em campos vazios
     """
     try:
-        # Extrair dados da linha baseado na estrutura real
+        # Extrair dados da linha
         mes = int(linha_dados.get('Mês', 0))
         ano = int(linha_dados.get('Ano', 0))
         data = linha_dados.get('Data')
-        codigo_unidade = linha_dados.get('Cód. da unidade')  # Ex: 106, 108, 115
-        codigo_centro_custo = linha_dados.get('Cód. do centro de custo')  # Ex: "20.02.02"
-        codigo_conta_contabil = linha_dados.get('Cód. da conta contábil')  # Ex: 6303010017
-        documento = linha_dados.get('Documento', '')
+        codigo_unidade = linha_dados.get('Cód. da unidade')
+        codigo_centro_custo = linha_dados.get('Cód. do centro de custo')
+        codigo_conta_contabil = linha_dados.get('Cód. da conta contábil')
         natureza = linha_dados.get('Natureza (D/C/A)', 'D')
         valor_bruto = linha_dados.get('Valor', 0)
         historico = linha_dados.get('Histórico', '')
-        codigo_projeto = linha_dados.get('Cód. do projeto', '')
-        gerador = linha_dados.get('Gerador', '')
+        codigo_projeto_raw = linha_dados.get('Cód. do projeto', '')
+        gerador_raw = linha_dados.get('Gerador', '')
         rateio = linha_dados.get('Rateio', 'N')
         
-        # === CORREÇÃO SIMPLES DE VALOR ===
-        # Apenas converter valor para positivo e garantir 2 casas decimais
-        if valor_bruto is None or valor_bruto == '':
-            valor = Decimal('0.00')
-        else:
-            try:
-                # Converter para Decimal, usar valor absoluto e arredondar para 2 casas
-                valor_decimal = Decimal(str(valor_bruto))
-                valor = abs(valor_decimal).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            except (ValueError, decimal.InvalidOperation):
-                raise ValueError(f'Valor inválido: {valor_bruto}')
+        # === LIMPAR CAMPOS OPCIONAIS (EVITAR "nan") ===
+        def limpar_campo(campo):
+            if campo is None or pd.isna(campo) or str(campo).lower() == 'nan':
+                return ''
+            return str(campo).strip()
         
-        # Manter natureza original do arquivo
-        natureza_final = natureza or 'D'
-        
-        # === BUSCAR UNIDADE PELO CÓDIGO ALL STRATEGY ===
-        unidade = Unidade.buscar_por_codigo_allstrategy(str(codigo_unidade))
-        if not unidade:
-            # Se não encontrou por All Strategy, tentar por código normal
-            try:
-                unidade = Unidade.objects.get(codigo=str(codigo_unidade), ativa=True)
-            except Unidade.DoesNotExist:
-                raise ValueError(f'Unidade não encontrada para código: {codigo_unidade}')
-        
-        # === BUSCAR CENTRO DE CUSTO ===
-        try:
-            centro_custo = CentroCusto.objects.get(codigo=str(codigo_centro_custo), ativo=True)
-        except CentroCusto.DoesNotExist:
-            raise ValueError(f'Centro de custo não encontrado: {codigo_centro_custo}')
-        
-        # === BUSCAR CONTA CONTÁBIL VIA CÓDIGO EXTERNO ===
-        try:
-            conta_externa = ContaExterna.objects.get(
-                codigo_externo=str(codigo_conta_contabil), 
-                ativa=True
-            )
-            conta_contabil = conta_externa.conta_contabil
-        except ContaExterna.DoesNotExist:
-            raise ValueError(f'Conta contábil não encontrada para código externo: {codigo_conta_contabil}')
-        
-        # === EXTRAIR FORNECEDOR DO HISTÓRICO ===
-        fornecedor = extrair_fornecedor_do_historico(historico) if historico else None
+        codigo_projeto = limpar_campo(codigo_projeto_raw)
+        gerador = limpar_campo(gerador_raw)
         
         # === CONVERTER DATA ===
         if isinstance(data, str):
@@ -168,13 +143,57 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
         elif isinstance(data, datetime):
             data = data.date()
         elif isinstance(data, (int, float)):
-            # Excel pode retornar data como número serial
             try:
-                # Excel serial date (1 = 1900-01-01)
                 excel_epoch = date(1900, 1, 1)
-                data = excel_epoch + timedelta(days=int(data) - 2)  # -2 para corrigir o bug do Excel
+                data = excel_epoch + timedelta(days=int(data) - 2)
             except:
                 raise ValueError(f'Formato de data inválido: {data}')
+        
+        # === VALIDAR SE ESTÁ NO PERÍODO (NÃO IMPORTAR SE FORA) ===
+        if not (data_inicio <= data <= data_fim):
+            return None, f'Data {data} fora do período {data_inicio} a {data_fim} - linha ignorada'
+        
+        # === CONVERTER VALOR ===
+        if valor_bruto is None or valor_bruto == '':
+            valor = Decimal('0.00')
+        else:
+            try:
+                valor_decimal = Decimal(str(valor_bruto))
+                valor = abs(valor_decimal).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except (ValueError, decimal.InvalidOperation):
+                raise ValueError(f'Valor inválido: {valor_bruto}')
+        
+        natureza_final = natureza or 'D'
+        
+        # === BUSCAR UNIDADE ===
+        unidade = Unidade.buscar_por_codigo_allstrategy(str(codigo_unidade))
+        if not unidade:
+            try:
+                unidade = Unidade.objects.get(codigo=str(codigo_unidade), ativa=True)
+            except Unidade.DoesNotExist:
+                raise ValueError(f'Unidade não encontrada para código: {codigo_unidade}')
+        
+        # === BUSCAR CENTRO DE CUSTO (NÃO IMPORTAR SE NÃO ENCONTRAR) ===
+        try:
+            centro_custo = CentroCusto.objects.get(codigo=str(codigo_centro_custo), ativo=True)
+        except CentroCusto.DoesNotExist:
+            return None, f'Centro de custo não encontrado: {codigo_centro_custo} - linha ignorada'
+        
+        # === BUSCAR CONTA CONTÁBIL VIA CÓDIGO EXTERNO (NÃO IMPORTAR SE NÃO ENCONTRAR) ===
+        try:
+            conta_externa = ContaExterna.objects.get(
+                codigo_externo=str(codigo_conta_contabil), 
+                ativa=True
+            )
+            conta_contabil = conta_externa.conta_contabil
+        except ContaExterna.DoesNotExist:
+            return None, f'Conta contábil não encontrada para código externo: {codigo_conta_contabil} - linha ignorada'
+        
+        # === EXTRAIR NÚMERO DO DOCUMENTO DO HISTÓRICO ===
+        numero_documento = extrair_numero_documento_do_historico(historico)
+        
+        # === EXTRAIR FORNECEDOR DO HISTÓRICO (SÓ CRIAR SE NOVO) ===
+        fornecedor = extrair_fornecedor_do_historico(historico) if historico else None
         
         # === CRIAR MOVIMENTO ===
         movimento = Movimento.objects.create(
@@ -185,13 +204,13 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo):
             centro_custo=centro_custo,
             conta_contabil=conta_contabil,
             fornecedor=fornecedor,
-            documento=str(documento) if documento else '',
-            natureza=natureza_final,  # Usar a natureza do arquivo
-            valor=valor,  # Usar o valor já convertido (sempre positivo)
+            documento=numero_documento,  # Usar o número extraído do histórico
+            natureza=natureza_final,
+            valor=valor,
             historico=historico,
-            codigo_projeto=str(codigo_projeto) if codigo_projeto else '',
-            gerador=str(gerador) if gerador else '',
-            rateio=str(rateio) if rateio else 'N',
+            codigo_projeto=codigo_projeto if codigo_projeto else '',  # Não gravar se vazio
+            gerador=gerador if gerador else '',  # Não gravar se vazio
+            rateio=str(rateio) if rateio and str(rateio).lower() != 'nan' else 'N',
             arquivo_origem=nome_arquivo,
             linha_origem=numero_linha
         )
@@ -208,7 +227,6 @@ def corrigir_estrutura_excel(arquivo):
     Corrige problemas na estrutura do Excel antes do processamento
     """
     try:
-        # Ler arquivo com cabeçalho na linha 1 (baseado na análise do arquivo real)
         df = pd.read_excel(arquivo, engine='openpyxl', header=0)
         
         # Verificar se as colunas necessárias existem
@@ -221,9 +239,8 @@ def corrigir_estrutura_excel(arquivo):
         if colunas_faltando:
             raise ValueError(f'Colunas obrigatórias faltando: {", ".join(colunas_faltando)}')
         
-        # Corrigir apenas os valores para positivo, manter natureza
+        # Corrigir valores para positivo, manter natureza
         if 'Valor' in df.columns:
-            # Converter todos os valores para positivo com 2 casas decimais
             df['Valor'] = df['Valor'].apply(lambda x: round(abs(float(x)), 2) if pd.notna(x) else 0.00)
         
         # Remover linhas completamente vazias
@@ -274,7 +291,7 @@ def movimento_importar(request):
 @login_required
 @require_POST
 def api_preview_movimentos_excel(request):
-    """API para preview dos movimentos - CORRIGIDA PARA VALORES DECIMAIS"""
+    """API para preview dos movimentos - COM VALIDAÇÕES APRIMORADAS"""
     
     try:
         if 'arquivo' not in request.FILES:
@@ -309,6 +326,7 @@ def api_preview_movimentos_excel(request):
         erros_encontrados = []
         fornecedores_novos = []
         linhas_no_periodo = 0
+        linhas_serao_ignoradas = 0
         
         for idx, linha in enumerate(preview_linhas, 1):
             resultado = {
@@ -321,12 +339,15 @@ def api_preview_movimentos_excel(request):
                     'codigo_centro': linha.get('Cód. do centro de custo'),
                     'codigo_conta': linha.get('Cód. da conta contábil'),
                     'valor': linha.get('Valor'),
-                    'natureza': linha.get('Natureza (D/C/A)')
+                    'natureza': linha.get('Natureza (D/C/A)'),
+                    'documento_extraido': '',
+                    'fornecedor_extraido': ''
                 },
                 'validacoes': {},
                 'errors': [],
                 'warnings': [],
-                'no_periodo': False
+                'no_periodo': False,
+                'sera_ignorada': False
             }
             
             # Verificar se a linha está no período
@@ -343,18 +364,22 @@ def api_preview_movimentos_excel(request):
                     resultado['no_periodo'] = True
                     linhas_no_periodo += 1
                 else:
-                    resultado['warnings'].append(f'Data {data_linha} fora do período {data_inicio} a {data_fim}')
+                    resultado['warnings'].append(f'Data {data_linha} fora do período - SERÁ IGNORADA')
+                    resultado['sera_ignorada'] = True
+                    linhas_serao_ignoradas += 1
             except:
-                resultado['errors'].append('Data inválida')
+                resultado['errors'].append('Data inválida - SERÁ IGNORADA')
+                resultado['sera_ignorada'] = True
+                linhas_serao_ignoradas += 1
             
-            # Verificar e corrigir valor (simples: converter para positivo)
+            # Verificar e corrigir valor
             valor_linha = linha.get('Valor', 0)
             natureza_linha = linha.get('Natureza (D/C/A)', 'D')
             
             try:
                 if valor_linha is not None:
                     valor_float = float(valor_linha)
-                    valor_corrigido = round(abs(valor_float), 2)  # Sempre positivo
+                    valor_corrigido = round(abs(valor_float), 2)
                     
                     explicacao = f"Valor {valor_float} → {valor_corrigido} (natureza: {natureza_linha})"
                 else:
@@ -370,8 +395,10 @@ def api_preview_movimentos_excel(request):
                     'explicacao': explicacao
                 }
             except (ValueError, TypeError):
-                resultado['errors'].append(f'Valor inválido: {valor_linha}')
+                resultado['errors'].append(f'Valor inválido: {valor_linha} - SERÁ IGNORADA')
                 resultado['validacoes']['valor'] = {'valido': False}
+                resultado['sera_ignorada'] = True
+                linhas_serao_ignoradas += 1
             
             # Validar unidade pelo código All Strategy
             codigo_unidade = linha.get('Cód. da unidade')
@@ -387,9 +414,11 @@ def api_preview_movimentos_excel(request):
                 'detalhes': f"{unidade.codigo_display} - {unidade.nome}" if unidade else None
             }
             if not unidade:
-                resultado['errors'].append(f'Unidade não encontrada: {codigo_unidade}')
+                resultado['errors'].append(f'Unidade não encontrada: {codigo_unidade} - SERÁ IGNORADA')
+                resultado['sera_ignorada'] = True
+                linhas_serao_ignoradas += 1
             
-            # Validar centro de custo
+            # Validar centro de custo (CRÍTICO - se não encontrar, será ignorada)
             codigo_centro = linha.get('Cód. do centro de custo')
             try:
                 centro = CentroCusto.objects.get(codigo=str(codigo_centro), ativo=True)
@@ -399,9 +428,11 @@ def api_preview_movimentos_excel(request):
                 }
             except CentroCusto.DoesNotExist:
                 resultado['validacoes']['centro_custo'] = {'encontrado': False}
-                resultado['errors'].append(f'Centro de custo não encontrado: {codigo_centro}')
+                resultado['errors'].append(f'Centro de custo não encontrado: {codigo_centro} - SERÁ IGNORADA')
+                resultado['sera_ignorada'] = True
+                linhas_serao_ignoradas += 1
             
-            # Validar conta contábil via código externo
+            # Validar conta contábil via código externo (CRÍTICO - se não encontrar, será ignorada)
             codigo_conta = linha.get('Cód. da conta contábil')
             try:
                 conta_externa = ContaExterna.objects.get(codigo_externo=str(codigo_conta), ativa=True)
@@ -411,22 +442,48 @@ def api_preview_movimentos_excel(request):
                 }
             except ContaExterna.DoesNotExist:
                 resultado['validacoes']['conta_contabil'] = {'encontrada': False}
-                resultado['errors'].append(f'Conta contábil não encontrada: {codigo_conta}')
+                resultado['errors'].append(f'Conta contábil não encontrada: {codigo_conta} - SERÁ IGNORADA')
+                resultado['sera_ignorada'] = True
+                linhas_serao_ignoradas += 1
             
-            # Preview de fornecedor do histórico
+            # Extrair número do documento e fornecedor do histórico
             historico = linha.get('Histórico', '')
-            fornecedor = extrair_fornecedor_do_historico(historico) if historico else None
-            if fornecedor:
-                eh_novo = not Fornecedor.objects.filter(codigo=fornecedor.codigo).exists()
-                resultado['validacoes']['fornecedor'] = {
-                    'sera_criado': eh_novo,
-                    'detalhes': f"{fornecedor.codigo} - {fornecedor.razao_social}"
-                }
-                if eh_novo:
-                    fornecedores_novos.append(f"{fornecedor.codigo} - {fornecedor.razao_social}")
+            if historico:
+                # Extrair número do documento
+                numero_documento = extrair_numero_documento_do_historico(historico)
+                resultado['dados']['documento_extraido'] = numero_documento
+                
+                # Extrair fornecedor
+                fornecedor_existente = Fornecedor.buscar_por_nome(
+                    re.findall(r'- \d+\s+([A-Z\s&\.\-_]+?) -', historico)[-1].strip() if 
+                    re.findall(r'- \d+\s+([A-Z\s&\.\-_]+?) -', historico) else ''
+                )
+                
+                if fornecedor_existente:
+                    resultado['validacoes']['fornecedor'] = {
+                        'sera_criado': False,
+                        'detalhes': f"EXISTENTE: {fornecedor_existente.codigo} - {fornecedor_existente.razao_social}"
+                    }
+                    resultado['dados']['fornecedor_extraido'] = f"EXISTENTE: {fornecedor_existente.razao_social}"
+                else:
+                    # Simular criação de novo fornecedor
+                    matches = re.findall(r'- \d+\s+([A-Z\s&\.\-_]+?) -', historico)
+                    if matches:
+                        nome_fornecedor = matches[-1].strip()
+                        if len(nome_fornecedor) >= 3:
+                            codigo_preview = Fornecedor.gerar_codigo_automatico(nome_fornecedor)
+                            resultado['validacoes']['fornecedor'] = {
+                                'sera_criado': True,
+                                'detalhes': f"NOVO: {codigo_preview} - {nome_fornecedor.upper()}"
+                            }
+                            resultado['dados']['fornecedor_extraido'] = f"NOVO: {nome_fornecedor.upper()}"
+                            fornecedores_novos.append(f"{codigo_preview} - {nome_fornecedor.upper()}")
+                        else:
+                            resultado['warnings'].append('Nome de fornecedor muito curto no histórico')
+                    else:
+                        resultado['warnings'].append('Nenhum fornecedor identificado no histórico')
             else:
-                resultado['validacoes']['fornecedor'] = {'encontrado': False}
-                resultado['warnings'].append('Nenhum fornecedor identificado no histórico')
+                resultado['warnings'].append('Histórico vazio - sem fornecedor')
             
             if resultado['errors']:
                 erros_encontrados.extend(resultado['errors'])
@@ -461,10 +518,11 @@ def api_preview_movimentos_excel(request):
                 'total_linhas_periodo': total_linhas_periodo,
                 'linhas_preview': len(preview_results),
                 'linhas_preview_periodo': linhas_no_periodo,
+                'linhas_serao_ignoradas': linhas_serao_ignoradas,
                 'total_erros': len(erros_encontrados),
                 'linhas_com_erro': len([r for r in preview_results if r['errors']]),
                 'fornecedores_novos': len(fornecedores_novos),
-                'pode_importar': len(erros_encontrados) == 0
+                'pode_importar': True  # Sempre pode importar, mas com avisos
             },
             'fornecedores_novos': fornecedores_novos[:10],
             'nome_arquivo': arquivo.name,
@@ -482,7 +540,7 @@ def api_preview_movimentos_excel(request):
 @login_required
 @require_POST
 def api_importar_movimentos_excel(request):
-    """API para importação real dos movimentos - CORRIGIDA PARA VALORES DECIMAIS"""
+    """API para importação real dos movimentos - COM FILTROS RIGOROSOS"""
     
     try:
         # Receber parâmetros
@@ -524,47 +582,62 @@ def api_importar_movimentos_excel(request):
         
         logger.info(f'Iniciando importação de {len(df)} linhas do arquivo {arquivo.name}')
         
+        # Contadores detalhados
         movimentos_criados = 0
         fornecedores_criados = 0
-        erros = []
         linhas_fora_periodo = 0
+        linhas_sem_centro_custo = 0
+        linhas_sem_conta_contabil = 0
+        erros = []
         
         # Acompanhar fornecedores criados
         fornecedores_novos = set()
         
         for idx, linha in df.iterrows():
             try:
-                # Processar linha
+                # Processar linha com filtros rigorosos
                 linha_dict = linha.to_dict()
-                movimento, erro = processar_linha_excel_atualizada(linha_dict, idx + 2, arquivo.name)
+                movimento, erro = processar_linha_excel_atualizada(
+                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
+                )
                 
                 if movimento:
-                    # Verificar se está no período
-                    if data_inicio <= movimento.data <= data_fim:
-                        movimentos_criados += 1
+                    movimentos_criados += 1
+                    
+                    # Rastrear fornecedores novos
+                    if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
+                        if movimento.fornecedor.codigo not in fornecedores_novos:
+                            fornecedores_novos.add(movimento.fornecedor.codigo)
+                            fornecedores_criados += 1
+                    
+                    # Log a cada 50 movimentos
+                    if movimentos_criados % 50 == 0:
+                        logger.info(f'Processados {movimentos_criados} movimentos...')
                         
-                        # Rastrear fornecedores novos
-                        if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
-                            if movimento.fornecedor.codigo not in fornecedores_novos:
-                                fornecedores_novos.add(movimento.fornecedor.codigo)
-                                fornecedores_criados += 1
-                        
-                        # Log a cada 50 movimentos
-                        if movimentos_criados % 50 == 0:
-                            logger.info(f'Processados {movimentos_criados} movimentos...')
-                    else:
-                        # Remover movimento fora do período
-                        movimento.delete()
+                elif erro:
+                    # Classificar o tipo de erro para estatísticas
+                    if 'fora do período' in erro:
                         linhas_fora_periodo += 1
-                else:
-                    erros.append(erro)
+                    elif 'Centro de custo não encontrado' in erro:
+                        linhas_sem_centro_custo += 1
+                    elif 'Conta contábil não encontrada' in erro:
+                        linhas_sem_conta_contabil += 1
+                    else:
+                        erros.append(erro)
                     
             except Exception as e:
                 erro_msg = f'Linha {idx + 2}: Erro inesperado - {str(e)}'
                 erros.append(erro_msg)
                 logger.error(erro_msg)
         
-        logger.info(f'Importação concluída: {movimentos_criados} movimentos, {fornecedores_criados} fornecedores novos, {len(erros)} erros, {linhas_fora_periodo} linhas fora do período')
+        logger.info(
+            f'Importação concluída: {movimentos_criados} movimentos criados, '
+            f'{fornecedores_criados} fornecedores novos, '
+            f'{len(erros)} erros, '
+            f'{linhas_fora_periodo} fora do período, '
+            f'{linhas_sem_centro_custo} sem centro de custo, '
+            f'{linhas_sem_conta_contabil} sem conta contábil'
+        )
         
         return JsonResponse({
             'success': True,
@@ -573,6 +646,8 @@ def api_importar_movimentos_excel(request):
                 'movimentos_criados': movimentos_criados,
                 'fornecedores_criados': fornecedores_criados,
                 'linhas_fora_periodo': linhas_fora_periodo,
+                'linhas_sem_centro_custo': linhas_sem_centro_custo,
+                'linhas_sem_conta_contabil': linhas_sem_conta_contabil,
                 'total_erros': len(erros),
                 'periodo': f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}",
                 'nome_arquivo': arquivo.name
