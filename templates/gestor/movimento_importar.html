@@ -1,755 +1,276 @@
-<!-- gestor/templates/gestor/movimento_importar.html -->
 {% extends 'gestor/base_gestor.html' %}
-{% load static %}
 
 {% block title %}Importar Movimentos | SynchroBI{% endblock %}
 
-{% block extra_css %}
-<style>
-.upload-area {
-    border: 2px dashed #dee2e6;
-    border-radius: 8px;
-    padding: 40px;
-    text-align: center;
-    transition: all 0.3s ease;
-    background-color: #f8f9fa;
-}
-
-.upload-area.dragover {
-    border-color: #007bff;
-    background-color: #e7f3ff;
-}
-
-.upload-area:hover {
-    border-color: #6c757d;
-    background-color: #e9ecef;
-}
-
-.progress-container {
-    display: none;
-}
-
-.status-icon {
-    font-size: 1.2rem;
-    margin-right: 8px;
-}
-
-.preview-table {
-    font-size: 0.85rem;
-}
-
-.validation-badge {
-    font-size: 0.7rem;
-}
-
-.stats-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    margin-bottom: 20px;
-}
-
-.date-inputs {
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    border: 1px solid #dee2e6;
-}
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="container-fluid">
-  <div class="row">
-    <div class="col-12">
+<div class="container mt-4">
+  <div class="card shadow">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">
+        <i class="fas fa-upload me-2"></i>Importar Movimentos
+      </h5>
+      <a href="{% url 'gestor:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+    
+    <div class="card-body">
+      <!-- Status do Sistema -->
+      {% if not stats.sistema_pronto %}
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <strong>Sistema não configurado completamente.</strong>
+        Certifique-se de que unidades, centros de custo e contas contábeis estão cadastrados.
+      </div>
+      {% endif %}
       
-      <!-- Header -->
-      <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-          <h4 class="mb-0">
-            Importação de Movimentos
-          </h4>
-        </div>
-        <div class="card-body">
-
-          <!-- Configuração do Período -->
-          <div class="date-inputs">
-            <h6 class="mb-3">
-              Período de Importação
-            </h6>
-            <div class="row">
-              <div class="col-md-6">
-                <label for="data_inicio" class="form-label">
-                  Data de Início <span class="text-danger">*</span>
-                </label>
-                <input type="date" id="data_inicio" class="form-control" required>
-              </div>
-              <div class="col-md-6">
-                <label for="data_fim" class="form-label">
-                  Data de Fim <span class="text-danger">*</span>
-                </label>
-                <input type="date" id="data_fim" class="form-control" required>
-              </div>
-            </div>
-            
-            <!-- Aviso sobre período -->
-            <div class="alert alert-warning mt-3 mb-0" id="avisoPerido" style="display: none;">
-              <h6 class="alert-heading">
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                Atenção: Dados serão substituídos. Esta ação não pode ser desfeita.
-              </h6>
-            </div>
+      <!-- Formulário Principal -->
+      <form id="formImportacao" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="row g-3">
+          <!-- Período -->
+          <div class="col-md-3">
+            <label for="data_inicio" class="form-label">Data Início</label>
+            <input type="date" id="data_inicio" name="data_inicio" class="form-control" required>
           </div>
           
-          <!-- Upload Area -->
-          <div class="upload-area" id="uploadArea">
-            <div id="uploadContent">
-              <h5>Arraste o arquivo Excel aqui</h5>
-              <p class="text-muted mb-3">ou clique para selecionar</p>
-              <button type="button" class="btn btn-primary" id="selectFileBtn">
-                <i class="fas fa-folder-open me-1"></i> Selecionar Arquivo
-              </button>
-              <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
-              <div class="mt-3">
-                <small class="text-muted">
-                  <strong>Formatos aceitos:</strong> .xlsx, .xls<br>
-                  <strong>Estrutura:</strong> Cabeçalho na linha 1<br>
-                  <strong>Colunas obrigatórias:</strong> 
-                  Mês, Ano, Data, Cód. da unidade, Cód. do centro de custo, 
-                  Cód. da conta contábil, Natureza (D/C/A), Valor, Histórico
-                </small>
-              </div>
+          <div class="col-md-3">
+            <label for="data_fim" class="form-label">Data Fim</label>
+            <input type="date" id="data_fim" name="data_fim" class="form-control" required>
+          </div>
+          
+          <!-- Arquivo -->
+          <div class="col-md-4">
+            <label for="arquivo" class="form-label">Arquivo Excel</label>
+            <input type="file" id="arquivo" name="arquivo" class="form-control" 
+                   accept=".xlsx,.xls" required>
+          </div>
+          
+          <!-- Botão -->
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" id="btnImportar">
+              <i class="fas fa-upload me-1"></i> Importar
+            </button>
+          </div>
+        </div>
+        
+        <!-- Info sobre período -->
+        <div id="infoPeriodo" class="mt-3" style="display: none;">
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <span id="textoPeriodo"></span>
+          </div>
+        </div>
+      </form>
+      
+      <!-- Progresso -->
+      <div id="progressoImportacao" class="mt-4" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="small">Processando...</span>
+          <span id="statusProgresso" class="small text-muted"></span>
+        </div>
+        <div class="progress">
+          <div id="barraProgresso" class="progress-bar progress-bar-striped progress-bar-animated" 
+               role="progressbar" style="width: 0%"></div>
+        </div>
+      </div>
+      
+      <!-- Resultado -->
+      <div id="resultadoImportacao" class="mt-4" style="display: none;">
+        <!-- Conteúdo será preenchido via JavaScript -->
+      </div>
+      
+      <!-- Stats do Sistema -->
+      {% if stats.sistema_pronto %}
+      <div class="mt-4">
+        <div class="row text-center">
+          <div class="col-6">
+            <div class="border rounded p-3">
+              <div class="h4 mb-1">{{ stats.total_movimentos|default:0 }}</div>
+              <div class="small text-muted">Movimentos Cadastrados</div>
             </div>
-            
-            <!-- Progress -->
-            <div class="progress-container" id="progressContainer">
-              <div class="progress mb-3">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                     id="progressBar" style="width: 0%"></div>
+          </div>
+          <div class="col-6">
+            <div class="border rounded p-3">
+              <div class="h4 mb-1">
+                <i class="fas fa-check-circle text-success"></i>
               </div>
-              <p id="progressText">Processando arquivo...</p>
+              <div class="small text-muted">Sistema Configurado</div>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- Preview dos Dados -->
-      <div class="card" id="previewCard" style="display: none;">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-          <h5 class="card-title mb-0">
-            Preview dos Dados
-          </h5>
-          <div>
-            <button type="button" class="btn btn-success" id="confirmarImportacao" disabled>
-              <i class="fas fa-check me-1"></i> Confirmar Importação
-            </button>
-            <button type="button" class="btn btn-secondary" id="cancelarPreview">
-              <i class="fas fa-times me-1"></i> Cancelar
-            </button>
-          </div>
-        </div>
-        <div class="card-body">
-          
-          <!-- Estatísticas do Preview -->
-          <div class="row mb-4" id="previewStats">
-            <!-- Será preenchido via JavaScript -->
-          </div>
-          
-          <!-- Alertas -->
-          <div id="previewAlerts">
-            <!-- Será preenchido via JavaScript -->
-          </div>
-          
-          <!-- Tabela de Preview -->
-          <div class="table-responsive">
-            <table class="table table-sm preview-table" id="previewTable">
-              <thead class="table-light">
-                <tr>
-                  <th>Linha</th>
-                  <th>Data</th>
-                  <th>Período</th>
-                  <th>Unidade</th>
-                  <th>Centro</th>
-                  <th>Conta</th>
-                  <th>Fornecedor</th>
-                  <th>Valor</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Será preenchido via JavaScript -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Resultado da Importação -->
-      <div class="card" id="resultadoCard" style="display: none;">
-        <div class="card-header bg-success text-white">
-          <h5 class="card-title mb-0">
-            <i class="fas fa-check-circle me-2"></i>Importação Concluída
-          </h5>
-        </div>
-        <div class="card-body">
-          <div id="resultadoContent">
-            <!-- Será preenchido via JavaScript -->
-          </div>
-          <div class="mt-4">
-            <a href="{% url 'gestor:movimento_list' %}" class="btn btn-primary">
-              <i class="fas fa-list me-1"></i> Ver Movimentos Importados
-            </a>
-            <button type="button" class="btn btn-secondary" id="novaImportacao">
-              <i class="fas fa-plus me-1"></i> Nova Importação
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {% endif %}
     </div>
   </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
 <script>
-$(document).ready(function() {
-    let selectedFile = null;
-    let previewData = null;
-
-    // Elementos
-    const $uploadArea = $('#uploadArea');
-    const $fileInput = $('#fileInput');
-    const $selectFileBtn = $('#selectFileBtn');
-    const $progressContainer = $('#progressContainer');
-    const $progressBar = $('#progressBar');
-    const $progressText = $('#progressText');
-    const $previewCard = $('#previewCard');
-    const $resultadoCard = $('#resultadoCard');
-    const $dataInicio = $('#data_inicio');
-    const $dataFim = $('#data_fim');
-    const $avisoPerido = $('#avisoPerido');
-
-    // Definir datas padrão (mês atual)
-    const hoje = new Date();
-    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('formImportacao');
+    const btnImportar = document.getElementById('btnImportar');
+    const progressoDiv = document.getElementById('progressoImportacao');
+    const barraProgresso = document.getElementById('barraProgresso');
+    const statusProgresso = document.getElementById('statusProgresso');
+    const resultadoDiv = document.getElementById('resultadoImportacao');
+    const infoPeriodo = document.getElementById('infoPeriodo');
+    const textoPeriodo = document.getElementById('textoPeriodo');
     
-    $dataInicio.val(formatarDataInput(primeiroDiaMes));
-    $dataFim.val(formatarDataInput(ultimoDiaMes));
-
-    function formatarDataInput(data) {
-        const ano = data.getFullYear();
-        const mes = String(data.getMonth() + 1).padStart(2, '0');
-        const dia = String(data.getDate()).padStart(2, '0');
-        return `${ano}-${mes}-${dia}`;
-    }
-
     // Validação de período
+    const dataInicio = document.getElementById('data_inicio');
+    const dataFim = document.getElementById('data_fim');
+    
     function validarPeriodo() {
-        const dataInicio = $dataInicio.val();
-        const dataFim = $dataFim.val();
-        
-        if (!dataInicio || !dataFim) {
-            $avisoPerido.hide();
-            return false;
+        if (dataInicio.value && dataFim.value) {
+            fetch(`/gestor/api/validar-periodo-simples/?data_inicio=${dataInicio.value}&data_fim=${dataFim.value}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.movimentos_existentes > 0) {
+                        infoPeriodo.style.display = 'block';
+                        textoPeriodo.textContent = `${data.movimentos_existentes} movimentos existentes serão substituídos`;
+                    } else {
+                        infoPeriodo.style.display = 'none';
+                    }
+                })
+                .catch(() => infoPeriodo.style.display = 'none');
         }
-        
-        if (dataInicio > dataFim) {
-            alert('Data de início deve ser anterior à data de fim');
-            return false;
-        }
-        
-        $avisoPerido.show();
-        
-        // Verificar se há movimentos no período
-        $.get('{% url "gestor:api_validar_periodo_importacao" %}', {
-            data_inicio: dataInicio,
-            data_fim: dataFim
-        }, function(response) {
-            if (response.success && response.movimentos_existentes > 0) {
-                $avisoPerido.removeClass('alert-warning').addClass('alert-danger');
-                $avisoPerido.find('p').html(
-                    `Existem <strong>${response.movimentos_existentes} movimentos</strong> no período selecionado que serão <strong>removidos permanentemente</strong>. Esta ação não pode ser desfeita.`
-                );
-            } else {
-                $avisoPerido.removeClass('alert-danger').addClass('alert-warning');
-            }
-        });
-        
-        return true;
     }
-
-    // Eventos de mudança de data
-    $dataInicio.on('change', validarPeriodo);
-    $dataFim.on('change', validarPeriodo);
-
-    // Validação inicial
-    validarPeriodo();
-
-    // Upload área - clique para selecionar
-    $uploadArea.on('click', function(e) {
-        if (e.target === this || e.target.id === 'uploadContent') {
-            if (!validarPeriodo()) {
-                alert('Por favor, defina um período válido antes de selecionar o arquivo');
-                return;
-            }
-            $fileInput.click();
-        }
-    });
-
-    $selectFileBtn.on('click', function() {
-        if (!validarPeriodo()) {
-            alert('Por favor, defina um período válido antes de selecionar o arquivo');
-            return;
-        }
-        $fileInput.click();
-    });
-
-    // Drag and drop
-    $uploadArea.on('dragover', function(e) {
+    
+    dataInicio.addEventListener('change', validarPeriodo);
+    dataFim.addEventListener('change', validarPeriodo);
+    
+    // Submissão do formulário
+    form.addEventListener('submit', function(e) {
         e.preventDefault();
-        $(this).addClass('dragover');
-    });
-
-    $uploadArea.on('dragleave', function(e) {
-        e.preventDefault();
-        $(this).removeClass('dragover');
-    });
-
-    $uploadArea.on('drop', function(e) {
-        e.preventDefault();
-        $(this).removeClass('dragover');
         
-        if (!validarPeriodo()) {
-            alert('Por favor, defina um período válido antes de fazer upload');
+        if (!form.checkValidity()) {
+            form.reportValidity();
             return;
         }
         
-        const files = e.originalEvent.dataTransfer.files;
-        if (files.length > 0) {
-            handleFileSelection(files[0]);
-        }
-    });
-
-    // Seleção de arquivo
-    $fileInput.on('change', function() {
-        if (this.files.length > 0) {
-            handleFileSelection(this.files[0]);
-        }
-    });
-
-    // Processar arquivo selecionado
-    function handleFileSelection(file) {
-        // Validar tipo
-        if (!file.name.match(/\.(xlsx|xls)$/i)) {
-            alert('Por favor, selecione um arquivo Excel (.xlsx ou .xls)');
-            return;
-        }
-
-        selectedFile = file;
+        // Preparar interface
+        btnImportar.disabled = true;
+        btnImportar.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processando...';
+        progressoDiv.style.display = 'block';
+        resultadoDiv.style.display = 'none';
         
-        // Mostrar progresso
-        showProgress('Analisando arquivo...');
-        
-        // Fazer preview
-        previewArquivo();
-    }
-
-    // Preview do arquivo
-    function previewArquivo() {
-        const formData = new FormData();
-        formData.append('arquivo', selectedFile);
-        formData.append('data_inicio', $dataInicio.val());
-        formData.append('data_fim', $dataFim.val());
-
-        $.ajax({
-            url: '{% url "gestor:api_preview_movimentos_excel" %}',
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            headers: {
-                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-            },
-            success: function(response) {
-                hideProgress();
-                
-                if (response.success) {
-                    previewData = response;
-                    mostrarPreview(response);
-                } else {
-                    alert('Erro: ' + response.error);
-                }
-            },
-            error: function() {
-                hideProgress();
-                alert('Erro ao processar arquivo');
-            }
-        });
-    }
-
-    // Mostrar preview
-    function mostrarPreview(data) {
-        // Estatísticas
-        const statsHtml = `
-            <div class="col-md-2">
-                <div class="card border-0 bg-light">
-                    <div class="card-body py-2 text-center">
-                        <h5 class="mb-1">${data.stats.total_linhas_arquivo}</h5>
-                        <small class="text-muted">Total de Linhas</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card border-0 bg-light">
-                    <div class="card-body py-2 text-center">
-                        <h5 class="mb-1">${data.stats.total_linhas_periodo}</h5>
-                        <small class="text-muted">No Período</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card border-0 bg-light">
-                    <div class="card-body py-2 text-center">
-                        <h5 class="mb-1">${data.stats.linhas_preview}</h5>
-                        <small class="text-muted">Preview</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card border-0 bg-light">
-                    <div class="card-body py-2 text-center">
-                        <h5 class="mb-1 ${data.stats.total_erros > 0 ? 'text-danger' : 'text-success'}">${data.stats.total_erros}</h5>
-                        <small class="text-muted">Erros</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card border-0 bg-light">
-                    <div class="card-body py-2 text-center">
-                        <h5 class="mb-1 text-info">${data.stats.fornecedores_novos}</h5>
-                        <small class="text-muted">Fornecedores Novos</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card border-0 bg-light">
-                    <div class="card-body py-2 text-center">
-                        <h5 class="mb-1 ${data.stats.pode_importar ? 'text-success' : 'text-danger'}">
-                            <i class="fas fa-${data.stats.pode_importar ? 'check' : 'times'}"></i>
-                        </h5>
-                        <small class="text-muted">${data.stats.pode_importar ? 'Pronto' : 'Bloqueado'}</small>
-                    </div>
-                </div>
-            </div>
-        `;
-        $('#previewStats').html(statsHtml);
-
-        // Alertas
-        let alertsHtml = '';
-        if (data.stats.total_erros > 0) {
-            alertsHtml += `
-                <div class="alert alert-danger">
-                    <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Erros Encontrados</h6>
-                    <p>Foram encontrados ${data.stats.total_erros} erro(s) que impedem a importação:</p>
-                    <ul class="mb-0">
-                        ${data.erros_encontrados.map(erro => `<li>${erro}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-
-        if (data.stats.fornecedores_novos > 0) {
-            alertsHtml += `
-                <div class="alert alert-info">
-                    <h6 class="alert-heading"><i class="fas fa-plus-circle me-2"></i>Novos Fornecedores</h6>
-                    <p>${data.stats.fornecedores_novos} fornecedor(es) será(ão) criado(s) automaticamente:</p>
-                    <ul class="mb-0">
-                        ${data.fornecedores_novos.map(forn => `<li>${forn}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-
-        if (data.stats.pode_importar) {
-            alertsHtml += `
-                <div class="alert alert-success">
-                    <h6 class="alert-heading"><i class="fas fa-check-circle me-2"></i>Arquivo Válido</h6>
-                    <p class="mb-2">O arquivo está pronto para importação no período: <strong>${data.periodo}</strong></p>
-                    <p class="mb-0">Revise os dados abaixo e confirme a importação.</p>
-                </div>
-            `;
-        }
-
-        $('#previewAlerts').html(alertsHtml);
-
-        // Tabela de preview
-        let tableHtml = '';
-        data.preview_results.forEach(function(linha) {
-            const hasErrors = linha.errors.length > 0;
-            const hasWarnings = linha.warnings.length > 0;
+        // Simular progresso
+        let progresso = 0;
+        const intervalo = setInterval(() => {
+            progresso += Math.random() * 15;
+            if (progresso > 90) progresso = 90;
             
-            let statusBadges = '';
-            if (hasErrors) {
-                statusBadges += '<span class="badge bg-danger validation-badge me-1">Erro</span>';
-            }
-            if (hasWarnings) {
-                statusBadges += '<span class="badge bg-warning validation-badge me-1">Aviso</span>';
-            }
-            if (!hasErrors && !hasWarnings) {
-                statusBadges += '<span class="badge bg-success validation-badge">OK</span>';
-            }
-
-            // Status do período
-            let statusPeriodo = '';
-            if (linha.no_periodo) {
-                statusPeriodo = '<span class="badge bg-success validation-badge">✓ No período</span>';
-            } else {
-                statusPeriodo = '<span class="badge bg-secondary validation-badge">Fora do período</span>';
-            }
-
-            tableHtml += `
-                <tr class="${hasErrors ? 'table-danger' : hasWarnings ? 'table-warning' : (linha.no_periodo ? '' : 'table-secondary')}">
-                    <td>${linha.linha}</td>
-                    <td>
-                        <small>${linha.dados.data || 'N/A'}</small>
-                        <br>${statusPeriodo}
-                    </td>
-                    <td>
-                        <small>${linha.dados.mes}/${linha.dados.ano}</small>
-                    </td>
-                    <td>
-                        <code class="small">${linha.dados.codigo_unidade}</code>
-                        ${linha.validacoes.unidade && linha.validacoes.unidade.detalhes ? 
-                            `<br><small class="text-muted">${linha.validacoes.unidade.detalhes}</small>` : ''}
-                    </td>
-                    <td>
-                        <code class="small">${linha.dados.codigo_centro}</code>
-                        ${linha.validacoes.centro_custo && linha.validacoes.centro_custo.detalhes ? 
-                            `<br><small class="text-muted">${linha.validacoes.centro_custo.detalhes}</small>` : ''}
-                    </td>
-                    <td>
-                        <code class="small">${linha.dados.codigo_conta}</code>
-                        ${linha.validacoes.conta_contabil && linha.validacoes.conta_contabil.detalhes ? 
-                            `<br><small class="text-muted">${linha.validacoes.conta_contabil.detalhes}</small>` : ''}
-                    </td>
-                    <td>
-                        ${linha.validacoes.fornecedor && linha.validacoes.fornecedor.detalhes ? 
-                            `<small>${linha.validacoes.fornecedor.detalhes}</small>` : 
-                            '<span class="text-muted">-</span>'}
-                        ${linha.validacoes.fornecedor && linha.validacoes.fornecedor.sera_criado ? 
-                            '<br><span class="badge bg-info validation-badge">Novo</span>' : ''}
-                    </td>
-                    <td class="text-end">
-                        <span class="badge bg-${linha.dados.natureza === 'D' ? 'danger' : 'success'} validation-badge me-1">
-                            ${linha.dados.natureza}
-                        </span>
-                        <br><small>R$ ${parseFloat(linha.dados.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</small>
-                    </td>
-                    <td>
-                        ${statusBadges}
-                    </td>
-                </tr>
-            `;
-        });
-
-        $('#previewTable tbody').html(tableHtml);
-
-        // Habilitar/desabilitar botão de importação
-        $('#confirmarImportacao').prop('disabled', !data.stats.pode_importar);
-
-        // Mostrar card de preview
-        $previewCard.show();
-        $('html, body').animate({
-            scrollTop: $previewCard.offset().top - 100
-        }, 500);
-    }
-
-    // Confirmar importação
-    $('#confirmarImportacao').on('click', function() {
-        if (!previewData || !previewData.stats.pode_importar) {
-            alert('Não é possível importar devido a erros no arquivo');
-            return;
-        }
-
-        const confirmMsg = `Confirma a importação dos movimentos?\n\n` +
-                          `Período: ${previewData.periodo}\n` +
-                          `Movimentos a serem processados: ${previewData.stats.total_linhas_periodo}\n` +
-                          `Fornecedores novos: ${previewData.stats.fornecedores_novos}\n\n` +
-                          `ATENÇÃO: Esta ação irá remover movimentos existentes no período selecionado.`;
-
-        if (!confirm(confirmMsg)) {
-            return;
-        }
-
-        realizarImportacao();
-    });
-
-    // Realizar importação
-    function realizarImportacao() {
-        showProgress('Importando movimentos...');
-
-        const formData = new FormData();
-        formData.append('arquivo', selectedFile);
-        formData.append('data_inicio', $dataInicio.val());
-        formData.append('data_fim', $dataFim.val());
-
-        $.ajax({
-            url: '{% url "gestor:api_importar_movimentos_excel" %}',
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            headers: {
-                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-            },
-            success: function(response) {
-                hideProgress();
-                
-                if (response.success) {
-                    mostrarResultado(response.resultado, response.erros);
-                } else {
-                    alert('Erro na importação: ' + response.error);
-                }
-            },
-            error: function(xhr, status, error) {
-                hideProgress();
-                console.error('Erro AJAX:', xhr.responseText);
-                alert('Erro na comunicação com o servidor: ' + error);
-            }
-        });
-    }
-
-    // Mostrar resultado
-    function mostrarResultado(resultado, erros) {
-        let resultHtml = `
-            <div class="row text-center mb-4">
-                <div class="col-md-3">
-                    <div class="card border-0 bg-light">
-                        <div class="card-body py-3">
-                            <h4 class="text-danger mb-1">${resultado.movimentos_removidos}</h4>
-                            <small class="text-muted">Movimentos Removidos</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 bg-light">
-                        <div class="card-body py-3">
-                            <h4 class="text-success mb-1">${resultado.movimentos_criados}</h4>
-                            <small class="text-muted">Movimentos Criados</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 bg-light">
-                        <div class="card-body py-3">
-                            <h4 class="text-info mb-1">${resultado.fornecedores_criados}</h4>
-                            <small class="text-muted">Fornecedores Criados</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 bg-light">
-                        <div class="card-body py-3">
-                            <h4 class="text-warning mb-1">${resultado.total_erros}</h4>
-                            <small class="text-muted">Erros</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="alert alert-success">
-                <h6 class="alert-heading"><i class="fas fa-check-circle me-2"></i>Importação Concluída</h6>
-                <ul class="mb-0">
-                    <li><strong>Período:</strong> ${resultado.periodo}</li>
-                    <li><strong>Arquivo:</strong> ${resultado.nome_arquivo}</li>
-                    <li><strong>Movimentos processados:</strong> ${resultado.movimentos_criados}</li>
-                    <li><strong>Fornecedores criados:</strong> ${resultado.fornecedores_criados}</li>
-                    ${resultado.linhas_fora_periodo ? `<li><strong>Linhas fora do período:</strong> ${resultado.linhas_fora_periodo}</li>` : ''}
-                </ul>
-            </div>
-        `;
-
-        if (erros && erros.length > 0) {
-            resultHtml += `
-                <div class="alert alert-warning">
-                    <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Erros Durante a Importação</h6>
-                    <p>Alguns registros apresentaram problemas:</p>
-                    <ul class="mb-0">
-                        ${erros.map(erro => `<li>${erro}</li>`).join('')}
-                    </ul>
-                    ${erros.length > 10 ? '<p class="mt-2 mb-0"><small class="text-muted">... e mais erros. Verifique os logs para detalhes completos.</small></p>' : ''}
-                </div>
-            `;
-        }
-
-        $('#resultadoContent').html(resultHtml);
-        $previewCard.hide();
-        $resultadoCard.show();
-        
-        $('html, body').animate({
-            scrollTop: $resultadoCard.offset().top - 100
-        }, 500);
-    }
-
-    // Cancelar preview
-    $('#cancelarPreview').on('click', function() {
-        resetarInterface();
-    });
-
-    // Nova importação
-    $('#novaImportacao').on('click', function() {
-        resetarInterface();
-    });
-
-    // Resetar interface
-    function resetarInterface() {
-        selectedFile = null;
-        previewData = null;
-        $fileInput.val('');
-        $previewCard.hide();
-        $resultadoCard.hide();
-        hideProgress();
-        validarPeriodo(); // Revalidar período
-    }
-
-    // Funções de progresso
-    function showProgress(text) {
-        $('#uploadContent').hide();
-        $progressContainer.show();
-        $progressBar.css('width', '0%');
-        $progressText.text(text);
-        
-        // Animação de progresso indeterminado
-        let progress = 0;
-        const interval = setInterval(function() {
-            progress += Math.random() * 15;
-            if (progress > 90) progress = 90;
-            $progressBar.css('width', progress + '%');
+            barraProgresso.style.width = progresso + '%';
+            statusProgresso.textContent = `${Math.round(progresso)}%`;
         }, 200);
         
-        $progressContainer.data('interval', interval);
-    }
-
-    function hideProgress() {
-        const interval = $progressContainer.data('interval');
-        if (interval) {
-            clearInterval(interval);
-        }
+        // Enviar dados
+        const formData = new FormData(form);
         
-        $progressBar.css('width', '100%');
-        setTimeout(function() {
-            $progressContainer.hide();
-            $('#uploadContent').show();
-        }, 500);
+        fetch('{% url "gestor:api_importar_movimentos_simples" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            clearInterval(intervalo);
+            barraProgresso.style.width = '100%';
+            statusProgresso.textContent = '100%';
+            
+            setTimeout(() => {
+                progressoDiv.style.display = 'none';
+                mostrarResultado(data);
+                resetarForm();
+            }, 500);
+        })
+        .catch(error => {
+            clearInterval(intervalo);
+            progressoDiv.style.display = 'none';
+            mostrarResultado({
+                success: false,
+                error: 'Erro de conexão. Tente novamente.'
+            });
+            resetarForm();
+        });
+    });
+    
+    function mostrarResultado(data) {
+        resultadoDiv.style.display = 'block';
+        
+        if (data.success) {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-check-circle me-2"></i>Importação Concluída
+                    </h6>
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h5 mb-1">${data.movimentos_criados}</div>
+                                <div class="small">Movimentos Importados</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h5 mb-1">${data.fornecedores_criados}</div>
+                                <div class="small">Fornecedores Criados</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h5 mb-1">${data.movimentos_removidos}</div>
+                                <div class="small">Removidos</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h5 mb-1 ${data.erros_count > 0 ? 'text-warning' : 'text-success'}">${data.erros_count}</div>
+                                <div class="small">Erros</div>
+                            </div>
+                        </div>
+                    </div>
+                    ${data.erros_resumo && data.erros_resumo.length > 0 ? `
+                        <hr>
+                        <div class="small">
+                            <strong>Principais erros:</strong>
+                            <ul class="mb-0 mt-1">
+                                ${data.erros_resumo.map(erro => `<li>${erro}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } else {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Erro na Importação
+                    </h6>
+                    <p class="mb-0">${data.error}</p>
+                </div>
+            `;
+        }
     }
+    
+    function resetarForm() {
+        btnImportar.disabled = false;
+        btnImportar.innerHTML = '<i class="fas fa-upload me-1"></i> Importar';
+    }
+    
+    // Data padrão (mês atual)
+    const hoje = new Date();
+    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    
+    dataInicio.value = primeiroDia.toISOString().split('T')[0];
+    dataFim.value = ultimoDia.toISOString().split('T')[0];
+    
+    // Validar período inicial
+    setTimeout(validarPeriodo, 100);
 });
 </script>
-<style>
-/* CSRF token hidden field - necessário para AJAX */
-form[style*="display: none"] { display: none !important; }
-</style>
-{% csrf_token %}
 {% endblock %}

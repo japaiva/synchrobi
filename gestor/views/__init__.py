@@ -127,6 +127,10 @@ from .movimento_import import (
     api_importar_movimentos_excel,       # Importação real do Excel
     api_validar_periodo_importacao,      # Validação de período
     
+    # ADICIONAR ESTAS DUAS LINHAS:
+    api_validar_periodo_simples,         # Validação simples de período  
+    api_importar_movimentos_simples,     # Importação simplificada
+    
     # Funções auxiliares de importação
     extrair_fornecedor_do_historico,     # Extrai fornecedor apenas pelo nome
     processar_linha_excel_atualizada,    # Processa linha com lógica correta

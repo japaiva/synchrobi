@@ -443,7 +443,7 @@ def corrigir_estrutura_excel(arquivo):
 @login_required
 def movimento_importar(request):
     """Interface para importação de movimentos"""
-    
+
     stats = {
         'unidades_ativas': Unidade.objects.filter(ativa=True).count(),
         'unidades_com_allstrategy': Unidade.objects.filter(
@@ -453,8 +453,15 @@ def movimento_importar(request):
         'contas_externas_ativas': ContaExterna.objects.filter(ativa=True).count(),
         'centros_custo_ativos': CentroCusto.objects.filter(ativo=True).count(),
         'fornecedores_ativos': Fornecedor.objects.filter(ativo=True).count(),
-        'total_movimentos': Movimento.objects.count()
+        'total_movimentos': Movimento.objects.count(),
+        # ADICIONE ESTA LINHA:
+        'sistema_pronto': all([
+            Unidade.objects.filter(ativa=True).exists(),
+            CentroCusto.objects.filter(ativo=True).exists(),
+            ContaExterna.objects.filter(ativa=True).exists(),
+        ])
     }
+
     
     if stats['unidades_ativas'] > 0:
         stats['percentual_unidades_preparadas'] = round(
@@ -923,4 +930,145 @@ def api_validar_periodo_importacao(request):
         return JsonResponse({
             'success': False,
             'error': f'Erro na validação: {str(e)}'
+        })
+    
+# === ADICIONAR ESTAS DUAS FUNÇÕES NO FINAL DO SEU movimento_import.py ===
+
+@login_required
+def api_validar_periodo_simples(request):
+    """Validação simples de período"""
+    try:
+        data_inicio_str = request.GET.get('data_inicio')
+        data_fim_str = request.GET.get('data_fim')
+        
+        if not data_inicio_str or not data_fim_str:
+            return JsonResponse({'success': False, 'periodo_valido': False})
+        
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        
+        movimentos_existentes = Movimento.objects.filter(
+            data__gte=data_inicio, data__lte=data_fim
+        ).count()
+        
+        return JsonResponse({
+            'success': True,
+            'movimentos_existentes': movimentos_existentes,
+            'periodo_valido': True
+        })
+        
+    except Exception:
+        return JsonResponse({'success': False, 'periodo_valido': False})
+
+@login_required
+@require_POST
+def api_importar_movimentos_simples(request):
+    """API simplificada para importação direta"""
+    try:
+        # Validar entrada
+        if 'arquivo' not in request.FILES:
+            return JsonResponse({'success': False, 'error': 'Arquivo não enviado'})
+        
+        arquivo = request.FILES['arquivo']
+        data_inicio_str = request.POST.get('data_inicio')
+        data_fim_str = request.POST.get('data_fim')
+        
+        if not data_inicio_str or not data_fim_str:
+            return JsonResponse({'success': False, 'error': 'Período não informado'})
+        
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        
+        # Ler arquivo
+        df = pd.read_excel(arquivo, engine='openpyxl', header=0)
+        df = df.dropna(how='all')
+        
+        # Verificar colunas essenciais
+        colunas_obrigatorias = ['Data', 'Cód. da unidade', 'Cód. do centro de custo', 
+                               'Cód. da conta contábil', 'Valor', 'Histórico']
+        
+        faltando = [col for col in colunas_obrigatorias if col not in df.columns]
+        if faltando:
+            return JsonResponse({
+                'success': False, 
+                'error': f'Colunas obrigatórias faltando: {", ".join(faltando)}'
+            })
+        
+        # Limpar período existente
+        movimentos_removidos = Movimento.objects.filter(
+            data__gte=data_inicio, data__lte=data_fim
+        ).count()
+        
+        Movimento.objects.filter(data__gte=data_inicio, data__lte=data_fim).delete()
+        
+        # Processar linhas
+        total_linhas = len(df)
+        movimentos_criados = 0
+        fornecedores_criados = 0
+        erros_agrupados = {}
+        
+        for idx, linha in df.iterrows():
+            try:
+                linha_dict = linha.to_dict()
+                movimento, erro = processar_linha_excel_atualizada(
+                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
+                )
+                
+                if movimento:
+                    movimentos_criados += 1
+                    if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
+                        fornecedores_criados += 1
+                elif erro:
+                    if erro.startswith('Data') and 'fora do período' in erro:
+                        continue  # Ignorar silenciosamente
+                    
+                    # Agrupar erros
+                    if ':' in erro and 'não encontrad' in erro:
+                        tipo_erro = erro.split(':')[0].strip()
+                        if tipo_erro not in erros_agrupados:
+                            erros_agrupados[tipo_erro] = 0
+                        erros_agrupados[tipo_erro] += 1
+                    else:
+                        if 'outros' not in erros_agrupados:
+                            erros_agrupados['outros'] = 0
+                        erros_agrupados['outros'] += 1
+                        
+            except Exception as e:
+                if 'erro_inesperado' not in erros_agrupados:
+                    erros_agrupados['erro_inesperado'] = 0
+                erros_agrupados['erro_inesperado'] += 1
+        
+        # Formatar erros para exibição
+        erros_resumo = []
+        for tipo, count in erros_agrupados.items():
+            if 'Unidade não encontrada' in tipo:
+                erros_resumo.append(f"Unidades não encontradas: {count} ocorrências")
+            elif 'Centro de custo não encontrado' in tipo:
+                erros_resumo.append(f"Centros de custo não encontrados: {count} ocorrências")
+            elif 'Conta contábil não encontrada' in tipo:
+                erros_resumo.append(f"Contas contábeis não encontradas: {count} ocorrências")
+            else:
+                erros_resumo.append(f"Outros erros: {count} ocorrências")
+        
+        # Resultado final
+        resultado = {
+            'success': True,
+            'movimentos_removidos': movimentos_removidos,
+            'movimentos_criados': movimentos_criados,
+            'fornecedores_criados': fornecedores_criados,
+            'total_processado': total_linhas,
+            'erros_count': sum(erros_agrupados.values()),
+            'erros_resumo': erros_resumo[:5],  # Máximo 5 tipos de erro
+            'arquivo': arquivo.name
+        }
+        
+        logger.info(f"Importação simplificada concluída: {movimentos_criados} movimentos criados")
+        
+        return JsonResponse(resultado)
+        
+    except Exception as e:
+        logger.error(f"Erro na importação simplificada: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Erro durante importação: {str(e)}'
         })

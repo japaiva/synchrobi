@@ -1,4 +1,4 @@
-# core/models/empresa.py - MODELO DE EMPRESA
+# core/models/empresa.py - MODELO DE EMPRESA CORRIGIDO
 
 import logging
 from django.db import models
@@ -82,34 +82,11 @@ class Empresa(models.Model):
         """Retorna unidades vinculadas a esta empresa"""
         return self.unidades.filter(ativa=True)
     
-    def get_centros_custo_ativos(self):
-        """Retorna centros de custo ativos desta empresa"""
-        return self.centros_custo_empresa.filter(ativo=True).select_related(
-            'centro_custo', 'responsavel'
-        )
-    
-    def get_centros_custo_vigentes(self):
-        """Retorna apenas centros de custo vigentes hoje"""
-        hoje = timezone.now().date()
-        return self.centros_custo_empresa.filter(
-            ativo=True,
-            data_inicio__lte=hoje
-        ).filter(
-            models.Q(data_fim__isnull=True) | models.Q(data_fim__gte=hoje)
-        ).select_related('centro_custo', 'responsavel')
-    
-    def get_responsaveis_centros_custo(self):
-        """Retorna lista de responsáveis pelos centros de custo desta empresa"""
-        from .usuario import Usuario
-        return Usuario.objects.filter(
-            centros_custo_responsavel__empresa=self,
-            centros_custo_responsavel__ativo=True
-        ).distinct()
-    
-    @property
-    def total_centros_custo(self):
-        """Total de centros de custo ativos"""
-        return self.centros_custo_empresa.filter(ativo=True).count()
+    # REMOVIDO: Métodos relacionados a empresa_centros_custo que não existe mais
+    # def get_centros_custo_ativos(self):
+    # def get_centros_custo_vigentes(self):
+    # def get_responsaveis_centros_custo(self):
+    # @property def total_centros_custo(self):
     
     def __str__(self):
         return f"{self.sigla} - {self.nome_display}"

@@ -141,6 +141,9 @@ urlpatterns = [
     path('api/movimento/importar-excel/', views.api_importar_movimentos_excel, name='api_importar_movimentos_excel'),
     path('api/movimento/validar-periodo/', views.api_validar_periodo_importacao, name='api_validar_periodo_importacao'),
 
+    path('api/validar-periodo-simples/', views.api_validar_periodo_simples, name='api_validar_periodo_simples'),
+    path('api/importar-movimentos-simples/', views.api_importar_movimentos_simples, name='api_importar_movimentos_simples'),
+
     # APIs gerais
     path('api/parametro/<str:codigo>/valor/', views.api_parametro_valor, name='api_parametro_valor'),
 ]

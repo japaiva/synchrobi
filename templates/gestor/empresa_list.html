@@ -59,8 +59,7 @@
             <th style="width: 150px;">Sigla</th>
             <th style="width: 300px;">Empresa</th>
             <th style="width: 180px;">CNPJ</th>
-            <th style="width: 40px;" class="text-center">Sts</th>
-            <th style="width: 40px;" class="text-center">CCs</th>
+            <th style="width: 40px;" class="text-center">Status</th>
             <th style="width: 150px;" class="text-end">Ações</th>
           </tr>
         </thead>
@@ -89,9 +88,6 @@
                   <span class="badge bg-danger">Inativa</span>
                 {% endif %}
               </td>
-              <td class="text-center">
-                <span class="badge bg-info">{{ empresa.total_centros_custo|default:0 }}</span>
-              </td>
               <td class="text-end">
                 <div class="btn-group" role="group" aria-label="Ações">
                   <a href="{% url 'gestor:empresa_update' empresa.sigla %}" 
@@ -109,7 +105,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="6" class="text-center py-5 text-muted">
+              <td colspan="5" class="text-center py-5 text-muted">
                 {% if search or ativa %}
                   <p>Nenhuma empresa encontrada com os critérios de busca.</p>
                   <a href="{% url 'gestor:empresa_list' %}" class="btn btn-sm btn-outline-primary">
