@@ -1,4 +1,4 @@
-# core/forms/hierarquicos.py - FORMULÁRIOS COM CAMPO PAI POR PESQUISA
+# core/forms/hierarquicos.py - FORMULÁRIOS COM CAMPO PAI POR PESQUISA - VERSÃO CORRIGIDA
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -24,11 +24,12 @@ class HierarchiaDeclaradaFormMixin:
         })
     
     def clean_codigo_pai(self):
-        """Validação genérica para código pai"""
+        """Validação genérica para código pai - VERSÃO CORRIGIDA"""
         codigo_pai = self.cleaned_data.get('codigo_pai', '').strip()
         
+        # CORREÇÃO PRINCIPAL: Tratar campo vazio explicitamente
         if not codigo_pai:
-            return ''  # Vazio = item raiz
+            return ''  # Vazio = item raiz - VÁLIDO
         
         # Verificar se o pai existe
         modelo = self._meta.model
@@ -39,13 +40,14 @@ class HierarchiaDeclaradaFormMixin:
             filter_dict = {'codigo': codigo_pai, active_field: True}
             pai = modelo.objects.get(**filter_dict)
         except modelo.DoesNotExist:
-            raise forms.ValidationError(f"Centro de custo pai '{codigo_pai}' não encontrado.")
+            raise forms.ValidationError(f"Item pai '{codigo_pai}' não encontrado ou inativo.")
         
         # Verificar se pai é sintético (se campo tipo existir)
         if hasattr(pai, 'tipo') and pai.tipo == 'A':
+            tipo_nome = 'Centro de custo' if modelo.__name__ == 'CentroCusto' else 'Conta contábil' if modelo.__name__ == 'ContaContabil' else 'Item'
             raise forms.ValidationError(
                 f'O item pai "{pai.codigo} - {pai.nome}" é analítico e não pode ter sub-itens. '
-                f'Use um centro sintético como pai.'
+                f'Use um {tipo_nome.lower()} sintético como pai.'
             )
         
         # Se estiver editando, verificar ciclos
@@ -62,7 +64,8 @@ class HierarchiaDeclaradaFormMixin:
                         raise forms.ValidationError(
                             f"Não é possível usar '{codigo_pai}' como pai pois é um descendente deste item."
                         )
-            except:
+            except Exception:
+                # Ignorar erros na verificação de descendentes para não bloquear o salvamento
                 pass
         
         return codigo_pai
@@ -179,10 +182,10 @@ class UnidadeForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
         
         return codigo
 
-# ===== FORMULÁRIO CONTA CONTÁBIL =====
+# ===== FORMULÁRIO CONTA CONTÁBIL - VERSÃO CORRIGIDA =====
 
 class ContaContabilForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
-    """Formulário para conta contábil com hierarquia declarada"""
+    """Formulário para conta contábil com hierarquia declarada - VERSÃO CORRIGIDA"""
     
     class Meta:
         model = ContaContabil
@@ -210,6 +213,14 @@ class ContaContabilForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
         # Readonly se editando
         if self.instance.pk:
             self.fields['codigo'].widget.attrs['readonly'] = True
+            
+            # Mostrar informação do pai atual se existir
+            if self.instance.codigo_pai:
+                try:
+                    pai = ContaContabil.objects.get(codigo=self.instance.codigo_pai)
+                    self.fields['codigo_pai'].help_text = f"Pai atual: {pai.codigo} - {pai.nome}"
+                except ContaContabil.DoesNotExist:
+                    pass
     
     def clean_codigo(self):
         codigo = self.cleaned_data.get('codigo', '').strip()
@@ -226,3 +237,86 @@ class ContaContabilForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
             raise forms.ValidationError("Já existe uma conta contábil com este código.")
         
         return codigo
+    
+    def clean_codigo_pai(self):
+        """Validação específica para conta contábil - SOBRESCREVE O MÉTODO GENÉRICO"""
+        codigo_pai = self.cleaned_data.get('codigo_pai', '')
+        
+        # CORREÇÃO CRÍTICA: Tratar None e valores vazios
+        if codigo_pai is None or codigo_pai == '':
+            return ''  # Conta raiz - totalmente válido
+        
+        codigo_pai = codigo_pai.strip()
+        
+        # CORREÇÃO ADICIONAL: Se depois do strip virar vazio, também é válido
+        if not codigo_pai:
+            return ''
+        
+        # Verificar se o pai existe
+        try:
+            pai = ContaContabil.objects.get(codigo=codigo_pai, ativa=True)
+        except ContaContabil.DoesNotExist:
+            raise forms.ValidationError(f"Conta contábil pai '{codigo_pai}' não encontrada ou inativa.")
+        
+        # Verificar se pai é sintético
+        if pai.tipo == 'A':
+            raise forms.ValidationError(
+                f'A conta pai "{pai.codigo} - {pai.nome}" é analítica e não pode ter sub-contas. '
+                f'Use uma conta sintética como pai.'
+            )
+        
+        # Se estiver editando, verificar ciclos
+        if self.instance.pk:
+            if codigo_pai == self.instance.codigo:
+                raise forms.ValidationError("Uma conta não pode ser pai de si mesma.")
+            
+            # Verificar se não está tentando usar um descendente como pai
+            try:
+                descendentes = self.instance.get_todos_filhos()
+                if descendentes:
+                    codigos_descendentes = [desc.codigo for desc in descendentes]
+                    if codigo_pai in codigos_descendentes:
+                        raise forms.ValidationError(
+                            f"Não é possível usar '{codigo_pai}' como pai pois é um descendente desta conta."
+                        )
+            except Exception:
+                # Ignorar erros na verificação de descendentes
+                pass
+        
+        return codigo_pai
+    
+    def clean(self):
+        """Validação adicional do formulário completo"""
+        cleaned_data = super().clean()
+        codigo = cleaned_data.get('codigo')
+        codigo_pai = cleaned_data.get('codigo_pai')
+        tipo = cleaned_data.get('tipo')
+        
+        # Validações de consistência
+        if codigo and codigo_pai and codigo == codigo_pai:
+            raise forms.ValidationError("Uma conta não pode ser pai de si mesma.")
+        
+        # Log para debugging
+        import logging
+        logger = logging.getLogger('synchrobi')
+        logger.info(f"Validando formulário ContaContabil: codigo={codigo}, codigo_pai='{codigo_pai}', tipo={tipo}")
+        
+        return cleaned_data
+    
+    def save(self, commit=True):
+        """Save customizado para contas contábeis"""
+        conta = super().save(commit=False)
+        
+        # Garantir que codigo_pai seja None se vazio (não string vazia)
+        if not conta.codigo_pai:
+            conta.codigo_pai = None
+        
+        # Log para debugging
+        import logging
+        logger = logging.getLogger('synchrobi')
+        logger.info(f"Salvando conta contábil: {conta.codigo}, pai: {conta.codigo_pai}")
+        
+        if commit:
+            conta.save()
+        
+        return conta
