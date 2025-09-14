@@ -21,26 +21,35 @@ logger = logging.getLogger('synchrobi')
 
 def extrair_numero_documento_do_historico(historico):
     """
-    Extrai o número do documento do histórico - geralmente uma sequência de números antes do nome do fornecedor
-    Exemplo: "... - 826498 AUTOPEL AUTOMACAO COMERCIAL E INFORMATICA LTDA - ..."
-    Extrai: "826498"
+    Extrai o número do documento do histórico
+    Exemplos:
+    - "... - 826498 AUTOPEL AUTOMACAO COMERCIAL E INFORMATICA LTDA - ..." → "826498"
+    - "... - 17 50.238.824 BEATRIZ SILVA HAUMAN - ..." → "17"
+    - "... CALDENSE EMBALAGENS LTDA 58316 - 58316 CALDENSE EMBALAGENS LTDA" → "58316"
     """
     if not historico:
         return ''
     
-    # Busca por "- NÚMERO NOME_COMPLETO -" e pega o NÚMERO
-    matches = re.findall(r'- (\d+)\s+[A-Z\s&\.\-_]+? -', historico)
+    # PADRÃO 1: - NÚMERO(S) NOME - (pegar o primeiro número)
+    matches = re.findall(r'- (\d+)(?:\s+[\d\.]+)?\s+[A-ZÀ-Ÿ]', historico, re.IGNORECASE)
     
     if matches:
-        # Pegar o último match (mais provável de ser o documento principal)
         return matches[-1].strip()
     
-    # Se não encontrou no padrão principal, tentar outros padrões
-    # Buscar sequências de números no histórico
-    numeros = re.findall(r'\b\d{5,}\b', historico)  # Números com 5+ dígitos
+    # PADRÃO 2: NOME NÚMERO - NÚMERO NOME (pegar o número repetido)
+    matches = re.findall(r'\b[A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?\s+(\d+)\s*-\s*\1\s+', historico, re.IGNORECASE)
+    
+    if matches:
+        return matches[-1].strip()
+    
+    # PADRÃO 3: Fallback - buscar sequências de números no histórico
+    # Buscar números com 3+ dígitos, preferencialmente os maiores
+    numeros = re.findall(r'\b(\d{3,})\b', historico)
     
     if numeros:
-        return numeros[-1]  # Último número encontrado
+        # Ordenar por tamanho (preferir números maiores, mais prováveis de serem documentos)
+        numeros_ordenados = sorted(set(numeros), key=lambda x: (len(x), x), reverse=True)
+        return numeros_ordenados[0]
     
     return ''
 
