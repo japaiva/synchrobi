@@ -107,7 +107,7 @@ from .parametro import (
     api_parametro_valor
 )
 
-# Movimento - ATUALIZADO COM NOVAS FUNÇÕES DE IMPORTAÇÃO
+# Movimento - CRUD básico separado das funções de importação
 from .movimento import (
     # CRUD básico de movimentos
     movimento_list,                      # Lista de movimentos com filtros
@@ -115,18 +115,22 @@ from .movimento import (
     movimento_update,                    # Editar movimento
     movimento_delete,                    # Excluir movimento
     
+    # Exportação
+    movimento_export_excel,              # Exportar para Excel
+)
+
+# Movimento Import - Funções de importação separadas
+from .movimento_import import (
     # Importação inteligente de Excel
     movimento_importar,                  # Interface de importação
     api_preview_movimentos_excel,        # Preview antes da importação
     api_importar_movimentos_excel,       # Importação real do Excel
     api_validar_periodo_importacao,      # Validação de período
     
-    # Exportação
-    movimento_export_excel,              # Exportar para Excel
-    
     # Funções auxiliares de importação
-    extrair_fornecedor_do_historico,     # NOVA: Extrai fornecedor apenas pelo nome
-    processar_linha_excel_atualizada,    # NOVA: Processa linha com lógica correta
+    extrair_fornecedor_do_historico,     # Extrai fornecedor apenas pelo nome
+    processar_linha_excel_atualizada,    # Processa linha com lógica correta
+    corrigir_estrutura_excel,            # Corrige estrutura do Excel
 )
 
 # Fornecedor - Gestão de fornecedores
@@ -153,22 +157,20 @@ from .fornecedor import (
 # - centrocusto.py → CRUD modais e árvore de centros de custo
 # - contacontabil.py → CRUD modais e árvore de contas contábeis
 # - contaexterna_inline.py → CRUD inline para códigos externos
-# - movimento.py → ✅ ATUALIZADO: Importação inteligente de Excel com período por datas
+# - movimento.py → ✅ LIMPO: CRUD básico de movimentos
+# - movimento_import.py → ✅ NOVO: Funções de importação separadas
 # - fornecedor.py → Gestão completa de fornecedores
 # - usuario.py → Gestão de usuários
 # - parametro.py → Gestão de parâmetros
 #
-# ✅ NOVAS FUNCIONALIDADES DE MOVIMENTO IMPLEMENTADAS:
-# - Importação por período de datas (data_inicio/data_fim)
-# - Extração inteligente de fornecedores (apenas nomes, sem números)
-# - Busca de unidades por código All Strategy prioritária
-# - Busca de contas contábeis via códigos externos
-# - Preview detalhado antes da importação
-# - Validação em tempo real do período
-# - Limpeza automática de movimentos existentes
-# - Logs detalhados da importação
-# - Criação automática de fornecedores
-# - APIs específicas para cada etapa da importação
+# ✅ SEPARAÇÃO IMPLEMENTADA:
+# - movimento.py: CRUD básico + exportação Excel
+# - movimento_import.py: Todas as funções de importação
+#   - Interface de importação
+#   - Preview de Excel
+#   - Importação real
+#   - Validação de período
+#   - Funções auxiliares (extração de fornecedor, processamento)
 #
 # PADRÃO DA NOVA ARQUITETURA:
 # 1. Visualização hierárquica integrada
@@ -176,7 +178,7 @@ from .fornecedor import (
 # 3. APIs específicas para validação e operações AJAX
 # 4. Templates responsivos e modernos
 # 5. JavaScript otimizado para UX fluida
-# 6. ✅ Importação inteligente com validações robustas
+# 6. ✅ Separação de responsabilidades (CRUD vs Importação)
 #
 # FUNCIONALIDADES IMPLEMENTADAS:
 # ✅ Dashboard com estatísticas
@@ -185,7 +187,7 @@ from .fornecedor import (
 # ✅ Sistema de centros de custo com hierarquia
 # ✅ Contas contábeis com estrutura hierárquica
 # ✅ Códigos externos com edição inline
-# ✅ ⭐ IMPORTAÇÃO INTELIGENTE DE MOVIMENTOS EXCEL ATUALIZADA
+# ✅ ⭐ MOVIMENTOS COM SEPARAÇÃO CLARA: CRUD vs IMPORTAÇÃO
 # ✅ Gestão completa de fornecedores
 # ✅ Sistema de usuários e parâmetros
 # ✅ APIs para validação em tempo real

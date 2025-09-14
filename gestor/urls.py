@@ -1,4 +1,4 @@
-# gestor/urls.py - Seu arquivo original + fornecedor e movimento
+# gestor/urls.py - ATUALIZADO COM SEPARAÇÃO DE MOVIMENTO E MOVIMENTO_IMPORT
 
 from django.urls import path
 from . import views
@@ -126,15 +126,17 @@ urlpatterns = [
     path('api/fornecedor/<str:codigo>/', views.api_fornecedor_info, name='api_fornecedor_info'),
     path('api/fornecedor/extrair-historico/', views.api_extrair_fornecedor_historico, name='api_extrair_fornecedor_historico'),
     
-    # ===== MOVIMENTOS =====
+    # ===== MOVIMENTOS - CRUD BÁSICO =====
     path('movimentos/', views.movimento_list, name='movimento_list'),
     path('movimentos/novo/', views.movimento_create, name='movimento_create'),
     path('movimentos/<int:pk>/editar/', views.movimento_update, name='movimento_update'),
     path('movimentos/<int:pk>/excluir/', views.movimento_delete, name='movimento_delete'),
-    path('movimentos/importar/', views.movimento_importar, name='movimento_importar'),
     path('movimentos/export-excel/', views.movimento_export_excel, name='movimento_export_excel'),
     
-    # APIs Movimento
+    # ===== MOVIMENTOS - IMPORTAÇÃO (SEPARADA) =====
+    path('movimentos/importar/', views.movimento_importar, name='movimento_importar'),
+    
+    # APIs Movimento Import
     path('api/movimento/preview-excel/', views.api_preview_movimentos_excel, name='api_preview_movimentos_excel'),
     path('api/movimento/importar-excel/', views.api_importar_movimentos_excel, name='api_importar_movimentos_excel'),
     path('api/movimento/validar-periodo/', views.api_validar_periodo_importacao, name='api_validar_periodo_importacao'),
