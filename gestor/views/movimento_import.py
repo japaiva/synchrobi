@@ -293,29 +293,33 @@ def extrair_fornecedor_do_historico(historico):
 
 def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, data_inicio, data_fim):
     """
-    Versão melhorada do processamento de linha Excel
+    Versão melhorada do processamento de linha Excel com proteção contra tipos incorretos
     """
     try:
-        # Extrair dados básicos
-        mes = int(linha_dados.get('Mês', 0))
-        ano = int(linha_dados.get('Ano', 0))
+        # Função auxiliar para limpar campos
+        def limpar_campo_seguro(campo):
+            if campo is None or pd.isna(campo):
+                return ''
+            campo_str = str(campo).strip()
+            if campo_str.lower() in ['nan', 'none', '']:
+                return ''
+            return campo_str
+        
+        # Extrair dados básicos com proteção
+        mes = int(linha_dados.get('Mês', 0)) if pd.notna(linha_dados.get('Mês')) else 0
+        ano = int(linha_dados.get('Ano', 0)) if pd.notna(linha_dados.get('Ano')) else 0
         data = linha_dados.get('Data')
-        codigo_unidade = linha_dados.get('Cód. da unidade')
-        codigo_centro_custo = linha_dados.get('Cód. do centro de custo')
-        codigo_conta_contabil = linha_dados.get('Cód. da conta contábil')
-        natureza = linha_dados.get('Natureza (D/C/A)', 'D')
+        codigo_unidade = limpar_campo_seguro(linha_dados.get('Cód. da unidade'))
+        codigo_centro_custo = limpar_campo_seguro(linha_dados.get('Cód. do centro de custo'))
+        codigo_conta_contabil = limpar_campo_seguro(linha_dados.get('Cód. da conta contábil'))
+        natureza = limpar_campo_seguro(linha_dados.get('Natureza (D/C/A)')) or 'D'
         valor_bruto = linha_dados.get('Valor', 0)
-        historico = linha_dados.get('Histórico', '')
+        historico = limpar_campo_seguro(linha_dados.get('Histórico'))
         
         # Campos opcionais
-        def limpar_campo(campo):
-            if campo is None or pd.isna(campo) or str(campo).lower() == 'nan':
-                return ''
-            return str(campo).strip()
-        
-        codigo_projeto = limpar_campo(linha_dados.get('Cód. do projeto', ''))
-        gerador = limpar_campo(linha_dados.get('Gerador', ''))
-        rateio = linha_dados.get('Rateio', 'N')
+        codigo_projeto = limpar_campo_seguro(linha_dados.get('Cód. do projeto'))
+        gerador = limpar_campo_seguro(linha_dados.get('Gerador'))
+        rateio = limpar_campo_seguro(linha_dados.get('Rateio')) or 'N'
         
         # Converter e validar data
         if isinstance(data, str):
@@ -330,19 +334,21 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, da
             data = data.date()
         elif isinstance(data, datetime):
             data = data.date()
-        elif isinstance(data, (int, float)):
+        elif isinstance(data, (int, float)) and not pd.isna(data):
             try:
                 excel_epoch = date(1900, 1, 1)
                 data = excel_epoch + timedelta(days=int(data) - 2)
             except:
                 raise ValueError(f'Formato de data inválido: {data}')
+        else:
+            raise ValueError(f'Data não informada ou inválida: {data}')
         
         # Validar período
         if not (data_inicio <= data <= data_fim):
             return None, f'Data {data} fora do período {data_inicio} a {data_fim} - linha ignorada'
         
         # Converter valor
-        if valor_bruto is None or valor_bruto == '':
+        if valor_bruto is None or valor_bruto == '' or pd.isna(valor_bruto):
             valor = Decimal('0.00')
         else:
             try:
@@ -351,24 +357,32 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, da
             except (ValueError, decimal.InvalidOperation):
                 raise ValueError(f'Valor inválido: {valor_bruto}')
         
+        # Validar códigos obrigatórios
+        if not codigo_unidade:
+            raise ValueError('Código da unidade não informado')
+        if not codigo_centro_custo:
+            raise ValueError('Código do centro de custo não informado')
+        if not codigo_conta_contabil:
+            raise ValueError('Código da conta contábil não informado')
+        
         # Buscar entidades relacionadas
         unidade = Unidade.buscar_unidade_para_movimento(codigo_unidade)
         if not unidade:
             raise ValueError(f'Unidade não encontrada: {codigo_unidade}')
         
         try:
-            centro_custo = CentroCusto.objects.get(codigo=str(codigo_centro_custo), ativo=True)
+            centro_custo = CentroCusto.objects.get(codigo=codigo_centro_custo, ativo=True)
         except CentroCusto.DoesNotExist:
             return None, f'Centro de custo não encontrado: {codigo_centro_custo} - linha ignorada'
         
         try:
-            conta_externa = ContaExterna.objects.get(codigo_externo=str(codigo_conta_contabil), ativa=True)
+            conta_externa = ContaExterna.objects.get(codigo_externo=codigo_conta_contabil, ativa=True)
             conta_contabil = conta_externa.conta_contabil
         except ContaExterna.DoesNotExist:
             return None, f'Conta contábil não encontrada: {codigo_conta_contabil} - linha ignorada'
         
-        # USAR NOVA EXTRAÇÃO MELHORADA
-        numero_documento = extrair_numero_documento_do_historico(historico)
+        # USAR NOVA EXTRAÇÃO MELHORADA com proteção
+        numero_documento = extrair_numero_documento_do_historico(historico) if historico else ''
         fornecedor = extrair_fornecedor_do_historico(historico) if historico else None
         
         # Criar movimento
@@ -386,7 +400,7 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, da
             historico=historico,
             codigo_projeto=codigo_projeto,
             gerador=gerador,
-            rateio=str(rateio) if rateio and str(rateio).lower() != 'nan' else 'N',
+            rateio=rateio,
             arquivo_origem=nome_arquivo,
             linha_origem=numero_linha
         )
