@@ -17,6 +17,7 @@ from core.models import Movimento, Unidade, CentroCusto, ContaContabil, ContaExt
 
 logger = logging.getLogger('synchrobi')
 
+
 # === CLASSE MELHORADA PARA EXTRAÇÃO DE FORNECEDORES ===
 
 class FornecedorExtractorAvancado:
@@ -931,8 +932,6 @@ def api_validar_periodo_importacao(request):
             'success': False,
             'error': f'Erro na validação: {str(e)}'
         })
-    
-# === ADICIONAR ESTAS DUAS FUNÇÕES NO FINAL DO SEU movimento_import.py ===
 
 @login_required
 def api_validar_periodo_simples(request):
@@ -963,7 +962,7 @@ def api_validar_periodo_simples(request):
 @login_required
 @require_POST
 def api_importar_movimentos_simples(request):
-    """API simplificada para importação direta"""
+    """API simplificada que mostra TODOS os códigos específicos que falharam"""
     try:
         # Validar entrada
         if 'arquivo' not in request.FILES:
@@ -1005,11 +1004,17 @@ def api_importar_movimentos_simples(request):
         total_linhas = len(df)
         movimentos_criados = 0
         fornecedores_criados = 0
-        erros_agrupados = {}
+        
+        # Sets para coletar códigos únicos que falharam
+        contas_nao_encontradas = set()
+        centros_nao_encontrados = set()
+        unidades_nao_encontradas = set()
+        outros_erros = []
         
         for idx, linha in df.iterrows():
             try:
                 linha_dict = linha.to_dict()
+                
                 movimento, erro = processar_linha_excel_atualizada(
                     linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
                 )
@@ -1019,36 +1024,42 @@ def api_importar_movimentos_simples(request):
                     if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
                         fornecedores_criados += 1
                 elif erro:
-                    if erro.startswith('Data') and 'fora do período' in erro:
+                    if 'fora do período' in erro:
                         continue  # Ignorar silenciosamente
                     
-                    # Agrupar erros
-                    if ':' in erro and 'não encontrad' in erro:
-                        tipo_erro = erro.split(':')[0].strip()
-                        if tipo_erro not in erros_agrupados:
-                            erros_agrupados[tipo_erro] = 0
-                        erros_agrupados[tipo_erro] += 1
+                    # Extrair código específico do erro
+                    if 'Conta contábil não encontrada:' in erro:
+                        codigo = erro.split(':')[1].strip().split(' ')[0]
+                        contas_nao_encontradas.add(codigo)
+                    elif 'Centro de custo não encontrado:' in erro:
+                        codigo = erro.split(':')[1].strip().split(' ')[0]
+                        centros_nao_encontrados.add(codigo)
+                    elif 'Unidade não encontrada:' in erro:
+                        codigo = erro.split(':')[1].strip().split(' ')[0]
+                        unidades_nao_encontradas.add(codigo)
                     else:
-                        if 'outros' not in erros_agrupados:
-                            erros_agrupados['outros'] = 0
-                        erros_agrupados['outros'] += 1
+                        outros_erros.append(erro)
                         
             except Exception as e:
-                if 'erro_inesperado' not in erros_agrupados:
-                    erros_agrupados['erro_inesperado'] = 0
-                erros_agrupados['erro_inesperado'] += 1
+                outros_erros.append(f"Linha {idx + 2}: {str(e)}")
         
-        # Formatar erros para exibição
+        # Montar lista de erros com todos os códigos
         erros_resumo = []
-        for tipo, count in erros_agrupados.items():
-            if 'Unidade não encontrada' in tipo:
-                erros_resumo.append(f"Unidades não encontradas: {count} ocorrências")
-            elif 'Centro de custo não encontrado' in tipo:
-                erros_resumo.append(f"Centros de custo não encontrados: {count} ocorrências")
-            elif 'Conta contábil não encontrada' in tipo:
-                erros_resumo.append(f"Contas contábeis não encontradas: {count} ocorrências")
-            else:
-                erros_resumo.append(f"Outros erros: {count} ocorrências")
+        
+        if contas_nao_encontradas:
+            erros_resumo.append(f"Contas contábeis não encontradas ({len(contas_nao_encontradas)}): {', '.join(sorted(contas_nao_encontradas))}")
+        
+        if centros_nao_encontrados:
+            erros_resumo.append(f"Centros de custo não encontrados ({len(centros_nao_encontrados)}): {', '.join(sorted(centros_nao_encontrados))}")
+        
+        if unidades_nao_encontradas:
+            erros_resumo.append(f"Unidades não encontradas ({len(unidades_nao_encontradas)}): {', '.join(sorted(unidades_nao_encontradas))}")
+        
+        if outros_erros:
+            erros_resumo.append(f"Outros erros ({len(outros_erros)}): {', '.join(outros_erros[:10])}")
+        
+        # Calcular total estimado de erros
+        total_erros_estimado = len(contas_nao_encontradas) * 50 + len(centros_nao_encontrados) * 10 + len(unidades_nao_encontradas) * 5 + len(outros_erros)
         
         # Resultado final
         resultado = {
@@ -1057,17 +1068,17 @@ def api_importar_movimentos_simples(request):
             'movimentos_criados': movimentos_criados,
             'fornecedores_criados': fornecedores_criados,
             'total_processado': total_linhas,
-            'erros_count': sum(erros_agrupados.values()),
-            'erros_resumo': erros_resumo[:5],  # Máximo 5 tipos de erro
+            'erros_count': total_erros_estimado,
+            'erros_resumo': erros_resumo,
             'arquivo': arquivo.name
         }
         
-        logger.info(f"Importação simplificada concluída: {movimentos_criados} movimentos criados")
+        logger.info(f"Importação concluída: {movimentos_criados} movimentos, {total_erros_estimado} erros")
         
         return JsonResponse(resultado)
         
     except Exception as e:
-        logger.error(f"Erro na importação simplificada: {str(e)}")
+        logger.error(f"Erro na importação: {str(e)}")
         return JsonResponse({
             'success': False,
             'error': f'Erro durante importação: {str(e)}'
