@@ -121,7 +121,8 @@ class FornecedorExtractorService:
         'EMPREENDIMENTOS', 'CONSTRUCAO', 'INDUSTRIA', 'DISTRIBUIDORA',
         'TRANSPORTES', 'LOGISTICA', 'SISTEMAS', 'SOFTWARE', 'INFORMATICA',
         'SHOPPING', 'CENTER', 'CLINICA', 'MEDICINA', 'LABORATORIO',
-        'ASSESSORIA', 'ADVOGADOS', 'ADVOCACIA', 'CONTABILIDADE'
+        'ASSESSORIA', 'ADVOGADOS', 'ADVOCACIA', 'CONTABILIDADE',
+        'CONSORCIO', 'FACILITIES', 'GESTAO'
     ]
     
     PALAVRAS_CONECTIVAS = [
@@ -137,6 +138,14 @@ class FornecedorExtractorService:
             'grupo_documento': None,
             'prioridade': 0,
             'confianca': 1.0
+        },
+        {
+            'nome': 'PREFIXO_REPETIDO',
+            'regex': r'([A-Z\s]+) - .* - \1\s+(\d+)\s+([A-Z\s]+(?:LTDA|S/?A|ME|EPP)[^-]*)',
+            'grupo_fornecedor': 3,  # Pega apenas o nome da empresa
+            'grupo_documento': 2,    # O número
+            'prioridade': 1,
+            'confianca': 0.96
         },
         {
             'nome': 'DUPLO_COMPLETO',
@@ -188,7 +197,7 @@ class FornecedorExtractorService:
         },
         {
             'nome': 'DOCUMENTO_SEGUIDO_EMPRESA',
-            'regex': r'(\d{4,8})[:\s;]+([A-Z][A-Z0-9\s\-\.&]+(?:LTDA|S/?A|ME|EPP|EIRELI|COMERCIO|SERVICOS|TECNOLOGIA|EMPREENDIMENTOS)[^-;]*)',
+            'regex': r'(\d{4,8})[:\s;]+([A-Z][A-Z0-9\s\-\.&]+(?:LTDA|S/?A|ME|EPP|EIRELI|COMERCIO|SERVICOS|TECNOLOGIA|EMPREENDIMENTOS|CONSORCIO|SHOPPING|CENTER)[^-;]*)',
             'grupo_fornecedor': 2,
             'grupo_documento': 1,
             'prioridade': 3,
@@ -522,6 +531,10 @@ class FornecedorExtractorService:
         
         nome_limpo = nome.strip()
         
+        # NOVA LÓGICA: Se o nome É IGUAL a um prefixo de contaminação, retornar vazio
+        if nome_limpo.upper() in [p.upper() for p in cls.PREFIXOS_CONTAMINACAO]:
+            return ''  # Não é um fornecedor, é só a descrição
+        
         # Remover caracteres especiais do início e fim (/, -, etc)
         nome_limpo = re.sub(r'^[/\-\s]+|[/\-\s]+$', '', nome_limpo)
         
@@ -536,8 +549,14 @@ class FornecedorExtractorService:
                 nome_limpo = re.sub(r'^[-\s:;]+', '', nome_limpo).strip()
                 break
         
-        # Truncar nome em palavras-chave (REEMB, REF, etc)
-        palavras_truncar = ['REEMB', 'REF ', 'REFERENTE', 'RELATIVO']
+        # Truncar nome em palavras-chave (REEMB, REF, DESPESAS, etc)
+        palavras_truncar = [
+            'REEMB', 'REF ', 'REFERENTE', 'RELATIVO',
+            'DESPESAS', 'DESPESA ', 'DESP ', 
+            'CUSTOS', 'CUSTO ', 
+            'PAGAMENTO', 'PGTO',
+            'VALOR', 'VLR'
+        ]
         for palavra in palavras_truncar:
             if palavra in nome_limpo.upper():
                 pos = nome_limpo.upper().find(palavra)

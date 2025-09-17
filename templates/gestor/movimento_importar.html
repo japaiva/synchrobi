@@ -123,7 +123,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function validarPeriodo() {
         if (dataInicio.value && dataFim.value) {
-            fetch(`/gestor/api/validar-periodo-simples/?data_inicio=${dataInicio.value}&data_fim=${dataFim.value}`)
+            // URL CORRIGIDA - usando a rota correta
+            fetch(`{% url 'gestor:api_validar_periodo_simples' %}?data_inicio=${dataInicio.value}&data_fim=${dataFim.value}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.movimentos_existentes > 0) {
