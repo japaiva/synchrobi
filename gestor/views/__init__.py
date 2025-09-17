@@ -119,17 +119,19 @@ from .movimento import (
     movimento_export_excel,              # Exportar para Excel
 )
 
-# Movimento Import - CORRIGIDO COM FUNÇÕES QUE REALMENTE EXISTEM
+# Movimento Import - Funções de importação separadas com SERVIÇO
 from .movimento_import import (
-    # Interface e validações
+    # Importação inteligente de Excel
     movimento_importar,                  # Interface de importação
     api_preview_movimentos_excel,        # Preview antes da importação
-    api_validar_periodo_importacao,      # Validação completa de período
-    api_validar_periodo_simples,         # Validação simples de período
-    
-    # Importação (mantendo nomes atuais para compatibilidade)
-    api_importar_movimentos_detalhado,   # ✅ NOME CORRETO da função principal
+    api_importar_movimentos_excel,       # Importação real do Excel
+    api_validar_periodo_importacao,      # Validação de período
+    api_validar_periodo_simples,         # Validação simples de período  
     api_importar_movimentos_simples,     # Importação simplificada
+    
+    # Funções auxiliares usando SERVIÇO
+    processar_linha_excel_otimizada,     # Processa linha com serviço otimizado
+    corrigir_estrutura_excel,            # Corrige estrutura do Excel
 )
 
 # Fornecedor - Gestão de fornecedores

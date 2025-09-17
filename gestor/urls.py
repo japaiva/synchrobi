@@ -1,4 +1,4 @@
-# gestor/urls.py - CORRIGIDO
+# gestor/urls.py - ATUALIZADO COM SERVIÇO DE FORNECEDOR
 
 from django.urls import path
 from . import views
@@ -133,16 +133,15 @@ urlpatterns = [
     path('movimentos/<int:pk>/excluir/', views.movimento_delete, name='movimento_delete'),
     path('movimentos/export-excel/', views.movimento_export_excel, name='movimento_export_excel'),
     
-    # ===== MOVIMENTOS - IMPORTAÇÃO (SEPARADA) =====
+    # ===== MOVIMENTOS - IMPORTAÇÃO COM SERVIÇO OTIMIZADO =====
     path('movimentos/importar/', views.movimento_importar, name='movimento_importar'),
     
-    # APIs Movimento Import - CORRIGIDAS
+    # APIs Movimento Import Otimizadas
     path('api/movimento/preview-excel/', views.api_preview_movimentos_excel, name='api_preview_movimentos_excel'),
-    path('api/movimento/importar-excel/', views.api_importar_movimentos_detalhado, name='api_importar_movimentos_excel'),  # ✅ CORRIGIDO
+    path('api/movimento/importar-excel/', views.api_importar_movimentos_excel, name='api_importar_movimentos_excel'),
     path('api/movimento/validar-periodo/', views.api_validar_periodo_importacao, name='api_validar_periodo_importacao'),
-
-    path('api/validar-periodo-simples/', views.api_validar_periodo_simples, name='api_validar_periodo_simples'),
-    path('api/importar-movimentos-simples/', views.api_importar_movimentos_simples, name='api_importar_movimentos_simples'),
+    path('api/movimento/validar-periodo-simples/', views.api_validar_periodo_simples, name='api_validar_periodo_simples'),
+    path('api/movimento/importar-simples/', views.api_importar_movimentos_simples, name='api_importar_movimentos_simples'),
 
     # APIs gerais
     path('api/parametro/<str:codigo>/valor/', views.api_parametro_valor, name='api_parametro_valor'),
