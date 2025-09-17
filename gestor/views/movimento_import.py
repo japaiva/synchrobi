@@ -1,4 +1,4 @@
-# gestor/views/movimento_import.py - SISTEMA DE IMPORTAÇÃO CORRIGIDO
+# gestor/views/movimento_import.py - SISTEMA DE IMPORTAÇÃO COMPLETO
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -12,6 +12,7 @@ import pandas as pd
 import decimal
 import re
 from decimal import Decimal, ROUND_HALF_UP
+from collections import defaultdict
 
 from core.models import Movimento, Unidade, CentroCusto, ContaContabil, ContaExterna, Fornecedor
 
@@ -21,114 +22,155 @@ logger = logging.getLogger('synchrobi')
 # === CLASSE MELHORADA PARA EXTRAÇÃO DE FORNECEDORES ===
 
 class FornecedorExtractorAvancado:
-    """Extrator avançado de fornecedores com múltiplos padrões"""
+    """Extrator avançado de fornecedores com múltiplos padrões e limpeza de blacklist"""
     
+    @staticmethod
+    def limpar_blacklist_do_historico(historico):
+        """Remove palavras da blacklist antes de tentar extrair fornecedor"""
+        if not historico or not isinstance(historico, str):
+            return ''
+        
+        palavras_blacklist = [
+            'LANÇAMENTO', 'INTEGRAÇÃO', 'ORÇAMENTO', 'SERVICO', 'DESPESA',
+            'MATERIAL', 'ESCRITORIO', 'VENDAS', 'LOJAS', 'DANFE', 'NFSERV',
+            'VARIAVEIS', 'DESP', 'ACOES', 'REDES', 'SOCIAIS', 'SITES',
+            'ANTIFRAUDE', 'ND'  # Adicionado ND conforme solicitado
+        ]
+        
+        historico_limpo = historico
+        for palavra in palavras_blacklist:
+            # Remove a palavra mas mantém a estrutura
+            historico_limpo = re.sub(rf'\b{palavra}\b', '', historico_limpo, flags=re.IGNORECASE)
+        
+        # Limpar espaços extras e pontuações órfãs
+        historico_limpo = re.sub(r'\s+', ' ', historico_limpo)
+        historico_limpo = re.sub(r'\s*-\s*-\s*', ' - ', historico_limpo)  # Corrigir traços duplos
+        
+        return historico_limpo.strip()
+
     @staticmethod
     def extrair_numero_documento_melhorado(historico):
         """
-        Extrai número do documento com padrões múltiplos
+        Extrai número do documento com padrões múltiplos - COM PROTEÇÃO
         """
-        if not historico:
+        if not historico or not isinstance(historico, str) or not historico.strip():
             return ''
         
-        # PADRÃO 1: - NÚMERO NOME -
-        matches = re.findall(r'[-–]\s*(\d+)[\s\.]*[A-ZÀ-Ÿ]', historico, re.IGNORECASE)
-        if matches:
-            return matches[-1].strip()
-        
-        # PADRÃO 2: NOME NÚMERO - NÚMERO NOME (número repetido)
-        matches = re.findall(r'([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?)\s+(\d+)\s*[-–]\s*\2\s+', historico, re.IGNORECASE)
-        if matches:
-            return matches[-1][1].strip()
-        
-        # PADRÃO 3: Número isolado no final após nome
-        matches = re.findall(r'([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?)\s+(\d{4,})\s*$', historico.strip())
-        if matches:
-            return matches[-1][1].strip()
-        
-        # PADRÃO 4: número NOME número_longo
-        matches = re.findall(r'\b(\d+)\s+[A-ZÀ-Ÿ][A-ZÀ-Ÿ\s]{3,}?\s+\d{8,}', historico, re.IGNORECASE)
-        if matches:
-            return matches[-1].strip()
-        
-        # PADRÃO 5: - número CPF NOME - (pessoas físicas - pegar o primeiro número)
-        matches = re.findall(r'[-–]\s*(\d+)\s+\d{2}\.\d{3}\.\d{3}\s+[A-ZÀ-Ÿ]', historico, re.IGNORECASE)
-        if matches:
-            return matches[-1].strip()
-        
-        # FALLBACK: Qualquer sequência de 3+ dígitos
-        numeros = re.findall(r'\b(\d{3,})\b', historico)
-        if numeros:
-            numeros_filtrados = [n for n in numeros if 4 <= len(n) <= 8]
-            if numeros_filtrados:
-                return numeros_filtrados[-1]
-            else:
-                return max(numeros, key=len)
-        
-        return ''
-    
+        try:
+            # PADRÃO 1: - NÚMERO NOME -
+            matches = re.findall(r'[-–]\s*(\d+)[\s\.]*[A-ZÀ-Ÿ]', historico, re.IGNORECASE)
+            if matches:
+                return matches[-1].strip()
+            
+            # PADRÃO 2: NOME NÚMERO - NÚMERO NOME (número repetido)
+            matches = re.findall(r'([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?)\s+(\d+)\s*[-–]\s*\2\s+', historico, re.IGNORECASE)
+            if matches:
+                return matches[-1][1].strip()
+            
+            # PADRÃO 3: Número isolado no final após nome
+            matches = re.findall(r'([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?)\s+(\d{4,})\s*$', historico.strip())
+            if matches:
+                return matches[-1][1].strip()
+            
+            # PADRÃO 4: número NOME número_longo
+            matches = re.findall(r'\b(\d+)\s+[A-ZÀ-Ÿ][A-ZÀ-Ÿ\s]{3,}?\s+\d{8,}', historico, re.IGNORECASE)
+            if matches:
+                return matches[-1].strip()
+            
+            # PADRÃO 5: - número CPF NOME - (pessoas físicas - pegar o primeiro número)
+            matches = re.findall(r'[-–]\s*(\d+)\s+\d{2}\.\d{3}\.\d{3}\s+[A-ZÀ-Ÿ]', historico, re.IGNORECASE)
+            if matches:
+                return matches[-1].strip()
+            
+            # FALLBACK: Qualquer sequência de 3+ dígitos
+            numeros = re.findall(r'\b(\d{3,})\b', historico)
+            if numeros:
+                numeros_filtrados = [n for n in numeros if 4 <= len(n) <= 8]
+                if numeros_filtrados:
+                    return numeros_filtrados[-1]
+                else:
+                    return max(numeros, key=len)
+            
+            return ''
+            
+        except Exception as e:
+            logger.warning(f'Erro na extração de documento: {str(e)}')
+            return ''
+
     @staticmethod
     def extrair_fornecedor_melhorado(historico):
         """
-        Extrai fornecedor com múltiplos padrões - VERSÃO APRIMORADA
+        Extrai fornecedor APÓS limpar blacklist - VERSÃO OTIMIZADA
         """
-        if not historico:
+        if not historico or not isinstance(historico, str) or not historico.strip():
             return None
         
-        nome_fornecedor = None
-        
-        # PADRÃO 1: - NÚMERO NOME_FORNECEDOR -
-        matches = re.findall(r'[-–]\s*\d+[\s\.]*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?)[-–]', historico, re.IGNORECASE)
-        if matches:
-            candidato = matches[-1].strip()
-            if FornecedorExtractorAvancado.validar_nome_fornecedor(candidato):
-                nome_fornecedor = candidato
-                logger.debug(f"Padrão 1 capturou: {nome_fornecedor}")
-        
-        # PADRÃO 2: NOME_FORNECEDOR NÚMERO - NÚMERO NOME_FORNECEDOR (repetição)
-        if not nome_fornecedor:
-            matches = re.findall(r'([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]{5,}?)\s+\d+\s*[-–]\s*\d+\s+\1', historico, re.IGNORECASE)
-            if matches:
-                candidato = matches[-1].strip()
-                if FornecedorExtractorAvancado.validar_nome_fornecedor(candidato):
-                    nome_fornecedor = candidato
-                    logger.debug(f"Padrão 2 capturou: {nome_fornecedor}")
-        
-        # PADRÃO 3: - DESCRIÇÃO NOME_FORNECEDOR número
-        if not nome_fornecedor:
-            matches = re.findall(r'[-–]\s*(?:SERVICOS?\s+)?([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]+?)\s+(\d{4,})\s*$', historico, re.IGNORECASE)
-            if matches:
-                candidato = matches[-1][0].strip()
-                if not re.search(r'SERVICOS?\s+ANTIFRAUDE|LANÇAMENTO|INTEGRAÇÃO', candidato, re.IGNORECASE):
-                    if FornecedorExtractorAvancado.validar_nome_fornecedor(candidato):
+        try:
+            # PRIMEIRO: Limpar palavras da blacklist
+            historico_limpo = FornecedorExtractorAvancado.limpar_blacklist_do_historico(historico)
+            
+            if not historico_limpo or len(historico_limpo.strip()) < 10:
+                return None
+            
+            nome_fornecedor = None
+            
+            # PADRÃO PRINCIPAL: Fornecedor após número e/ou ponto e vírgula
+            # Padrão 1: - número; NOME; (mais comum)
+            if not nome_fornecedor:
+                matches = re.findall(r'[-–]\s*\d+;\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&/\.\-_]+?);\s*', historico_limpo, re.IGNORECASE)
+                if matches:
+                    candidato = matches[-1].strip()
+                    if FornecedorExtractorAvancado.validar_nome_fornecedor_flexivel(candidato):
                         nome_fornecedor = candidato
-                        logger.debug(f"Padrão 3 capturou: {nome_fornecedor}")
-        
-        # PADRÃO 4: número NOME_FORNECEDOR número_longo
-        if not nome_fornecedor:
-            matches = re.findall(r'\b\d+\s+([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s]{8,}?)\s+\d{8,}', historico, re.IGNORECASE)
-            if matches:
-                candidato = matches[-1].strip()
-                if FornecedorExtractorAvancado.validar_nome_fornecedor(candidato):
-                    nome_fornecedor = candidato
-                    logger.debug(f"Padrão 4 capturou: {nome_fornecedor}")
-        
-        # PADRÃO 5: Nome no final após traço (fallback)
-        if not nome_fornecedor:
-            matches = re.findall(r'[-–]\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&\.\-_]{10,}?)(?:\s+\d+)?\s*$', historico, re.IGNORECASE)
-            if matches:
-                candidato = matches[-1].strip()
-                if FornecedorExtractorAvancado.validar_nome_fornecedor(candidato):
-                    nome_fornecedor = candidato
-                    logger.debug(f"Padrão 5 capturou: {nome_fornecedor}")
-        
-        if nome_fornecedor:
-            nome_final = FornecedorExtractorAvancado.limpar_nome_fornecedor(nome_fornecedor)
-            if FornecedorExtractorAvancado.validar_nome_fornecedor(nome_final):
-                return nome_final
-        
-        return None
-    
+                        logger.debug(f"Padrão 1 (após número;) capturou: {nome_fornecedor}")
+            
+            # Padrão 2: ; NOME; (sem número inicial)
+            if not nome_fornecedor:
+                matches = re.findall(r';\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&/\.\-_]{8,}?);\s*', historico_limpo, re.IGNORECASE)
+                if matches:
+                    candidato = matches[-1].strip()
+                    if FornecedorExtractorAvancado.validar_nome_fornecedor_flexivel(candidato):
+                        nome_fornecedor = candidato
+                        logger.debug(f"Padrão 2 (;NOME;) capturou: {nome_fornecedor}")
+            
+            # Padrão 3: - número NOME (sem ponto e vírgula)
+            if not nome_fornecedor:
+                matches = re.findall(r'[-–]\s*\d+\s+([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&/\.\-_]{8,}?)(?:\s*[-–]|$)', historico_limpo, re.IGNORECASE)
+                if matches:
+                    candidato = matches[-1].strip()
+                    if FornecedorExtractorAvancado.validar_nome_fornecedor_flexivel(candidato):
+                        nome_fornecedor = candidato
+                        logger.debug(f"Padrão 3 (após número) capturou: {nome_fornecedor}")
+            
+            # Padrão 4: número NOME número_longo (padrão original mantido)
+            if not nome_fornecedor:
+                matches = re.findall(r'\b\d+\s+([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&/\.\-_]{8,}?)\s+\d{8,}', historico_limpo, re.IGNORECASE)
+                if matches:
+                    candidato = matches[-1].strip()
+                    if FornecedorExtractorAvancado.validar_nome_fornecedor_flexivel(candidato):
+                        nome_fornecedor = candidato
+                        logger.debug(f"Padrão 4 (número longo) capturou: {nome_fornecedor}")
+            
+            # Padrão 5: Nome repetido (NOME número - número NOME)
+            if not nome_fornecedor:
+                matches = re.findall(r'([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s&/\.\-_]{8,}?)\s+\d+\s*[-–]\s*\d+\s+\1', historico_limpo, re.IGNORECASE)
+                if matches:
+                    candidato = matches[-1].strip()
+                    if FornecedorExtractorAvancado.validar_nome_fornecedor_flexivel(candidato):
+                        nome_fornecedor = candidato
+                        logger.debug(f"Padrão 5 (repetido) capturou: {nome_fornecedor}")
+            
+            if nome_fornecedor:
+                nome_final = FornecedorExtractorAvancado.limpar_nome_fornecedor(nome_fornecedor)
+                if FornecedorExtractorAvancado.validar_nome_fornecedor_flexivel(nome_final):
+                    return nome_final
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f'Erro na extração de fornecedor: {str(e)}')
+            return None
+
     @staticmethod
     def limpar_nome_fornecedor(nome):
         """Limpa e padroniza nome do fornecedor"""
@@ -136,7 +178,7 @@ class FornecedorExtractorAvancado:
             return ''
         
         # Remover caracteres especiais, mas manter essenciais
-        nome_limpo = re.sub(r'[^\w\s&\.\-]', ' ', nome)
+        nome_limpo = re.sub(r'[^\w\s&\.\-/]', ' ', nome)
         
         # Remover múltiplos espaços
         nome_limpo = re.sub(r'\s+', ' ', nome_limpo)
@@ -145,50 +187,50 @@ class FornecedorExtractorAvancado:
         nome_limpo = nome_limpo.upper().strip()
         
         return nome_limpo
-    
+
     @staticmethod
-    def validar_nome_fornecedor(nome):
+    def validar_nome_fornecedor_flexivel(nome):
         """
-        Validação rigorosa para nome de fornecedor
+        Validação mais flexível para nomes de fornecedor
         """
-        if not nome or len(nome) < 5:
+        if not nome or not isinstance(nome, str) or len(nome.strip()) < 5:
             return False
         
-        # Deve ter pelo menos 2 palavras significativas
-        palavras = [p for p in nome.split() if len(p) >= 2]
-        if len(palavras) < 2:
-            return False
-        
-        # Não deve ser apenas números
-        if nome.replace(' ', '').replace('.', '').replace('-', '').isdigit():
-            return False
-        
-        # Não deve ter mais de 70% de números
-        total_chars = len(nome.replace(' ', ''))
-        digit_chars = sum(1 for c in nome if c.isdigit())
-        if total_chars > 0 and (digit_chars / total_chars) > 0.7:
-            return False
-        
-        # Lista de palavras que indicam que NÃO é um fornecedor
-        palavras_blacklist = [
-            'LANÇAMENTO', 'INTEGRAÇÃO', 'ORÇAMENTO', 'SERVICO', 'DESPESA',
-            'MATERIAL', 'ESCRITORIO', 'VENDAS', 'LOJAS', 'DANFE', 'NFSERV',
-            'VARIAVEIS', 'DESP', 'ACOES', 'REDES', 'SOCIAIS', 'SITES',
-            'ANTIFRAUDE'
-        ]
-        
-        nome_upper = nome.upper()
-        for palavra in palavras_blacklist:
-            if palavra in nome_upper:
+        try:
+            nome = nome.strip()
+            
+            # Deve ter pelo menos 2 palavras com 2+ caracteres
+            palavras = [p for p in nome.split() if len(p) >= 2]
+            if len(palavras) < 2:
                 return False
-        
-        # Deve ter pelo menos uma palavra com 3+ caracteres
-        palavras_longas = [p for p in palavras if len(p) >= 3]
-        if len(palavras_longas) < 1:
+            
+            # Não deve ser apenas números
+            if nome.replace(' ', '').replace('.', '').replace('-', '').replace('/', '').isdigit():
+                return False
+            
+            # Não deve ter mais de 80% de números (mais flexível)
+            total_chars = len(nome.replace(' ', ''))
+            digit_chars = sum(1 for c in nome if c.isdigit())
+            if total_chars > 0 and (digit_chars / total_chars) > 0.8:
+                return False
+            
+            # Blacklist reduzida - apenas termos técnicos
+            palavras_blacklist_validacao = [
+                'SISTEMA', 'AUTOMATICO', 'PROCESSAMENTO', 'CALCULO'
+            ]
+            
+            nome_upper = nome.upper()
+            for palavra in palavras_blacklist_validacao:
+                if palavra in nome_upper:
+                    return False
+            
+            # Aceitar qualquer nome que passe nos critérios básicos
+            return True
+            
+        except Exception as e:
+            logger.warning(f'Erro na validação de nome: {str(e)}')
             return False
-        
-        return True
-    
+
     @staticmethod
     def buscar_fornecedor_existente(nome_limpo):
         """Busca fornecedor existente com fuzzy matching básico"""
@@ -222,7 +264,7 @@ class FornecedorExtractorAvancado:
                     return candidato
         
         return None
-    
+
     @staticmethod
     def criar_fornecedor_automatico(nome_limpo, historico_original=''):
         """Cria novo fornecedor com código otimizado"""
@@ -266,35 +308,256 @@ class FornecedorExtractorAvancado:
             logger.error(f"Erro ao criar fornecedor {nome_limpo}: {str(e)}")
             return None
 
+
 # === FUNÇÕES ATUALIZADAS DE PROCESSAMENTO ===
 
 def extrair_numero_documento_do_historico(historico):
-    """Função atualizada usando novo extrator"""
-    return FornecedorExtractorAvancado.extrair_numero_documento_melhorado(historico)
+    """Função atualizada usando novo extrator com proteção"""
+    if not historico or not historico.strip():
+        return ''
+    
+    try:
+        return FornecedorExtractorAvancado.extrair_numero_documento_melhorado(historico)
+    except Exception as e:
+        logger.warning(f'Erro na extração de documento: {str(e)}')
+        return ''
 
 def extrair_fornecedor_do_historico(historico):
-    """Função atualizada com melhor extração de fornecedores"""
+    """Função atualizada com melhor extração de fornecedores e proteção contra erros"""
     
-    if not historico:
+    if not historico or not historico.strip():
         return None
     
-    # Extrair nome do fornecedor
-    nome_fornecedor = FornecedorExtractorAvancado.extrair_fornecedor_melhorado(historico)
-    
-    if not nome_fornecedor:
+    try:
+        # Extrair nome do fornecedor
+        nome_fornecedor = FornecedorExtractorAvancado.extrair_fornecedor_melhorado(historico)
+        
+        if not nome_fornecedor:
+            return None
+        
+        # Buscar fornecedor existente
+        fornecedor_existente = FornecedorExtractorAvancado.buscar_fornecedor_existente(nome_fornecedor)
+        if fornecedor_existente:
+            return fornecedor_existente
+        
+        # Criar novo fornecedor
+        return FornecedorExtractorAvancado.criar_fornecedor_automatico(nome_fornecedor, historico)
+        
+    except Exception as e:
+        logger.warning(f'Erro na extração de fornecedor: {str(e)}')
         return None
-    
-    # Buscar fornecedor existente
-    fornecedor_existente = FornecedorExtractorAvancado.buscar_fornecedor_existente(nome_fornecedor)
-    if fornecedor_existente:
-        return fornecedor_existente
-    
-    # Criar novo fornecedor
-    return FornecedorExtractorAvancado.criar_fornecedor_automatico(nome_fornecedor, historico)
 
-def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, data_inicio, data_fim):
+
+# === CLASSE PARA COLETA DETALHADA DE ERROS ===
+
+class ErrosDetalhados:
+    """Classe para coletar e organizar erros detalhados com códigos específicos"""
+    
+    def __init__(self):
+        self.contas_nao_encontradas = defaultdict(int)
+        self.centros_nao_encontrados = defaultdict(int)
+        self.unidades_nao_encontradas = defaultdict(int)
+        self.outros_erros = defaultdict(int)
+        self.linhas_fora_periodo = 0
+        self.valores_invalidos = defaultdict(int)
+        self.datas_invalidas = defaultdict(int)
+    
+    def adicionar_conta_nao_encontrada(self, codigo):
+        """Registra código de conta contábil não encontrado"""
+        self.contas_nao_encontradas[str(codigo)] += 1
+    
+    def adicionar_centro_nao_encontrado(self, codigo):
+        """Registra código de centro de custo não encontrado"""
+        self.centros_nao_encontrados[str(codigo)] += 1
+    
+    def adicionar_unidade_nao_encontrada(self, codigo):
+        """Registra código de unidade não encontrado"""
+        self.unidades_nao_encontradas[str(codigo)] += 1
+    
+    def adicionar_valor_invalido(self, valor, linha):
+        """Registra valor inválido"""
+        chave = f"Valor '{valor}' na linha {linha}"
+        self.valores_invalidos[chave] += 1
+    
+    def adicionar_data_invalida(self, data, linha):
+        """Registra data inválida"""
+        chave = f"Data '{data}' na linha {linha}"
+        self.datas_invalidas[chave] += 1
+    
+    def adicionar_outro_erro(self, erro):
+        """Registra outros tipos de erro"""
+        # Limpar número da linha para agrupar erros similares
+        erro_limpo = re.sub(r'Linha \d+:', 'Linha X:', erro)
+        erro_limpo = re.sub(r'linha \d+', 'linha X', erro_limpo)
+        self.outros_erros[erro_limpo] += 1
+    
+    def linha_fora_periodo(self):
+        """Incrementa contador de linhas fora do período"""
+        self.linhas_fora_periodo += 1
+    
+    def get_total_erros(self):
+        """Retorna total de erros"""
+        return (
+            sum(self.contas_nao_encontradas.values()) +
+            sum(self.centros_nao_encontrados.values()) +
+            sum(self.unidades_nao_encontradas.values()) +
+            sum(self.valores_invalidos.values()) +
+            sum(self.datas_invalidas.values()) +
+            sum(self.outros_erros.values())
+        )
+    
+    def get_resumo_detalhado(self):
+        """Retorna resumo detalhado para a interface"""
+        resumo = {
+            'total_erros': self.get_total_erros(),
+            'linhas_fora_periodo': self.linhas_fora_periodo,
+            'categorias': []
+        }
+        
+        # CONTAS CONTÁBEIS NÃO ENCONTRADAS - COM TODOS OS CÓDIGOS
+        if self.contas_nao_encontradas:
+            contas_ordenadas = sorted(
+                self.contas_nao_encontradas.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            categoria_contas = {
+                'tipo': 'Contas Contábeis Não Encontradas',
+                'total_ocorrencias': sum(self.contas_nao_encontradas.values()),
+                'total_codigos': len(self.contas_nao_encontradas),
+                'detalhes': [
+                    {
+                        'codigo': codigo,
+                        'ocorrencias': count,
+                        'descricao': f"Código {codigo}: {count} movimento{'s' if count > 1 else ''}"
+                    }
+                    for codigo, count in contas_ordenadas
+                ]
+            }
+            resumo['categorias'].append(categoria_contas)
+        
+        # CENTROS DE CUSTO NÃO ENCONTRADOS - COM TODOS OS CÓDIGOS
+        if self.centros_nao_encontrados:
+            centros_ordenados = sorted(
+                self.centros_nao_encontrados.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            categoria_centros = {
+                'tipo': 'Centros de Custo Não Encontrados',
+                'total_ocorrencias': sum(self.centros_nao_encontrados.values()),
+                'total_codigos': len(self.centros_nao_encontrados),
+                'detalhes': [
+                    {
+                        'codigo': codigo,
+                        'ocorrencias': count,
+                        'descricao': f"Código {codigo}: {count} movimento{'s' if count > 1 else ''}"
+                    }
+                    for codigo, count in centros_ordenados
+                ]
+            }
+            resumo['categorias'].append(categoria_centros)
+        
+        # UNIDADES NÃO ENCONTRADAS - COM TODOS OS CÓDIGOS
+        if self.unidades_nao_encontradas:
+            unidades_ordenadas = sorted(
+                self.unidades_nao_encontradas.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            categoria_unidades = {
+                'tipo': 'Unidades Não Encontradas',
+                'total_ocorrencias': sum(self.unidades_nao_encontradas.values()),
+                'total_codigos': len(self.unidades_nao_encontradas),
+                'detalhes': [
+                    {
+                        'codigo': codigo,
+                        'ocorrencias': count,
+                        'descricao': f"Código {codigo}: {count} movimento{'s' if count > 1 else ''}"
+                    }
+                    for codigo, count in unidades_ordenadas
+                ]
+            }
+            resumo['categorias'].append(categoria_unidades)
+        
+        # VALORES INVÁLIDOS
+        if self.valores_invalidos:
+            valores_ordenados = sorted(
+                self.valores_invalidos.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            categoria_valores = {
+                'tipo': 'Valores Inválidos',
+                'total_ocorrencias': sum(self.valores_invalidos.values()),
+                'total_codigos': len(self.valores_invalidos),
+                'detalhes': [
+                    {
+                        'codigo': erro,
+                        'ocorrencias': count,
+                        'descricao': f"{erro}: {count} ocorrência{'s' if count > 1 else ''}"
+                    }
+                    for erro, count in valores_ordenados
+                ]
+            }
+            resumo['categorias'].append(categoria_valores)
+        
+        # DATAS INVÁLIDAS
+        if self.datas_invalidas:
+            datas_ordenadas = sorted(
+                self.datas_invalidas.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            categoria_datas = {
+                'tipo': 'Datas Inválidas',
+                'total_ocorrencias': sum(self.datas_invalidas.values()),
+                'total_codigos': len(self.datas_invalidas),
+                'detalhes': [
+                    {
+                        'codigo': erro,
+                        'ocorrencias': count,
+                        'descricao': f"{erro}: {count} ocorrência{'s' if count > 1 else ''}"
+                    }
+                    for erro, count in datas_ordenadas
+                ]
+            }
+            resumo['categorias'].append(categoria_datas)
+        
+        # OUTROS ERROS
+        if self.outros_erros:
+            outros_ordenados = sorted(
+                self.outros_erros.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            categoria_outros = {
+                'tipo': 'Outros Erros',
+                'total_ocorrencias': sum(self.outros_erros.values()),
+                'total_codigos': len(self.outros_erros),
+                'detalhes': [
+                    {
+                        'codigo': erro,
+                        'ocorrencias': count,
+                        'descricao': f"{erro}: {count} ocorrência{'s' if count > 1 else ''}"
+                    }
+                    for erro, count in outros_ordenados
+                ]
+            }
+            resumo['categorias'].append(categoria_outros)
+        
+        return resumo
+
+
+def processar_linha_excel_com_coleta_erros(linha_dados, numero_linha, nome_arquivo, data_inicio, data_fim, coletores_erros):
     """
-    Versão melhorada do processamento de linha Excel com proteção contra tipos incorretos
+    Versão melhorada que coleta erros detalhados por código específico
     """
     try:
         # Função auxiliar para limpar campos
@@ -315,7 +578,16 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, da
         codigo_conta_contabil = limpar_campo_seguro(linha_dados.get('Cód. da conta contábil'))
         natureza = limpar_campo_seguro(linha_dados.get('Natureza (D/C/A)')) or 'D'
         valor_bruto = linha_dados.get('Valor', 0)
-        historico = limpar_campo_seguro(linha_dados.get('Histórico'))
+        
+        # Campos do histórico com validação mais rigorosa
+        historico = linha_dados.get('Histórico')
+        if historico is None or pd.isna(historico):
+            historico = ''
+        else:
+            historico = str(historico).strip()
+            # Se após strip ainda está vazio, definir como string vazia
+            if not historico:
+                historico = ''
         
         # Campos opcionais
         codigo_projeto = limpar_campo_seguro(linha_dados.get('Cód. do projeto'))
@@ -323,68 +595,93 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, da
         rateio = limpar_campo_seguro(linha_dados.get('Rateio')) or 'N'
         
         # Converter e validar data
-        if isinstance(data, str):
-            try:
-                data = datetime.strptime(data, '%Y-%m-%d').date()
-            except ValueError:
+        try:
+            if isinstance(data, str):
                 try:
-                    data = datetime.strptime(data, '%Y-%m-%d %H:%M:%S').date()
+                    data = datetime.strptime(data, '%Y-%m-%d').date()
                 except ValueError:
-                    raise ValueError(f'Formato de data inválido: {data}')
-        elif hasattr(data, 'date'):
-            data = data.date()
-        elif isinstance(data, datetime):
-            data = data.date()
-        elif isinstance(data, (int, float)) and not pd.isna(data):
-            try:
-                excel_epoch = date(1900, 1, 1)
-                data = excel_epoch + timedelta(days=int(data) - 2)
-            except:
-                raise ValueError(f'Formato de data inválido: {data}')
-        else:
-            raise ValueError(f'Data não informada ou inválida: {data}')
+                    try:
+                        data = datetime.strptime(data, '%Y-%m-%d %H:%M:%S').date()
+                    except ValueError:
+                        coletores_erros.adicionar_data_invalida(data, numero_linha)
+                        return None
+            elif hasattr(data, 'date'):
+                data = data.date()
+            elif isinstance(data, datetime):
+                data = data.date()
+            elif isinstance(data, (int, float)) and not pd.isna(data):
+                try:
+                    excel_epoch = date(1900, 1, 1)
+                    data = excel_epoch + timedelta(days=int(data) - 2)
+                except:
+                    coletores_erros.adicionar_data_invalida(data, numero_linha)
+                    return None
+            else:
+                coletores_erros.adicionar_data_invalida(data, numero_linha)
+                return None
+        except Exception:
+            coletores_erros.adicionar_data_invalida(data, numero_linha)
+            return None
         
         # Validar período
         if not (data_inicio <= data <= data_fim):
-            return None, f'Data {data} fora do período {data_inicio} a {data_fim} - linha ignorada'
+            coletores_erros.linha_fora_periodo()
+            return None
         
         # Converter valor
-        if valor_bruto is None or valor_bruto == '' or pd.isna(valor_bruto):
-            valor = Decimal('0.00')
-        else:
-            try:
+        try:
+            if valor_bruto is None or valor_bruto == '' or pd.isna(valor_bruto):
+                valor = Decimal('0.00')
+            else:
                 valor_decimal = Decimal(str(valor_bruto))
                 valor = abs(valor_decimal).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            except (ValueError, decimal.InvalidOperation):
-                raise ValueError(f'Valor inválido: {valor_bruto}')
+        except (ValueError, decimal.InvalidOperation):
+            coletores_erros.adicionar_valor_invalido(valor_bruto, numero_linha)
+            return None
         
-        # Validar códigos obrigatórios
+        # Validar códigos obrigatórios (histórico NÃO é obrigatório)
         if not codigo_unidade:
-            raise ValueError('Código da unidade não informado')
+            coletores_erros.adicionar_outro_erro(f'Linha {numero_linha}: Código da unidade não informado')
+            return None
         if not codigo_centro_custo:
-            raise ValueError('Código do centro de custo não informado')
+            coletores_erros.adicionar_outro_erro(f'Linha {numero_linha}: Código do centro de custo não informado')
+            return None
         if not codigo_conta_contabil:
-            raise ValueError('Código da conta contábil não informado')
+            coletores_erros.adicionar_outro_erro(f'Linha {numero_linha}: Código da conta contábil não informado')
+            return None
         
-        # Buscar entidades relacionadas
+        # Buscar entidades relacionadas COM COLETA DETALHADA DE ERROS
         unidade = Unidade.buscar_unidade_para_movimento(codigo_unidade)
         if not unidade:
-            raise ValueError(f'Unidade não encontrada: {codigo_unidade}')
+            coletores_erros.adicionar_unidade_nao_encontrada(codigo_unidade)
+            return None
         
         try:
             centro_custo = CentroCusto.objects.get(codigo=codigo_centro_custo, ativo=True)
         except CentroCusto.DoesNotExist:
-            return None, f'Centro de custo não encontrado: {codigo_centro_custo} - linha ignorada'
+            coletores_erros.adicionar_centro_nao_encontrado(codigo_centro_custo)
+            return None
         
         try:
             conta_externa = ContaExterna.objects.get(codigo_externo=codigo_conta_contabil, ativa=True)
             conta_contabil = conta_externa.conta_contabil
         except ContaExterna.DoesNotExist:
-            return None, f'Conta contábil não encontrada: {codigo_conta_contabil} - linha ignorada'
+            coletores_erros.adicionar_conta_nao_encontrada(codigo_conta_contabil)
+            return None
         
-        # USAR NOVA EXTRAÇÃO MELHORADA com proteção
-        numero_documento = extrair_numero_documento_do_historico(historico) if historico else ''
-        fornecedor = extrair_fornecedor_do_historico(historico) if historico else None
+        # Extrair fornecedor com proteção contra histórico vazio - NOVA LÓGICA
+        numero_documento = ''
+        fornecedor = None
+        
+        # Se histórico está em branco, não busca nada - apenas prossegue
+        if historico and historico.strip():
+            try:
+                numero_documento = extrair_numero_documento_do_historico(historico)
+                fornecedor = extrair_fornecedor_do_historico(historico)
+            except Exception as e:
+                logger.warning(f'Erro na extração do histórico linha {numero_linha}: {str(e)}')
+                # Continua sem fornecedor se houver erro na extração
+        # Se histórico em branco, simplesmente continua sem tentar extrair nada
         
         # Criar movimento
         movimento = Movimento.objects.create(
@@ -406,40 +703,15 @@ def processar_linha_excel_atualizada(linha_dados, numero_linha, nome_arquivo, da
             linha_origem=numero_linha
         )
         
-        return movimento, None
+        return movimento
         
     except Exception as e:
-        error_msg = f'Linha {numero_linha}: {str(e)}'
-        logger.error(f'Erro ao processar movimento: {error_msg}')
-        return None, error_msg
+        coletores_erros.adicionar_outro_erro(f'Linha {numero_linha}: Erro inesperado - {str(e)}')
+        logger.error(f'Erro ao processar movimento linha {numero_linha}: {str(e)}')
+        return None
 
-def corrigir_estrutura_excel(arquivo):
-    """Corrige problemas na estrutura do Excel"""
-    try:
-        df = pd.read_excel(arquivo, engine='openpyxl', header=0)
-        
-        # Verificar colunas necessárias
-        colunas_necessarias = [
-            'Mês', 'Ano', 'Data', 'Cód. da unidade', 'Cód. do centro de custo',
-            'Cód. da conta contábil', 'Natureza (D/C/A)', 'Valor', 'Histórico'
-        ]
-        
-        colunas_faltando = [col for col in colunas_necessarias if col not in df.columns]
-        if colunas_faltando:
-            raise ValueError(f'Colunas obrigatórias faltando: {", ".join(colunas_faltando)}')
-        
-        # Corrigir valores
-        if 'Valor' in df.columns:
-            df['Valor'] = df['Valor'].apply(lambda x: round(abs(float(x)), 2) if pd.notna(x) else 0.00)
-        
-        # Remover linhas vazias
-        df = df.dropna(how='all')
-        
-        return df
-        
-    except Exception as e:
-        logger.error(f'Erro ao corrigir estrutura do Excel: {str(e)}')
-        raise
+
+# === VIEWS DE IMPORTAÇÃO ===
 
 @login_required
 def movimento_importar(request):
@@ -455,7 +727,6 @@ def movimento_importar(request):
         'centros_custo_ativos': CentroCusto.objects.filter(ativo=True).count(),
         'fornecedores_ativos': Fornecedor.objects.filter(ativo=True).count(),
         'total_movimentos': Movimento.objects.count(),
-        # ADICIONE ESTA LINHA:
         'sistema_pronto': all([
             Unidade.objects.filter(ativa=True).exists(),
             CentroCusto.objects.filter(ativo=True).exists(),
@@ -463,7 +734,6 @@ def movimento_importar(request):
         ])
     }
 
-    
     if stats['unidades_ativas'] > 0:
         stats['percentual_unidades_preparadas'] = round(
             (stats['unidades_com_allstrategy'] / stats['unidades_ativas'] * 100), 1
@@ -478,6 +748,7 @@ def movimento_importar(request):
     }
     
     return render(request, 'gestor/movimento_importar.html', context)
+
 
 @login_required
 @require_POST
@@ -505,9 +776,10 @@ def api_preview_movimentos_excel(request):
             return JsonResponse({'success': False, 'error': 'Arquivo deve ser Excel (.xlsx ou .xls)'})
         
         try:
-            df = corrigir_estrutura_excel(arquivo)
+            df = pd.read_excel(arquivo, engine='openpyxl', header=0)
+            df = df.dropna(how='all')
         except Exception as e:
-            logger.error(f'Erro ao corrigir estrutura do Excel: {str(e)}')
+            logger.error(f'Erro ao ler Excel: {str(e)}')
             return JsonResponse({'success': False, 'error': f'Erro na estrutura do arquivo: {str(e)}'})
         
         # Verificar se há dados
@@ -606,13 +878,7 @@ def api_preview_movimentos_excel(request):
                 try:
                     codigo_unidade = linha.get('Cód. da unidade')
                     if codigo_unidade:
-                        unidade = Unidade.buscar_por_codigo_allstrategy(str(codigo_unidade))
-                        if not unidade:
-                            try:
-                                unidade = Unidade.objects.get(codigo=str(codigo_unidade), ativa=True)
-                            except Unidade.DoesNotExist:
-                                pass
-                        
+                        unidade = Unidade.buscar_unidade_para_movimento(str(codigo_unidade))
                         resultado['validacoes']['unidade'] = {
                             'encontrada': unidade is not None,
                             'detalhes': f"{unidade.codigo_display} - {unidade.nome}" if unidade else None
@@ -738,165 +1004,6 @@ def api_preview_movimentos_excel(request):
             'error': f'Erro interno no servidor: {str(e)}'
         })
 
-@login_required
-@require_POST
-def api_importar_movimentos_excel(request):
-    """API para importação real dos movimentos"""
-    
-    try:
-        data_inicio_str = request.POST.get('data_inicio')
-        data_fim_str = request.POST.get('data_fim')
-        
-        if not data_inicio_str or not data_fim_str:
-            return JsonResponse({'success': False, 'error': 'Período não informado'})
-        
-        try:
-            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
-            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-        except ValueError:
-            return JsonResponse({'success': False, 'error': 'Formato de data inválido'})
-        
-        if 'arquivo' not in request.FILES:
-            return JsonResponse({'success': False, 'error': 'Arquivo não encontrado'})
-        
-        arquivo = request.FILES['arquivo']
-        
-        # Limpar período
-        logger.info(f'Limpando período {data_inicio} a {data_fim}')
-        movimentos_removidos = Movimento.objects.filter(
-            data__gte=data_inicio,
-            data__lte=data_fim
-        ).count()
-        
-        Movimento.objects.filter(
-            data__gte=data_inicio,
-            data__lte=data_fim
-        ).delete()
-        
-        # Processar arquivo
-        try:
-            df = corrigir_estrutura_excel(arquivo)
-        except Exception as e:
-            return JsonResponse({'success': False, 'error': f'Erro na estrutura: {str(e)}'})
-        
-        logger.info(f'Iniciando importação MELHORADA de {len(df)} linhas')
-        
-        # Contadores
-        movimentos_criados = 0
-        fornecedores_criados = 0
-        fornecedores_encontrados = 0
-        erros = []
-        erros_tipos = {}  # Dicionário para agrupar tipos de erro
-        
-        fornecedores_novos = set()
-        
-        for idx, linha in df.iterrows():
-            try:
-                linha_dict = linha.to_dict()
-                
-                movimento, erro = processar_linha_excel_atualizada(
-                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
-                )
-                
-                if movimento:
-                    movimentos_criados += 1
-                    
-                    if movimento.fornecedor:
-                        if movimento.fornecedor.criado_automaticamente:
-                            if movimento.fornecedor.codigo not in fornecedores_novos:
-                                fornecedores_novos.add(movimento.fornecedor.codigo)
-                                fornecedores_criados += 1
-                        else:
-                            fornecedores_encontrados += 1
-                    
-                    if movimentos_criados % 50 == 0:
-                        logger.info(f'Processados {movimentos_criados} movimentos...')
-                        
-                elif erro:
-                    # Agrupar erros similares de forma inteligente
-                    if 'Conta contábil não encontrada:' in erro:
-                        tipo_base = 'Conta contábil não encontrada'
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        chave_erro = f"{tipo_base}:{codigo}"
-                    elif 'Centro de custo não encontrado:' in erro:
-                        tipo_base = 'Centro de custo não encontrado'
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        chave_erro = f"{tipo_base}:{codigo}"
-                    elif 'Unidade não encontrada:' in erro:
-                        tipo_base = 'Unidade não encontrada'
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        chave_erro = f"{tipo_base}:{codigo}"
-                    else:
-                        tipo_base = erro.split(' - linha')[0] if ' - linha' in erro else erro.split(':')[0] if ':' in erro else erro
-                        chave_erro = tipo_base
-                    
-                    if chave_erro not in erros_tipos:
-                        erros_tipos[chave_erro] = {
-                            'count': 1,
-                            'exemplo': erro,
-                            'tipo': tipo_base
-                        }
-                    else:
-                        erros_tipos[chave_erro]['count'] += 1
-                    
-            except Exception as e:
-                erro_msg = f'Linha {idx + 2}: Erro inesperado - {str(e)}'
-                tipo_erro = 'Erro inesperado'
-                
-                if tipo_erro not in erros_tipos:
-                    erros_tipos[tipo_erro] = {
-                        'count': 1,
-                        'exemplo': erro_msg,
-                        'tipo': tipo_erro
-                    }
-                    logger.error(erro_msg)
-                else:
-                    erros_tipos[tipo_erro]['count'] += 1
-        
-        # Converter erros agrupados para lista final
-        for chave, info in erros_tipos.items():
-            if info['count'] == 1:
-                erros.append(info['exemplo'])
-            else:
-                # Para múltiplas ocorrências, mostrar resumo
-                if info['tipo'] == 'Conta contábil não encontrada':
-                    codigo = chave.split(':')[1]
-                    erros.append(f"Conta contábil não encontrada: {codigo} ({info['count']} ocorrências)")
-                elif info['tipo'] == 'Centro de custo não encontrado':
-                    codigo = chave.split(':')[1]
-                    erros.append(f"Centro de custo não encontrado: {codigo} ({info['count']} ocorrências)")
-                elif info['tipo'] == 'Unidade não encontrada':
-                    codigo = chave.split(':')[1]
-                    erros.append(f"Unidade não encontrada: {codigo} ({info['count']} ocorrências)")
-                else:
-                    erros.append(f"{info['tipo']} ({info['count']} ocorrências)")
-        
-        logger.info(
-            f'Importação MELHORADA concluída: {movimentos_criados} movimentos, '
-            f'{fornecedores_criados} fornecedores novos, {fornecedores_encontrados} existentes'
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'resultado': {
-                'movimentos_removidos': movimentos_removidos,
-                'movimentos_criados': movimentos_criados,
-                'fornecedores_criados': fornecedores_criados,
-                'fornecedores_encontrados': fornecedores_encontrados,
-                'total_erros': len(erros),
-                'nome_arquivo': arquivo.name,
-                'melhorias_aplicadas': True
-            },
-            'erros': erros[:20],
-            'tem_mais_erros': len(erros) > 20
-        })
-        
-    except Exception as e:
-        logger.error(f'Erro na importação: {str(e)}')
-        return JsonResponse({
-            'success': False,
-            'error': f'Erro na importação: {str(e)}'
-        })
 
 @login_required
 def api_validar_periodo_importacao(request):
@@ -933,6 +1040,118 @@ def api_validar_periodo_importacao(request):
             'error': f'Erro na validação: {str(e)}'
         })
 
+
+@login_required
+@require_POST
+def api_importar_movimentos_detalhado(request):
+    """API de importação com detalhamento COMPLETO de todos os erros"""
+    
+    try:
+        data_inicio_str = request.POST.get('data_inicio')
+        data_fim_str = request.POST.get('data_fim')
+        
+        if not data_inicio_str or not data_fim_str:
+            return JsonResponse({'success': False, 'error': 'Período não informado'})
+        
+        try:
+            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Formato de data inválido'})
+        
+        if 'arquivo' not in request.FILES:
+            return JsonResponse({'success': False, 'error': 'Arquivo não encontrado'})
+        
+        arquivo = request.FILES['arquivo']
+        
+        # Limpar período
+        logger.info(f'Limpando período {data_inicio} a {data_fim}')
+        movimentos_removidos = Movimento.objects.filter(
+            data__gte=data_inicio,
+            data__lte=data_fim
+        ).count()
+        
+        Movimento.objects.filter(
+            data__gte=data_inicio,
+            data__lte=data_fim
+        ).delete()
+        
+        # Processar arquivo
+        try:
+            df = pd.read_excel(arquivo, engine='openpyxl', header=0)
+            df = df.dropna(how='all')
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Erro na estrutura: {str(e)}'})
+        
+        logger.info(f'Iniciando importação DETALHADA de {len(df)} linhas')
+        
+        # INICIALIZAR COLETOR DE ERROS DETALHADOS
+        coletores_erros = ErrosDetalhados()
+        
+        # Contadores
+        movimentos_criados = 0
+        fornecedores_criados = 0
+        fornecedores_encontrados = 0
+        fornecedores_novos = set()
+        
+        for idx, linha in df.iterrows():
+            try:
+                linha_dict = linha.to_dict()
+                
+                movimento = processar_linha_excel_com_coleta_erros(
+                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim, coletores_erros
+                )
+                
+                if movimento:
+                    movimentos_criados += 1
+                    
+                    if movimento.fornecedor:
+                        if movimento.fornecedor.criado_automaticamente:
+                            if movimento.fornecedor.codigo not in fornecedores_novos:
+                                fornecedores_novos.add(movimento.fornecedor.codigo)
+                                fornecedores_criados += 1
+                        else:
+                            fornecedores_encontrados += 1
+                    
+                    if movimentos_criados % 100 == 0:
+                        logger.info(f'Processados {movimentos_criados} movimentos...')
+                        
+            except Exception as e:
+                coletores_erros.adicionar_outro_erro(f'Linha {idx + 2}: Erro crítico - {str(e)}')
+                logger.error(f'Erro crítico linha {idx + 2}: {str(e)}')
+        
+        # GERAR RESUMO DETALHADO COMPLETO
+        resumo_detalhado = coletores_erros.get_resumo_detalhado()
+        
+        logger.info(
+            f'Importação DETALHADA concluída: {movimentos_criados} movimentos, '
+            f'{fornecedores_criados} fornecedores novos, {resumo_detalhado["total_erros"]} erros'
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'resultado': {
+                'movimentos_removidos': movimentos_removidos,
+                'movimentos_criados': movimentos_criados,
+                'fornecedores_criados': fornecedores_criados,
+                'fornecedores_encontrados': fornecedores_encontrados,
+                'total_erros': resumo_detalhado['total_erros'],
+                'linhas_fora_periodo': resumo_detalhado['linhas_fora_periodo'],
+                'nome_arquivo': arquivo.name,
+                'detalhamento_completo': True
+            },
+            'erros_detalhados': resumo_detalhado,
+            'tem_detalhamento': True
+        })
+        
+    except Exception as e:
+        logger.error(f'Erro na importação detalhada: {str(e)}')
+        return JsonResponse({
+            'success': False,
+            'error': f'Erro na importação: {str(e)}'
+        })
+
+
 @login_required
 def api_validar_periodo_simples(request):
     """Validação simples de período"""
@@ -959,10 +1178,11 @@ def api_validar_periodo_simples(request):
     except Exception:
         return JsonResponse({'success': False, 'periodo_valido': False})
 
+
 @login_required
 @require_POST
 def api_importar_movimentos_simples(request):
-    """API simplificada que mostra TODOS os códigos específicos que falharam"""
+    """API simplificada de fallback"""
     try:
         # Validar entrada
         if 'arquivo' not in request.FILES:
@@ -993,92 +1213,11 @@ def api_importar_movimentos_simples(request):
                 'error': f'Colunas obrigatórias faltando: {", ".join(faltando)}'
             })
         
-        # Limpar período existente
-        movimentos_removidos = Movimento.objects.filter(
-            data__gte=data_inicio, data__lte=data_fim
-        ).count()
-        
-        Movimento.objects.filter(data__gte=data_inicio, data__lte=data_fim).delete()
-        
-        # Processar linhas
-        total_linhas = len(df)
-        movimentos_criados = 0
-        fornecedores_criados = 0
-        
-        # Sets para coletar códigos únicos que falharam
-        contas_nao_encontradas = set()
-        centros_nao_encontrados = set()
-        unidades_nao_encontradas = set()
-        outros_erros = []
-        
-        for idx, linha in df.iterrows():
-            try:
-                linha_dict = linha.to_dict()
-                
-                movimento, erro = processar_linha_excel_atualizada(
-                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
-                )
-                
-                if movimento:
-                    movimentos_criados += 1
-                    if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
-                        fornecedores_criados += 1
-                elif erro:
-                    if 'fora do período' in erro:
-                        continue  # Ignorar silenciosamente
-                    
-                    # Extrair código específico do erro
-                    if 'Conta contábil não encontrada:' in erro:
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        contas_nao_encontradas.add(codigo)
-                    elif 'Centro de custo não encontrado:' in erro:
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        centros_nao_encontrados.add(codigo)
-                    elif 'Unidade não encontrada:' in erro:
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        unidades_nao_encontradas.add(codigo)
-                    else:
-                        outros_erros.append(erro)
-                        
-            except Exception as e:
-                outros_erros.append(f"Linha {idx + 2}: {str(e)}")
-        
-        # Montar lista de erros com todos os códigos
-        erros_resumo = []
-        
-        if contas_nao_encontradas:
-            erros_resumo.append(f"Contas contábeis não encontradas ({len(contas_nao_encontradas)}): {', '.join(sorted(contas_nao_encontradas))}")
-        
-        if centros_nao_encontrados:
-            erros_resumo.append(f"Centros de custo não encontrados ({len(centros_nao_encontrados)}): {', '.join(sorted(centros_nao_encontrados))}")
-        
-        if unidades_nao_encontradas:
-            erros_resumo.append(f"Unidades não encontradas ({len(unidades_nao_encontradas)}): {', '.join(sorted(unidades_nao_encontradas))}")
-        
-        if outros_erros:
-            erros_resumo.append(f"Outros erros ({len(outros_erros)}): {', '.join(outros_erros[:10])}")
-        
-        # Calcular total estimado de erros
-        total_erros_estimado = len(contas_nao_encontradas) * 50 + len(centros_nao_encontrados) * 10 + len(unidades_nao_encontradas) * 5 + len(outros_erros)
-        
-        # Resultado final
-        resultado = {
-            'success': True,
-            'movimentos_removidos': movimentos_removidos,
-            'movimentos_criados': movimentos_criados,
-            'fornecedores_criados': fornecedores_criados,
-            'total_processado': total_linhas,
-            'erros_count': total_erros_estimado,
-            'erros_resumo': erros_resumo,
-            'arquivo': arquivo.name
-        }
-        
-        logger.info(f"Importação concluída: {movimentos_criados} movimentos, {total_erros_estimado} erros")
-        
-        return JsonResponse(resultado)
+        # Usar a versão detalhada como padrão
+        return api_importar_movimentos_detalhado(request)
         
     except Exception as e:
-        logger.error(f"Erro na importação: {str(e)}")
+        logger.error(f"Erro na importação simples: {str(e)}")
         return JsonResponse({
             'success': False,
             'error': f'Erro durante importação: {str(e)}'

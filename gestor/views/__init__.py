@@ -119,22 +119,17 @@ from .movimento import (
     movimento_export_excel,              # Exportar para Excel
 )
 
-# Movimento Import - Funções de importação separadas
+# Movimento Import - CORRIGIDO COM FUNÇÕES QUE REALMENTE EXISTEM
 from .movimento_import import (
-    # Importação inteligente de Excel
+    # Interface e validações
     movimento_importar,                  # Interface de importação
     api_preview_movimentos_excel,        # Preview antes da importação
-    api_importar_movimentos_excel,       # Importação real do Excel
-    api_validar_periodo_importacao,      # Validação de período
+    api_validar_periodo_importacao,      # Validação completa de período
+    api_validar_periodo_simples,         # Validação simples de período
     
-    # ADICIONAR ESTAS DUAS LINHAS:
-    api_validar_periodo_simples,         # Validação simples de período  
+    # Importação (mantendo nomes atuais para compatibilidade)
+    api_importar_movimentos_detalhado,   # ✅ NOME CORRETO da função principal
     api_importar_movimentos_simples,     # Importação simplificada
-    
-    # Funções auxiliares de importação
-    extrair_fornecedor_do_historico,     # Extrai fornecedor apenas pelo nome
-    processar_linha_excel_atualizada,    # Processa linha com lógica correta
-    corrigir_estrutura_excel,            # Corrige estrutura do Excel
 )
 
 # Fornecedor - Gestão de fornecedores
@@ -150,51 +145,3 @@ from .fornecedor import (
     api_fornecedor_info,                 # Informações do fornecedor
     api_extrair_fornecedor_historico,    # Extração do histórico
 )
-
-# ===== ESTRUTURA DE ARQUIVOS DA NOVA ARQUITETURA =====
-# 
-# ARQUIVOS DE VIEWS:
-# - dashboard.py → Dashboard e home
-# - empresa.py → Gestão de empresas
-# - unidade.py → CRUD modais para unidades
-# - unidade_tree.py → Árvore hierárquica de unidades
-# - centrocusto.py → CRUD modais e árvore de centros de custo
-# - contacontabil.py → CRUD modais e árvore de contas contábeis
-# - contaexterna_inline.py → CRUD inline para códigos externos
-# - movimento.py → ✅ LIMPO: CRUD básico de movimentos
-# - movimento_import.py → ✅ NOVO: Funções de importação separadas
-# - fornecedor.py → Gestão completa de fornecedores
-# - usuario.py → Gestão de usuários
-# - parametro.py → Gestão de parâmetros
-#
-# ✅ SEPARAÇÃO IMPLEMENTADA:
-# - movimento.py: CRUD básico + exportação Excel
-# - movimento_import.py: Todas as funções de importação
-#   - Interface de importação
-#   - Preview de Excel
-#   - Importação real
-#   - Validação de período
-#   - Funções auxiliares (extração de fornecedor, processamento)
-#
-# PADRÃO DA NOVA ARQUITETURA:
-# 1. Visualização hierárquica integrada
-# 2. Edição via modais ou inline
-# 3. APIs específicas para validação e operações AJAX
-# 4. Templates responsivos e modernos
-# 5. JavaScript otimizado para UX fluida
-# 6. ✅ Separação de responsabilidades (CRUD vs Importação)
-#
-# FUNCIONALIDADES IMPLEMENTADAS:
-# ✅ Dashboard com estatísticas
-# ✅ Gestão de empresas com validações
-# ✅ Árvore hierárquica de unidades organizacionais
-# ✅ Sistema de centros de custo com hierarquia
-# ✅ Contas contábeis com estrutura hierárquica
-# ✅ Códigos externos com edição inline
-# ✅ ⭐ MOVIMENTOS COM SEPARAÇÃO CLARA: CRUD vs IMPORTAÇÃO
-# ✅ Gestão completa de fornecedores
-# ✅ Sistema de usuários e parâmetros
-# ✅ APIs para validação em tempo real
-# ✅ Logs detalhados de auditoria
-# ✅ Exportação para Excel otimizada
-# ✅ Interface moderna e responsiva

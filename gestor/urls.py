@@ -1,4 +1,4 @@
-# gestor/urls.py - ATUALIZADO COM SEPARAÇÃO DE MOVIMENTO E MOVIMENTO_IMPORT
+# gestor/urls.py - CORRIGIDO
 
 from django.urls import path
 from . import views
@@ -136,9 +136,9 @@ urlpatterns = [
     # ===== MOVIMENTOS - IMPORTAÇÃO (SEPARADA) =====
     path('movimentos/importar/', views.movimento_importar, name='movimento_importar'),
     
-    # APIs Movimento Import
+    # APIs Movimento Import - CORRIGIDAS
     path('api/movimento/preview-excel/', views.api_preview_movimentos_excel, name='api_preview_movimentos_excel'),
-    path('api/movimento/importar-excel/', views.api_importar_movimentos_excel, name='api_importar_movimentos_excel'),
+    path('api/movimento/importar-excel/', views.api_importar_movimentos_detalhado, name='api_importar_movimentos_excel'),  # ✅ CORRIGIDO
     path('api/movimento/validar-periodo/', views.api_validar_periodo_importacao, name='api_validar_periodo_importacao'),
 
     path('api/validar-periodo-simples/', views.api_validar_periodo_simples, name='api_validar_periodo_simples'),
