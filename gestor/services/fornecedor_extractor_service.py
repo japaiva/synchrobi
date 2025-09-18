@@ -1,6 +1,6 @@
 # gestor/services/fornecedor_extractor_service.py
 # Serviço especializado em extração de fornecedores de históricos contábeis
-# Versão melhorada com logs detalhados apenas para erros
+# Versão atualizada com novas empresas na whitelist e padronização de nomes
 
 import re
 import hashlib
@@ -46,13 +46,23 @@ class FornecedorExtractorService:
     _erros_sessao: List[ErroExtracao] = []
     
     # Whitelist - fornecedores conhecidos que devem sempre ser reconhecidos
+    # ATUALIZADA COM NOVAS EMPRESAS
     WHITELIST_FORNECEDORES = [
         'CHOSEI',
         'SHOPPING METRO TATUAPE',
         'CENTER NORTE',
         'INMEO',
         'HDI SEGUROS',
-        'REC 2016'
+        'REC 2016',
+        # NOVAS EMPRESAS ADICIONADAS
+        'BEAUTY FAIR',
+        'TAIFF',
+        'EMPRESA BRASILEIRA DE COSMETICOS',
+        'EBC',  # Sigla de Empresa Brasileira de Cosméticos
+        'CENTRO METROPOLITANO DE COSMETICOS',
+        'CMC',  # Sigla de Centro Metropolitano de Cosméticos
+        'ACTION TECHNOLOGY',
+        'ACTION'  # Forma curta de Action Technology
     ]
     
     # Configuração das listas otimizadas
@@ -75,12 +85,13 @@ class FornecedorExtractorService:
     ]
     
     # Lista de casos que devem sempre ser ignorados (não são fornecedores)
+    # REMOVIDOS: 'RECEITA - ND', 'ALUGUEL - BEAUTY FAIR', 'ALUGUEL - TAIFF'
     IGNORAR_HISTORICOS = [
-        'RECEITA - ND',
+        # 'RECEITA - ND',  # REMOVIDO - agora processa normalmente
         'ALUGUEL CHOSEI - LOJA',  # Mas não "ALUGUEL CHOSEI" sozinho
         'SERVICOS DE CONSERVACAO E REPARO',
-        'ALUGUEL - BEAUTY FAIR',
-        'ALUGUEL - TAIFF'
+        # 'ALUGUEL - BEAUTY FAIR',  # REMOVIDO - Beauty Fair é fornecedor válido
+        # 'ALUGUEL - TAIFF'  # REMOVIDO - Taiff é fornecedor válido
     ]
     
     PREFIXOS_CONTAMINACAO = [
@@ -122,7 +133,9 @@ class FornecedorExtractorService:
         'TRANSPORTES', 'LOGISTICA', 'SISTEMAS', 'SOFTWARE', 'INFORMATICA',
         'SHOPPING', 'CENTER', 'CLINICA', 'MEDICINA', 'LABORATORIO',
         'ASSESSORIA', 'ADVOGADOS', 'ADVOCACIA', 'CONTABILIDADE',
-        'CONSORCIO', 'FACILITIES', 'GESTAO'
+        'CONSORCIO', 'FACILITIES', 'GESTAO',
+        # ADICIONADOS INDICADORES RELACIONADOS ÀS NOVAS EMPRESAS
+        'COSMETICOS', 'COSMETICA', 'FAIR', 'TECHNOLOGY', 'TECH'
     ]
     
     PALAVRAS_CONECTIVAS = [
@@ -488,8 +501,27 @@ class FornecedorExtractorService:
     
     @classmethod
     def _verificar_whitelist(cls, historico: str) -> Optional[FornecedorExtraido]:
-        """Verifica se há fornecedor da whitelist no histórico"""
+        """Verifica se há fornecedor da whitelist no histórico com padronização de nomes"""
         historico_upper = historico.upper()
+        
+        # Mapeamento de nomes para padronização
+        # Quando encontrar a chave, salva como o valor
+        NOME_PADRONIZADO = {
+            'ACTION': 'ACTION TECHNOLOGY',
+            'ACTION TECHNOLOGY': 'ACTION TECHNOLOGY',
+            'EBC': 'EMPRESA BRASILEIRA DE COSMETICOS',
+            'EMPRESA BRASILEIRA DE COSMETICOS': 'EMPRESA BRASILEIRA DE COSMETICOS',
+            'CMC': 'CENTRO METROPOLITANO DE COSMETICOS',
+            'CENTRO METROPOLITANO DE COSMETICOS': 'CENTRO METROPOLITANO DE COSMETICOS',
+            'BEAUTY FAIR': 'BEAUTY FAIR',
+            'TAIFF': 'TAIFF',
+            'CHOSEI': 'CHOSEI',
+            'SHOPPING METRO TATUAPE': 'SHOPPING METRO TATUAPE',
+            'CENTER NORTE': 'CENTER NORTE',
+            'INMEO': 'INMEO',
+            'HDI SEGUROS': 'HDI SEGUROS',
+            'REC 2016': 'REC 2016'
+        }
         
         for fornecedor_white in cls.WHITELIST_FORNECEDORES:
             if fornecedor_white.upper() in historico_upper:
@@ -512,6 +544,12 @@ class FornecedorExtractorService:
                         
                         # Limpar o nome
                         nome_limpo = cls._limpar_fornecedor(nome)
+                        
+                        # PADRONIZAÇÃO: Se o nome está no mapeamento, usar o nome padronizado
+                        nome_upper = nome_limpo.upper() if nome_limpo else ''
+                        if nome_upper in NOME_PADRONIZADO:
+                            nome_limpo = NOME_PADRONIZADO[nome_upper]
+                        
                         if nome_limpo:
                             return FornecedorExtraido(
                                 nome=nome_limpo,
@@ -562,14 +600,14 @@ class FornecedorExtractorService:
                 pos = nome_limpo.upper().find(palavra)
                 nome_limpo = nome_limpo[:pos].strip()
         
-        # Remover padrões com regex
+        # Remover padrões com regex - REMOVIDO 'ND' DA LISTA
         patterns_limpeza = [
             r'^(?:DESP|MATERIAL|SERVICOS|PUBLICIDADE)\s+\w*\s*',
             r'^\w*\s*\((?:DANFE|NFSERV|CTE)\)\s*',
             r'^(?:VARIAVEIS|CAMPANHAS|ACOES)\s+\w*\s*',
             r'^Lançamento integração Orçamento\.\s*-\s*',
             r'^ESTORNO\s+',
-            r'^ND\s+',
+            # r'^ND\s+',  # REMOVIDO - agora processa ND normalmente
         ]
         
         for pattern in patterns_limpeza:
@@ -783,22 +821,28 @@ def limpar_erros() -> None:
 
 # Exemplo de uso com contexto
 if __name__ == "__main__":
-    # Exemplo do seu caso específico
-    historico_teste = "IPTU_TERCEIRO - Lançamento integração Orçamento. - 26976; CENTER NORTE S/A CONSTRUCAO EMPREEND ADM E PARTICIPACAO; - 26976 CENTER NORTE S/A CONSTRUCAO EMPREEND ADM E PARTICIPACAO"
+    # Testes com as novas empresas
+    testes = [
+        "RECEITA - ND 12345 EMPRESA BRASILEIRA DE COSMETICOS LTDA",
+        "ALUGUEL - BEAUTY FAIR - 2024/07",
+        "PAGAMENTO - TAIFF INDUSTRIA E COMERCIO LTDA",
+        "SERVICOS - EBC - EMPRESA BRASILEIRA DE COSMETICOS",
+        "COMPRA - CMC - CENTRO METROPOLITANO DE COSMETICOS",
+        "SISTEMA - ACTION TECHNOLOGY LTDA",
+        "DESENVOLVIMENTO - ACTION SOFTWARE",
+        "PAGAMENTO - ACTION - 2024",
+        "NOTA FISCAL - EBC LTDA"
+    ]
     
-    contexto = {
-        'data': '31/07/2025',
-        'valor': Decimal('2654.74'),
-        'documento': '26976'
-    }
+    print("="*60)
+    print("TESTE DE EXTRAÇÃO COM PADRONIZAÇÃO")
+    print("="*60)
     
-    # Tentar extrair
-    fornecedor = extrair_fornecedor_do_historico(historico_teste, contexto)
-    
-    if fornecedor:
-        print(f"✅ Fornecedor extraído: {fornecedor.codigo} - {fornecedor.razao_social}")
-    else:
-        print("❌ Falha na extração")
-        
-    # Ver relatório de erros
-    print(gerar_relatorio_erros())
+    for historico in testes:
+        fornecedor = extrair_fornecedor_do_historico(historico)
+        if fornecedor:
+            print(f"✅ Histórico: {historico[:40]}")
+            print(f"   Extraído: {fornecedor.codigo} - {fornecedor.razao_social}")
+        else:
+            print(f"❌ Não extraído: {historico}")
+        print("-"*60)
