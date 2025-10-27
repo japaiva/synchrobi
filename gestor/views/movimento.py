@@ -215,7 +215,7 @@ def movimento_export_excel(request):
         centro_custo = request.GET.get('centro_custo', '')
         
         movimentos = Movimento.objects.select_related(
-            'unidade', 'centro_custo', 'conta_contabil', 'fornecedor'
+            'unidade', 'unidade__empresa', 'centro_custo', 'conta_contabil', 'fornecedor'
         ).order_by('-data', '-id')
         
         # Aplicar filtros
@@ -268,8 +268,8 @@ def movimento_export_excel(request):
         
         # Cabeçalhos
         headers = [
-            'Data', 'Mês', 'Ano', 'Período',
-            'Código Unidade', 'Nome Unidade', 'Código All Strategy',
+            'Data', 'Mês', 'Ano', 'Período', 'Empresa',
+            'Código All Strategy', 'Nome Unidade',
             'Código Centro Custo', 'Nome Centro Custo',
             'Código Conta Contábil', 'Nome Conta Contábil',
             'Código Fornecedor', 'Razão Social Fornecedor',
@@ -293,9 +293,9 @@ def movimento_export_excel(request):
                 movimento.mes,
                 movimento.ano,
                 movimento.periodo_display,
-                movimento.unidade.codigo if movimento.unidade else '',
-                movimento.unidade.nome if movimento.unidade else '',
+                movimento.unidade.empresa.nome if movimento.unidade and movimento.unidade.empresa else '',
                 movimento.unidade.codigo_allstrategy if movimento.unidade else '',
+                movimento.unidade.nome if movimento.unidade else '',
                 movimento.centro_custo.codigo if movimento.centro_custo else '',
                 movimento.centro_custo.nome if movimento.centro_custo else '',
                 movimento.conta_contabil.codigo if movimento.conta_contabil else '',
@@ -327,14 +327,15 @@ def movimento_export_excel(request):
         # Ajustar largura das colunas
         column_widths = [
             12, 8, 8, 10,  # Data, Mês, Ano, Período
-            15, 30, 15,     # Unidade
-            15, 30,         # Centro Custo
-            15, 30,         # Conta Contábil
-            15, 40,         # Fornecedor
-            15, 8, 15,      # Documento, Natureza, Valor
-            50,             # Histórico
-            15, 15, 8,      # Projeto, Gerador, Rateio
-            20, 25, 8       # Importação info
+            25,            # Empresa
+            15, 30,        # Unidade (All Strategy, Nome)
+            15, 30,        # Centro Custo
+            15, 30,        # Conta Contábil
+            15, 40,        # Fornecedor
+            15, 8, 15,     # Documento, Natureza, Valor
+            50,            # Histórico
+            15, 15, 8,     # Projeto, Gerador, Rateio
+            20, 25, 8      # Importação info
         ]
         
         for col, width in enumerate(column_widths, 1):
