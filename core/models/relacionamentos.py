@@ -219,9 +219,9 @@ class EmpresaCentroCusto(models.Model):
 
 class ContaExterna(models.Model):
     """
-    Modelo para mapear códigos de contas externas (ERPs) às contas contábeis internas
+    Modelo para mapear códigos de contas do ERP às contas contábeis internas
     """
-    
+
     # Relacionamento com conta contábil interna
     conta_contabil = models.ForeignKey(
         ContaContabil,
@@ -229,19 +229,19 @@ class ContaExterna(models.Model):
         related_name='contas_externas',
         verbose_name="Conta Contábil Interna"
     )
-    
-    # Dados da conta externa
+
+    # Dados da conta do ERP
     codigo_externo = models.CharField(
         max_length=50,
-        verbose_name="Código Externo",
-        help_text="Código da conta no sistema externo (ERP)",
+        verbose_name="Código ERP",
+        help_text="Código da conta no sistema ERP",
         db_index=True  # ÍNDICE PARA BUSCA RÁPIDA
     )
-    
+
     nome_externo = models.CharField(
         max_length=255,
-        verbose_name="Nome no Sistema Externo",
-        help_text="Nome/descrição da conta no sistema externo"
+        verbose_name="Nome no ERP",
+        help_text="Nome/descrição da conta no sistema ERP"
     )
     
     # Sistema/empresa origem
@@ -261,24 +261,24 @@ class ContaExterna(models.Model):
     observacoes = models.TextField(
         blank=True,
         verbose_name="Observações",
-        help_text="Observações sobre a conta externa"
+        help_text="Observações sobre a conta do ERP"
     )
-    
+
     # Campos de controle
     ativa = models.BooleanField(
         default=True,
         verbose_name="Ativa",
-        help_text="Se a conta externa está ativa"
+        help_text="Se a conta do ERP está ativa"
     )
-    
+
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
-    
+
     # Campos para sincronização
     sincronizado = models.BooleanField(
         default=False,
         verbose_name="Sincronizado",
-        help_text="Se a conta foi sincronizada com o sistema externo"
+        help_text="Se a conta foi sincronizada com o sistema ERP"
     )
     
     data_ultima_sincronizacao = models.DateTimeField(
@@ -303,7 +303,7 @@ class ContaExterna(models.Model):
         
         if duplicatas.exists():
             raise ValidationError({
-                'codigo_externo': f'Já existe uma conta externa ativa com este código para a conta {self.conta_contabil.codigo}'
+                'codigo_externo': f'Já existe uma conta ERP ativa com este código para a conta {self.conta_contabil.codigo}'
             })
     
     @property
@@ -322,20 +322,20 @@ class ContaExterna(models.Model):
         return [emp for emp in empresas if emp]
     
     def sincronizar_dados(self):
-        """Sincroniza dados com o sistema externo"""
+        """Sincroniza dados com o sistema ERP"""
         # Implementar lógica de sincronização
         self.sincronizado = True
         self.data_ultima_sincronizacao = timezone.now()
         self.save()
-    
+
     def __str__(self):
         sistema = f" ({self.sistema_origem})" if self.sistema_origem else ""
         return f"{self.codigo_externo}{sistema} → {self.conta_contabil.codigo}"
-    
+
     class Meta:
         db_table = 'contas_externas'
-        verbose_name = 'Conta Externa'
-        verbose_name_plural = 'Contas Externas'
+        verbose_name = 'Código ERP'
+        verbose_name_plural = 'Códigos ERP'
         ordering = ['conta_contabil__codigo', 'codigo_externo']
         unique_together = ['conta_contabil', 'codigo_externo', 'ativa']  # Evita duplicatas ativas
         indexes = [

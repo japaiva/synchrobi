@@ -339,7 +339,7 @@ class TreeManager {
             
             // VERIFICAR SE É CÓDIGOS ERP E SE EXISTE FUNÇÃO ESPECÍFICA
             if (configKey === 'external_codes' && typeof window.openExternalAccountModal === 'function') {
-                // Usar implementação específica das códigos ERP
+                // Usar implementação específica das contas externas
                 buttons += `
                     <button class="btn btn-sm btn-outline-warning" 
                             onclick="window.openExternalAccountModal('${item.codigo}')" 

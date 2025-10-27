@@ -216,6 +216,8 @@ def movimento_export_excel(request):
         
         movimentos = Movimento.objects.select_related(
             'unidade', 'unidade__empresa', 'centro_custo', 'conta_contabil', 'fornecedor'
+        ).prefetch_related(
+            'conta_contabil__contas_externas'
         ).order_by('-data', '-id')
         
         # Aplicar filtros
@@ -272,6 +274,7 @@ def movimento_export_excel(request):
             'Código All Strategy', 'Nome Unidade',
             'Código Centro Custo', 'Nome Centro Custo',
             'Código Conta Contábil', 'Nome Conta Contábil',
+            'Código ERP', 'Nome ERP',
             'Código Fornecedor', 'Razão Social Fornecedor',
             'Documento', 'Natureza', 'Valor', 'Histórico',
             'Código Projeto', 'Gerador', 'Rateio',
@@ -288,18 +291,34 @@ def movimento_export_excel(request):
         
         # Escrever dados
         for row, movimento in enumerate(movimentos, 2):
+            # Obter sigla da empresa
+            empresa_sigla = ''
+            if movimento.unidade and movimento.unidade.empresa:
+                empresa_sigla = movimento.unidade.empresa.sigla
+
+            # Obter código ERP (primeiro código ativo da conta contábil)
+            codigo_erp = ''
+            nome_erp = ''
+            if movimento.conta_contabil:
+                conta_externa = movimento.conta_contabil.contas_externas.filter(ativa=True).first()
+                if conta_externa:
+                    codigo_erp = conta_externa.codigo_externo
+                    nome_erp = conta_externa.nome_externo
+
             data_row = [
                 movimento.data.strftime('%d/%m/%Y') if movimento.data else '',
                 movimento.mes,
                 movimento.ano,
                 movimento.periodo_display,
-                movimento.unidade.empresa.nome if movimento.unidade and movimento.unidade.empresa else '',
+                empresa_sigla,
                 movimento.unidade.codigo_allstrategy if movimento.unidade else '',
                 movimento.unidade.nome if movimento.unidade else '',
                 movimento.centro_custo.codigo if movimento.centro_custo else '',
                 movimento.centro_custo.nome if movimento.centro_custo else '',
                 movimento.conta_contabil.codigo if movimento.conta_contabil else '',
                 movimento.conta_contabil.nome if movimento.conta_contabil else '',
+                codigo_erp,
+                nome_erp,
                 movimento.fornecedor.codigo if movimento.fornecedor else '',
                 movimento.fornecedor.razao_social if movimento.fornecedor else '',
                 movimento.documento,
@@ -319,11 +338,11 @@ def movimento_export_excel(request):
                 cell.border = border_thin
                 
                 # Formatação especial para valores monetários
-                if col == 16:  # Coluna Valor
+                if col == 18:  # Coluna Valor (agora na posição 18)
                     cell.number_format = '#,##0.00'
                     if value < 0:
                         cell.font = Font(color="FF0000")  # Vermelho para negativos
-        
+
         # Ajustar largura das colunas
         column_widths = [
             12, 8, 8, 10,  # Data, Mês, Ano, Período
@@ -331,6 +350,7 @@ def movimento_export_excel(request):
             15, 30,        # Unidade (All Strategy, Nome)
             15, 30,        # Centro Custo
             15, 30,        # Conta Contábil
+            15, 30,        # Código ERP, Nome ERP
             15, 40,        # Fornecedor
             15, 8, 15,     # Documento, Natureza, Valor
             50,            # Histórico
