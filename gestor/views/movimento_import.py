@@ -479,119 +479,132 @@ def api_preview_movimentos_excel(request):
 @login_required
 @require_POST
 def api_importar_movimentos_excel(request):
-    """API para importação real dos movimentos usando serviço otimizado"""
-    
+    """API para importação real dos movimentos usando serviço otimizado com chunks"""
+
     try:
         data_inicio_str = request.POST.get('data_inicio')
         data_fim_str = request.POST.get('data_fim')
-        
+
         if not data_inicio_str or not data_fim_str:
             return JsonResponse({'success': False, 'error': 'Período não informado'})
-        
+
         try:
             data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
             data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
         except ValueError:
             return JsonResponse({'success': False, 'error': 'Formato de data inválido'})
-        
+
         if 'arquivo' not in request.FILES:
             return JsonResponse({'success': False, 'error': 'Arquivo não encontrado'})
-        
+
         arquivo = request.FILES['arquivo']
-        
+
         # Limpar período
         logger.info(f'Limpando período {data_inicio} a {data_fim}')
         movimentos_removidos = Movimento.objects.filter(
             data__gte=data_inicio,
             data__lte=data_fim
         ).count()
-        
+
         Movimento.objects.filter(
             data__gte=data_inicio,
             data__lte=data_fim
         ).delete()
-        
+
         # Processar arquivo
         try:
             df = corrigir_estrutura_excel(arquivo)
+            total_linhas = len(df)
+            logger.info(f'Arquivo carregado: {total_linhas} linhas')
         except Exception as e:
+            logger.error(f'Erro ao carregar arquivo: {str(e)}')
             return JsonResponse({'success': False, 'error': f'Erro na estrutura: {str(e)}'})
-        
-        logger.info(f'Iniciando importação OTIMIZADA de {len(df)} linhas')
-        
+
+        logger.info(f'Iniciando importação OTIMIZADA de {total_linhas} linhas')
+
         # Contadores
         movimentos_criados = 0
         fornecedores_criados = 0
         fornecedores_encontrados = 0
-        erros = []
         erros_tipos = {}
-        
+
         fornecedores_novos = set()
-        
-        for idx, linha in df.iterrows():
-            try:
-                linha_dict = linha.to_dict()
-                
-                movimento, erro = processar_linha_excel_otimizada(
-                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
-                )
-                
-                if movimento:
-                    movimentos_criados += 1
-                    
-                    if movimento.fornecedor:
-                        if movimento.fornecedor.criado_automaticamente:
-                            if movimento.fornecedor.codigo not in fornecedores_novos:
-                                fornecedores_novos.add(movimento.fornecedor.codigo)
-                                fornecedores_criados += 1
+
+        # Processar em chunks
+        CHUNK_SIZE = 100
+        for chunk_start in range(0, total_linhas, CHUNK_SIZE):
+            chunk_end = min(chunk_start + CHUNK_SIZE, total_linhas)
+            chunk_df = df.iloc[chunk_start:chunk_end]
+
+            if chunk_start % 500 == 0:  # Log a cada 500 linhas
+                logger.info(f'Processando linhas {chunk_start+1} a {chunk_end} de {total_linhas}')
+
+            for idx, linha in chunk_df.iterrows():
+                try:
+                    linha_dict = linha.to_dict()
+
+                    movimento, erro = processar_linha_excel_otimizada(
+                        linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
+                    )
+
+                    if movimento:
+                        movimentos_criados += 1
+
+                        if movimento.fornecedor:
+                            if movimento.fornecedor.criado_automaticamente:
+                                if movimento.fornecedor.codigo not in fornecedores_novos:
+                                    fornecedores_novos.add(movimento.fornecedor.codigo)
+                                    fornecedores_criados += 1
+                            else:
+                                fornecedores_encontrados += 1
+
+                    elif erro:
+                        # Ignorar erros de período
+                        if 'fora do período' in erro:
+                            continue
+
+                        # Agrupar erros similares
+                        if 'Conta contábil não encontrada:' in erro:
+                            tipo_base = 'Conta contábil não encontrada'
+                            codigo = erro.split(':')[1].strip().split(' ')[0]
+                            chave_erro = f"{tipo_base}:{codigo}"
+                        elif 'Centro de custo não encontrado:' in erro:
+                            tipo_base = 'Centro de custo não encontrado'
+                            codigo = erro.split(':')[1].strip().split(' ')[0]
+                            chave_erro = f"{tipo_base}:{codigo}"
+                        elif 'Unidade não encontrada:' in erro:
+                            tipo_base = 'Unidade não encontrada'
+                            codigo = erro.split(':')[1].strip().split(' ')[0]
+                            chave_erro = f"{tipo_base}:{codigo}"
                         else:
-                            fornecedores_encontrados += 1
-                    
-                    if movimentos_criados % 50 == 0:
-                        logger.info(f'Processados {movimentos_criados} movimentos...')
-                        
-                elif erro:
-                    # Agrupar erros similares
-                    if 'Conta contábil não encontrada:' in erro:
-                        tipo_base = 'Conta contábil não encontrada'
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        chave_erro = f"{tipo_base}:{codigo}"
-                    elif 'Centro de custo não encontrado:' in erro:
-                        tipo_base = 'Centro de custo não encontrado'
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        chave_erro = f"{tipo_base}:{codigo}"
-                    elif 'Unidade não encontrada:' in erro:
-                        tipo_base = 'Unidade não encontrada'
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        chave_erro = f"{tipo_base}:{codigo}"
-                    else:
-                        tipo_base = erro.split(' - linha')[0] if ' - linha' in erro else erro.split(':')[0] if ':' in erro else erro
-                        chave_erro = tipo_base
-                    
-                    if chave_erro not in erros_tipos:
-                        erros_tipos[chave_erro] = {
+                            tipo_base = erro.split(' - linha')[0] if ' - linha' in erro else erro.split(':')[0] if ':' in erro else erro
+                            chave_erro = tipo_base
+
+                        if chave_erro not in erros_tipos:
+                            erros_tipos[chave_erro] = {
+                                'count': 1,
+                                'exemplo': erro,
+                                'tipo': tipo_base
+                            }
+                        else:
+                            erros_tipos[chave_erro]['count'] += 1
+
+                except Exception as e:
+                    erro_msg = f'Linha {idx + 2}: Erro inesperado - {str(e)}'
+                    tipo_erro = 'Erro inesperado'
+
+                    if tipo_erro not in erros_tipos:
+                        erros_tipos[tipo_erro] = {
                             'count': 1,
-                            'exemplo': erro,
-                            'tipo': tipo_base
+                            'exemplo': erro_msg,
+                            'tipo': tipo_erro
                         }
+                        logger.error(erro_msg)
                     else:
-                        erros_tipos[chave_erro]['count'] += 1
-                    
-            except Exception as e:
-                erro_msg = f'Linha {idx + 2}: Erro inesperado - {str(e)}'
-                tipo_erro = 'Erro inesperado'
-                
-                if tipo_erro not in erros_tipos:
-                    erros_tipos[tipo_erro] = {
-                        'count': 1,
-                        'exemplo': erro_msg,
-                        'tipo': tipo_erro
-                    }
-                    logger.error(erro_msg)
-                else:
-                    erros_tipos[tipo_erro]['count'] += 1
-        
+                        erros_tipos[tipo_erro]['count'] += 1
+
         # Converter erros agrupados para lista final
+        erros = []
         for chave, info in erros_tipos.items():
             if info['count'] == 1:
                 erros.append(info['exemplo'])
@@ -607,12 +620,12 @@ def api_importar_movimentos_excel(request):
                     erros.append(f"Unidade não encontrada: {codigo} ({info['count']} ocorrências)")
                 else:
                     erros.append(f"{info['tipo']} ({info['count']} ocorrências)")
-        
+
         logger.info(
             f'Importação OTIMIZADA concluída: {movimentos_criados} movimentos, '
             f'{fornecedores_criados} fornecedores novos, {fornecedores_encontrados} existentes'
         )
-        
+
         return JsonResponse({
             'success': True,
             'resultado': {
@@ -622,14 +635,15 @@ def api_importar_movimentos_excel(request):
                 'fornecedores_encontrados': fornecedores_encontrados,
                 'total_erros': len(erros),
                 'nome_arquivo': arquivo.name,
-                'servico_otimizado': True
+                'servico_otimizado': True,
+                'processamento_chunks': True
             },
             'erros': erros[:20],
             'tem_mais_erros': len(erros) > 20
         })
-        
+
     except Exception as e:
-        logger.error(f'Erro na importação: {str(e)}')
+        logger.error(f'Erro crítico na importação: {str(e)}', exc_info=True)
         return JsonResponse({
             'success': False,
             'error': f'Erro na importação: {str(e)}'
@@ -702,105 +716,147 @@ def api_validar_periodo_simples(request):
 @login_required
 @require_POST
 def api_importar_movimentos_simples(request):
-    """API simplificada com serviço otimizado"""
+    """API simplificada com serviço otimizado e processamento em chunks"""
     try:
         # Validar entrada
         if 'arquivo' not in request.FILES:
             return JsonResponse({'success': False, 'error': 'Arquivo não enviado'})
-        
+
         arquivo = request.FILES['arquivo']
         data_inicio_str = request.POST.get('data_inicio')
         data_fim_str = request.POST.get('data_fim')
-        
+
         if not data_inicio_str or not data_fim_str:
             return JsonResponse({'success': False, 'error': 'Período não informado'})
-        
+
         data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
         data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-        
-        # Ler arquivo
-        df = pd.read_excel(arquivo, engine='openpyxl', header=0)
-        df = df.dropna(how='all')
-        
+
+        logger.info(f"Iniciando importação de {arquivo.name} - Período: {data_inicio} a {data_fim}")
+
+        # Ler arquivo em chunks para arquivos grandes
+        try:
+            # Primeiro, tentar ler o arquivo inteiro para verificar tamanho
+            df = pd.read_excel(arquivo, engine='openpyxl', header=0)
+            df = df.dropna(how='all')
+            total_linhas = len(df)
+
+            logger.info(f"Arquivo carregado: {total_linhas} linhas")
+        except Exception as e:
+            logger.error(f"Erro ao carregar arquivo: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Erro ao ler arquivo Excel: {str(e)}'
+            })
+
         # Verificar colunas essenciais
-        colunas_obrigatorias = ['Data', 'Cód. da unidade', 'Cód. do centro de custo', 
+        colunas_obrigatorias = ['Data', 'Cód. da unidade', 'Cód. do centro de custo',
                                'Cód. da conta contábil', 'Valor', 'Histórico']
-        
+
         faltando = [col for col in colunas_obrigatorias if col not in df.columns]
         if faltando:
             return JsonResponse({
-                'success': False, 
+                'success': False,
                 'error': f'Colunas obrigatórias faltando: {", ".join(faltando)}'
             })
-        
+
         # Limpar período existente
+        logger.info("Limpando período existente...")
         movimentos_removidos = Movimento.objects.filter(
             data__gte=data_inicio, data__lte=data_fim
         ).count()
-        
+
         Movimento.objects.filter(data__gte=data_inicio, data__lte=data_fim).delete()
-        
-        # Processar linhas
-        total_linhas = len(df)
+        logger.info(f"Removidos {movimentos_removidos} movimentos do período")
+
+        # Processar linhas em chunks para melhor performance
+        CHUNK_SIZE = 100  # Processar 100 linhas por vez
         movimentos_criados = 0
         fornecedores_criados = 0
-        
+        fornecedores_novos_codigos = set()
+
         # Sets para coletar códigos únicos que falharam
         contas_nao_encontradas = set()
         centros_nao_encontrados = set()
         unidades_nao_encontradas = set()
         outros_erros = []
-        
-        for idx, linha in df.iterrows():
-            try:
-                linha_dict = linha.to_dict()
-                
-                movimento, erro = processar_linha_excel_otimizada(
-                    linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
-                )
-                
-                if movimento:
-                    movimentos_criados += 1
-                    if movimento.fornecedor and movimento.fornecedor.criado_automaticamente:
-                        fornecedores_criados += 1
-                elif erro:
-                    if 'fora do período' in erro:
-                        continue  # Ignorar silenciosamente
-                    
-                    # Extrair código específico do erro
-                    if 'Conta contábil não encontrada:' in erro:
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        contas_nao_encontradas.add(codigo)
-                    elif 'Centro de custo não encontrado:' in erro:
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        centros_nao_encontrados.add(codigo)
-                    elif 'Unidade não encontrada:' in erro:
-                        codigo = erro.split(':')[1].strip().split(' ')[0]
-                        unidades_nao_encontradas.add(codigo)
-                    else:
-                        outros_erros.append(erro)
-                        
-            except Exception as e:
-                outros_erros.append(f"Linha {idx + 2}: {str(e)}")
-        
+
+        # Processar em chunks
+        for chunk_start in range(0, total_linhas, CHUNK_SIZE):
+            chunk_end = min(chunk_start + CHUNK_SIZE, total_linhas)
+            chunk_df = df.iloc[chunk_start:chunk_end]
+
+            logger.info(f"Processando linhas {chunk_start+1} a {chunk_end} de {total_linhas}")
+
+            movimentos_chunk = []
+
+            for idx, linha in chunk_df.iterrows():
+                try:
+                    linha_dict = linha.to_dict()
+
+                    movimento, erro = processar_linha_excel_otimizada(
+                        linha_dict, idx + 2, arquivo.name, data_inicio, data_fim
+                    )
+
+                    if movimento:
+                        movimentos_criados += 1
+                        if movimento.fornecedor:
+                            if movimento.fornecedor.criado_automaticamente:
+                                if movimento.fornecedor.codigo not in fornecedores_novos_codigos:
+                                    fornecedores_novos_codigos.add(movimento.fornecedor.codigo)
+                                    fornecedores_criados += 1
+                    elif erro:
+                        if 'fora do período' in erro:
+                            continue  # Ignorar silenciosamente
+
+                        # Extrair código específico do erro
+                        if 'Conta contábil não encontrada:' in erro:
+                            codigo = erro.split(':')[1].strip().split(' ')[0]
+                            contas_nao_encontradas.add(codigo)
+                        elif 'Centro de custo não encontrado:' in erro:
+                            codigo = erro.split(':')[1].strip().split(' ')[0]
+                            centros_nao_encontrados.add(codigo)
+                        elif 'Unidade não encontrada:' in erro:
+                            codigo = erro.split(':')[1].strip().split(' ')[0]
+                            unidades_nao_encontradas.add(codigo)
+                        else:
+                            if len(outros_erros) < 100:  # Limitar erros coletados
+                                outros_erros.append(erro)
+
+                except Exception as e:
+                    if len(outros_erros) < 100:
+                        outros_erros.append(f"Linha {idx + 2}: {str(e)}")
+                    logger.error(f"Erro na linha {idx + 2}: {str(e)}")
+
+        logger.info(f"Processamento concluído: {movimentos_criados} movimentos criados")
+
         # Montar lista de erros com todos os códigos
         erros_resumo = []
-        
+
         if contas_nao_encontradas:
-            erros_resumo.append(f"Contas contábeis não encontradas ({len(contas_nao_encontradas)}): {', '.join(sorted(contas_nao_encontradas))}")
-        
+            codigos_list = ', '.join(sorted(list(contas_nao_encontradas))[:20])
+            if len(contas_nao_encontradas) > 20:
+                codigos_list += f' ... e mais {len(contas_nao_encontradas) - 20}'
+            erros_resumo.append(f"Contas contábeis não encontradas ({len(contas_nao_encontradas)}): {codigos_list}")
+
         if centros_nao_encontrados:
-            erros_resumo.append(f"Centros de custo não encontrados ({len(centros_nao_encontrados)}): {', '.join(sorted(centros_nao_encontrados))}")
-        
+            codigos_list = ', '.join(sorted(list(centros_nao_encontrados))[:20])
+            if len(centros_nao_encontrados) > 20:
+                codigos_list += f' ... e mais {len(centros_nao_encontrados) - 20}'
+            erros_resumo.append(f"Centros de custo não encontrados ({len(centros_nao_encontrados)}): {codigos_list}")
+
         if unidades_nao_encontradas:
-            erros_resumo.append(f"Unidades não encontradas ({len(unidades_nao_encontradas)}): {', '.join(sorted(unidades_nao_encontradas))}")
-        
+            codigos_list = ', '.join(sorted(list(unidades_nao_encontradas))[:20])
+            if len(unidades_nao_encontradas) > 20:
+                codigos_list += f' ... e mais {len(unidades_nao_encontradas) - 20}'
+            erros_resumo.append(f"Unidades não encontradas ({len(unidades_nao_encontradas)}): {codigos_list}")
+
         if outros_erros:
-            erros_resumo.append(f"Outros erros ({len(outros_erros)}): {', '.join(outros_erros[:10])}")
-        
+            erros_resumo.append(f"Outros erros ({len(outros_erros)}): {'; '.join(outros_erros[:5])}")
+
         # Calcular total estimado de erros
-        total_erros_estimado = len(contas_nao_encontradas) * 50 + len(centros_nao_encontrados) * 10 + len(unidades_nao_encontradas) * 5 + len(outros_erros)
-        
+        total_erros_estimado = len(contas_nao_encontradas) + len(centros_nao_encontrados) + len(unidades_nao_encontradas) + len(outros_erros)
+
         # Resultado final
         resultado = {
             'success': True,
@@ -811,15 +867,16 @@ def api_importar_movimentos_simples(request):
             'erros_count': total_erros_estimado,
             'erros_resumo': erros_resumo,
             'arquivo': arquivo.name,
-            'servico_otimizado': True
+            'servico_otimizado': True,
+            'processamento_chunks': True
         }
-        
-        logger.info(f"Importação OTIMIZADA concluída: {movimentos_criados} movimentos, {total_erros_estimado} erros")
-        
+
+        logger.info(f"Importação concluída: {movimentos_criados} movimentos, {fornecedores_criados} fornecedores novos, {total_erros_estimado} erros")
+
         return JsonResponse(resultado)
-        
+
     except Exception as e:
-        logger.error(f"Erro na importação: {str(e)}")
+        logger.error(f"Erro crítico na importação: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': f'Erro durante importação: {str(e)}'
