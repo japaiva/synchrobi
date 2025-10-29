@@ -42,15 +42,18 @@ urlpatterns = [
     path('api/unidades/export/', views.unidade_tree_export, name='unidade_tree_export'),
     
     # ===== CENTROS DE CUSTO - NOVA ARQUITETURA FOCADA NA ÁRVORE =====
-    
+
     # View principal (árvore hierárquica)
     path('centros-custo/', views.centrocusto_tree_view, name='centrocusto_tree'),
-    
+
     # Views modais para CRUD
     path('centros-custo/criar/', views.centrocusto_create_modal, name='centrocusto_create_modal'),
     path('centros-custo/<str:codigo>/editar/', views.centrocusto_update_modal, name='centrocusto_update_modal'),
     path('centros-custo/<str:codigo>/excluir/', views.centrocusto_delete_ajax, name='centrocusto_delete_ajax'),
-    
+
+    # Exportação
+    path('centros-custo/export-excel/', views.export_centros_custo_excel, name='centrocusto_export_excel'),
+
     # APIs para árvore de centros de custo
     path('api/centros-custo/tree-data/', views.api_centrocusto_tree_data, name='api_centrocusto_tree_data'),
     path('api/centros-custo/validar-codigo/', views.api_validar_codigo_centrocusto, name='api_validar_codigo_centrocusto'),
@@ -63,15 +66,18 @@ urlpatterns = [
     path('centros-custo/<str:codigo>/excluir-old/', views.centrocusto_delete, name='centrocusto_delete'),
 
     # ===== CONTAS CONTÁBEIS - NOVA ARQUITETURA FOCADA NA ÁRVORE =====
-    
+
     # View principal da árvore
     path('contas-contabeis/', views.contacontabil_tree_view, name='contacontabil_tree'),
-    
+
     # Views modais
     path('contas-contabeis/nova/', views.contacontabil_create_modal, name='contacontabil_create_modal'),
     path('contas-contabeis/<str:codigo>/editar/', views.contacontabil_update_modal, name='contacontabil_update_modal'),
     path('contas-contabeis/<str:codigo>/excluir/', views.contacontabil_delete_ajax, name='contacontabil_delete_ajax'),
-    
+
+    # Exportação
+    path('contas-contabeis/export-excel/', views.export_contas_contabeis_excel, name='contacontabil_export_excel'),
+
     # APIs básicas
     path('api/contas-contabeis/tree-data/', views.api_contacontabil_tree_data, name='api_contacontabil_tree_data'),
     path('api/contas-contabeis/validar-codigo/', views.api_validar_codigo_contacontabil, name='api_validar_codigo_contacontabil'),
@@ -91,15 +97,26 @@ urlpatterns = [
     path('api/contas-contabeis/arvore-externa/', views.contaexterna_list, name='api_contacontabil_tree_with_external'),
     
     # ===== CRUD PARA CÓDIGOS EXTERNOS (INLINE) =====
-    
+
     # Views principais para contas externas
     path('contas-externas/', views.contaexterna_list, name='contaexterna_list'),
     path('contas-externas/nova/', views.contaexterna_create, name='contaexterna_create'),
     path('contas-externas/<int:pk>/editar/', views.contaexterna_update, name='contaexterna_update'),
-    
+
     # APIs para operações inline
     path('api/contas-externas/validar-codigo/', views.api_validar_codigo_externo, name='api_validar_codigo_externo'),
     path('api/contas-externas/<int:pk>/delete/', views.api_contaexterna_delete, name='api_contaexterna_delete'),
+
+    # ===== CRUD PARA CÓDIGOS ERP DE CENTROS DE CUSTO (INLINE) =====
+
+    # Views principais para centros de custo externos
+    path('centros-custo-externos/', views.centrocustoexterno_list, name='centrocustoexterno_list'),
+    path('centros-custo-externos/novo/', views.centrocustoexterno_create, name='centrocustoexterno_create'),
+    path('centros-custo-externos/<int:pk>/editar/', views.centrocustoexterno_update, name='centrocustoexterno_update'),
+
+    # APIs para operações inline
+    path('api/centros-custo-externos/validar-codigo/', views.api_validar_codigo_externo_cc, name='api_validar_codigo_externo_cc'),
+    path('api/centros-custo-externos/<int:pk>/delete/', views.api_centrocustoexterno_delete, name='api_centrocustoexterno_delete'),
 
     # ===== USUÁRIOS =====
     path('usuarios/', views.usuario_list, name='usuario_list'),

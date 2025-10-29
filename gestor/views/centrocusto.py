@@ -5,10 +5,15 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
+from django.utils import timezone
 import logging
 import json
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+import io
 
 from core.models import CentroCusto
 from core.forms import CentroCustoForm
@@ -241,7 +246,7 @@ def centrocusto_create_modal(request):
 def centrocusto_delete_ajax(request, codigo):
     """Deletar centro de custo via AJAX - HIERARQUIA DECLARADA"""
     centro = get_object_or_404(CentroCusto, codigo=codigo)
-    
+
     # Verificar se tem filhos usando hierarquia declarada
     if centro.tem_filhos:
         filhos_count = centro.get_filhos_diretos().count()
@@ -249,21 +254,82 @@ def centrocusto_delete_ajax(request, codigo):
             'success': False,
             'message': f'Não é possível excluir o centro de custo "{centro.nome}" pois ele possui {filhos_count} sub-centro(s).'
         })
-    
+
+    # Verificar se tem movimentos associados
     try:
+        movimentos_count = centro.movimentos.count()
+        if movimentos_count > 0:
+            return JsonResponse({
+                'success': False,
+                'message': f'Não é possível excluir o centro de custo "{centro.nome}" pois ele possui {movimentos_count} movimento(s) financeiro(s) associado(s).'
+            })
+    except Exception as e:
+        logger.warning(f'Erro ao verificar movimentos do centro {centro.codigo}: {str(e)}')
+
+    # Verificar se tem empresas vinculadas
+    try:
+        empresas_count = centro.empresas_vinculadas.count()
+        if empresas_count > 0:
+            return JsonResponse({
+                'success': False,
+                'message': f'Não é possível excluir o centro de custo "{centro.nome}" pois ele está vinculado a {empresas_count} empresa(s).'
+            })
+    except Exception as e:
+        logger.warning(f'Erro ao verificar empresas vinculadas do centro {centro.codigo}: {str(e)}')
+
+    # Verificar se tem usuários com acesso
+    try:
+        usuarios_count = centro.usuarios_com_acesso.count()
+        if usuarios_count > 0:
+            return JsonResponse({
+                'success': False,
+                'message': f'Não é possível excluir o centro de custo "{centro.nome}" pois {usuarios_count} usuário(s) tem acesso a ele.'
+            })
+    except Exception as e:
+        logger.warning(f'Erro ao verificar usuários com acesso do centro {centro.codigo}: {str(e)}')
+
+    try:
+        from django.db import connection
         nome = centro.nome
         codigo_centro = centro.codigo
-        centro.delete()
-        
+
+        # Verificar se a tabela empresa_centros_custo existe
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'empresa_centros_custo'
+                )
+            """)
+            table_exists = cursor.fetchone()[0]
+
+        if not table_exists:
+            # Tabela não existe, fazer delete direto sem cascade
+            logger.warning(f'Tabela empresa_centros_custo não existe. Executando delete direto.')
+            with connection.cursor() as cursor:
+                cursor.execute('DELETE FROM centros_custo WHERE codigo = %s', [codigo_centro])
+        else:
+            # Tabela existe, usar delete normal do Django
+            centro.delete()
+
         logger.info(f'Centro de custo excluído: {codigo_centro} - {nome} por {request.user}')
-        
+
         return JsonResponse({
             'success': True,
             'message': f'Centro de custo "{nome}" (código: {codigo_centro}) excluído com sucesso!'
         })
-        
+
     except Exception as e:
         logger.error(f'Erro ao excluir centro de custo {centro.codigo}: {str(e)}')
+
+        # Verificar se é erro de tabela inexistente
+        error_msg = str(e)
+        if 'does not exist' in error_msg and 'empresa_centros_custo' in error_msg:
+            return JsonResponse({
+                'success': False,
+                'message': 'Não foi possível excluir o centro de custo. Execute as migrações pendentes do banco de dados (python manage.py migrate).'
+            })
+
         return JsonResponse({
             'success': False,
             'message': f'Erro ao excluir centro de custo: {str(e)}'
@@ -473,7 +539,7 @@ def api_centro_custo_detalhes(request, codigo):
     """API para obter detalhes de um centro de custo"""
     try:
         centro = get_object_or_404(CentroCusto, codigo=codigo, ativo=True)
-        
+
         return JsonResponse({
             'success': True,
             'centro': {
@@ -487,10 +553,114 @@ def api_centro_custo_detalhes(request, codigo):
                 'tem_filhos': centro.tem_filhos
             }
         })
-        
+
     except Exception as e:
         logger.error(f'Erro ao buscar detalhes do centro {codigo}: {str(e)}')
         return JsonResponse({
             'success': False,
             'error': 'Centro de custo não encontrado'
         })
+
+@login_required
+def export_centros_custo_excel(request):
+    """Exporta centros de custo para Excel com hierarquia"""
+    try:
+        # Criar workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Centros de Custo"
+
+        # Estilos
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # Cabeçalhos
+        headers = ['Nível', 'Código', 'Nome', 'Tipo', 'Código Pai', 'Descrição', 'Ativo', 'Data Criação', 'Data Alteração']
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = border
+
+        # Buscar centros de custo ordenados
+        centros = CentroCusto.objects.all().order_by('nivel', 'codigo')
+
+        # Preencher dados
+        row_num = 2
+        for centro in centros:
+            # Indentação baseada no nível
+            indentation = "  " * (centro.nivel - 1)
+
+            ws.cell(row=row_num, column=1, value=centro.nivel).border = border
+            ws.cell(row=row_num, column=2, value=centro.codigo).border = border
+            ws.cell(row=row_num, column=3, value=f"{indentation}{centro.nome}").border = border
+            ws.cell(row=row_num, column=4, value=centro.get_tipo_display()).border = border
+            ws.cell(row=row_num, column=5, value=centro.codigo_pai or '').border = border
+            ws.cell(row=row_num, column=6, value=centro.descricao or '').border = border
+            ws.cell(row=row_num, column=7, value='Sim' if centro.ativo else 'Não').border = border
+            ws.cell(row=row_num, column=8, value=centro.data_criacao.strftime('%d/%m/%Y %H:%M') if centro.data_criacao else '').border = border
+            ws.cell(row=row_num, column=9, value=centro.data_alteracao.strftime('%d/%m/%Y %H:%M') if centro.data_alteracao else '').border = border
+
+            # Colorir por tipo
+            if centro.tipo == 'S':
+                # Sintético - amarelo claro
+                tipo_fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+            else:
+                # Analítico - verde claro
+                tipo_fill = PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid")
+
+            for col in range(1, 10):
+                ws.cell(row=row_num, column=col).fill = tipo_fill
+
+            row_num += 1
+
+        # Ajustar largura das colunas
+        column_widths = {
+            'A': 8,   # Nível
+            'B': 15,  # Código
+            'C': 50,  # Nome (mais largo para hierarquia)
+            'D': 12,  # Tipo
+            'E': 15,  # Código Pai
+            'F': 40,  # Descrição
+            'G': 8,   # Ativo
+            'H': 18,  # Data Criação
+            'I': 18,  # Data Alteração
+        }
+
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+
+        # Congelar primeira linha
+        ws.freeze_panes = 'A2'
+
+        # Salvar em memória
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # Preparar resposta
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="centros_custo_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+
+        logger.info(f'Exportação de centros de custo realizada por {request.user}')
+
+        return response
+
+    except Exception as e:
+        logger.error(f'Erro ao exportar centros de custo para Excel: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        messages.error(request, f'Erro ao exportar: {str(e)}')
+        return redirect('gestor:centrocusto_tree')

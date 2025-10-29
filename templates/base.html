@@ -15,7 +15,7 @@
   <!-- CSS adicional -->
   <style>
     body {
-      background-image: url("{% static 'img/background.jpeg' %}");
+      background-image: url("{% static 'img/background.jpeg' %}?v=20250929");
       background-size: cover;
       background-attachment: fixed;
       background-position: center;
@@ -59,7 +59,7 @@
     <div class="container-fluid">
 
       <a class="navbar-brand" href="{% url 'home' %}">
-        <img src="{% static 'img/logo.png' %}" alt="SynchroBI">
+        <img src="{% static 'img/logo.png' %}?v=20250929" alt="SynchroBI">
         <span class="app-title-text">{% block navbar_title %}Portal Controladoria{% endblock %}</span>
       </a>
 

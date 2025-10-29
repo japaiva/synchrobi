@@ -3,11 +3,24 @@
 {% load static %}
 
 {% block title %}Árvore de Contas Contábeis | SynchroBI{% endblock %}
+{% block content_class %}container-fluid{% endblock %}
 
 {% block extra_css %}
 {% include 'gestor/partials/tree_styles.html' %}
 <style>
-    .main-container { padding: 0; }
+    /* FORÇAR ESPAÇAMENTOS - MESMA LARGURA DO CENTRO DE CUSTO */
+    .content-container {
+        max-width: 100% !important; /* Remove limitação do container */
+        padding: 0 40px !important; /* Padding lateral */
+    }
+
+    .main-container {
+        padding: 0 !important;
+        max-width: 1800px !important; /* Largura máxima aumentada */
+        margin: 0 auto !important; /* Centraliza */
+        width: 100% !important;
+    }
+
     .card { border-radius: 0; border: none; margin-bottom: 0; border-bottom: 1px solid #dee2e6; }
     .card:last-child { border-bottom: none; }
     .modal-xl { max-width: 90%; }
@@ -19,6 +32,49 @@
     .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1055; }
     .tree-node.analytic { background: linear-gradient(135deg, #d1ecf1 0%, #ffffff 100%); border-left-color: #17a2b8 !important; }
     .tree-node.synthetic { background: linear-gradient(135deg, #d4edda 0%, #ffffff 100%); border-left-color: #20c997 !important; }
+
+    /* OVERRIDE COMPLETO DOS ESPAÇAMENTOS */
+    .tree-node {
+        padding: 12px 20px !important;
+    }
+
+    .tree-info {
+        gap: 25px !important;
+    }
+
+    .tree-content {
+        gap: 15px !important;
+        min-width: 0 !important;
+    }
+
+    .tree-code {
+        min-width: 140px !important;
+        margin-right: 10px !important;
+    }
+
+    .tree-name {
+        margin-right: 30px !important;
+        flex: 1 !important;
+    }
+
+    .tree-badges {
+        gap: 15px !important;
+        margin-left: 20px !important;
+    }
+
+    .tree-actions {
+        gap: 8px !important;
+        margin-left: 15px !important;
+    }
+
+    .btn-tree-action {
+        padding: 6px 12px !important;
+        margin-left: 2px !important;
+    }
+
+    .type-badge {
+        margin-right: 10px !important;
+    }
 </style>
 {% endblock %}
 
@@ -29,6 +85,9 @@
         <div class="card-header d-flex justify-content-between align-items-center">
             <h4 class="mb-0">Contas Contábeis</h4>
             <div class="d-flex gap-2">
+                <a href="{% url 'gestor:contacontabil_export_excel' %}" class="btn btn-outline-success btn-sm" title="Exportar para Excel">
+                    <i class="fas fa-file-excel me-1"></i> Exportar Excel
+                </a>
                 <button class="btn btn-outline-info btn-sm" onclick="refreshTree()">
                     <i class="fas fa-sync-alt me-1"></i> Atualizar
                 </button>

@@ -346,3 +346,133 @@ class ContaExterna(models.Model):
             models.Index(fields=['sincronizado']),
             models.Index(fields=['codigo_externo', 'ativa']),  # ÍNDICE COMPOSTO
         ]
+
+class CentroCustoExterno(models.Model):
+    """
+    Modelo para mapear códigos de centros de custo do ERP aos centros de custo internos
+    """
+
+    # Relacionamento com centro de custo interno
+    centro_custo = models.ForeignKey(
+        CentroCusto,
+        on_delete=models.CASCADE,
+        related_name='centros_externos',
+        verbose_name="Centro de Custo Interno"
+    )
+
+    # Dados do centro de custo do ERP
+    codigo_externo = models.CharField(
+        max_length=50,
+        verbose_name="Código ERP",
+        help_text="Código do centro de custo no sistema ERP",
+        db_index=True  # ÍNDICE PARA BUSCA RÁPIDA
+    )
+
+    nome_externo = models.CharField(
+        max_length=255,
+        verbose_name="Nome no ERP",
+        help_text="Nome/descrição do centro de custo no sistema ERP"
+    )
+
+    # Sistema/empresa origem
+    sistema_origem = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Sistema de Origem",
+        help_text="Nome do ERP/sistema de origem (ex: Consinco, Protheus)"
+    )
+
+    empresas_utilizacao = models.TextField(
+        blank=True,
+        verbose_name="Empresas de Utilização",
+        help_text="Empresas que utilizam este centro de custo (ex: CMC & EBC & Taiff & Action Motors)"
+    )
+
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name="Observações",
+        help_text="Observações sobre o centro de custo do ERP"
+    )
+
+    # Campos de controle
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name="Ativo",
+        help_text="Se o centro de custo do ERP está ativo"
+    )
+
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_alteracao = models.DateTimeField(auto_now=True)
+
+    # Campos para sincronização
+    sincronizado = models.BooleanField(
+        default=False,
+        verbose_name="Sincronizado",
+        help_text="Se o centro de custo foi sincronizado com o sistema ERP"
+    )
+
+    data_ultima_sincronizacao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Última Sincronização"
+    )
+
+    def clean(self):
+        """Validação customizada"""
+        super().clean()
+
+        # Verificar se não há duplicação do código externo para o mesmo centro de custo interno
+        duplicatas = CentroCustoExterno.objects.filter(
+            centro_custo=self.centro_custo,
+            codigo_externo=self.codigo_externo,
+            ativo=True
+        )
+
+        if self.pk:
+            duplicatas = duplicatas.exclude(pk=self.pk)
+
+        if duplicatas.exists():
+            raise ValidationError({
+                'codigo_externo': f'Já existe um centro de custo ERP ativo com este código para o centro {self.centro_custo.codigo}'
+            })
+
+    @property
+    def codigo_display(self):
+        """Código para exibição"""
+        return f"{self.codigo_externo} ({self.sistema_origem})" if self.sistema_origem else self.codigo_externo
+
+    @property
+    def empresas_lista(self):
+        """Retorna lista de empresas que utilizam este centro de custo"""
+        if not self.empresas_utilizacao:
+            return []
+
+        # Dividir por & e limpar espaços
+        empresas = [emp.strip() for emp in self.empresas_utilizacao.split('&')]
+        return [emp for emp in empresas if emp]
+
+    def sincronizar_dados(self):
+        """Sincroniza dados com o sistema ERP"""
+        # Implementar lógica de sincronização
+        self.sincronizado = True
+        self.data_ultima_sincronizacao = timezone.now()
+        self.save()
+
+    def __str__(self):
+        sistema = f" ({self.sistema_origem})" if self.sistema_origem else ""
+        return f"{self.codigo_externo}{sistema} → {self.centro_custo.codigo}"
+
+    class Meta:
+        db_table = 'centros_custo_externos'
+        verbose_name = 'Código ERP Centro de Custo'
+        verbose_name_plural = 'Códigos ERP Centros de Custo'
+        ordering = ['centro_custo__codigo', 'codigo_externo']
+        unique_together = ['centro_custo', 'codigo_externo', 'ativo']  # Evita duplicatas ativas
+        indexes = [
+            models.Index(fields=['centro_custo']),
+            models.Index(fields=['codigo_externo']),  # ÍNDICE PRINCIPAL PARA BUSCA
+            models.Index(fields=['sistema_origem']),
+            models.Index(fields=['ativo']),
+            models.Index(fields=['sincronizado']),
+            models.Index(fields=['codigo_externo', 'ativo']),  # ÍNDICE COMPOSTO
+        ]

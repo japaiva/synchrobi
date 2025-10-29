@@ -1,0 +1,122 @@
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}Novo Código ERP - Centro de Custo | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-plus-circle me-2"></i>
+                        Novo Código ERP - Centro de Custo
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="formCodigo" method="POST">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label for="centro_custo" class="form-label">Centro de Custo *</label>
+                            <select class="form-select" id="centro_custo" name="centro_custo" required>
+                                <option value="">Selecione...</option>
+                                {% load static %}
+                                <!-- Carregar centros de custo via AJAX ou passar no context -->
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="codigo_externo" class="form-label">Código ERP *</label>
+                            <input type="text" class="form-control" id="codigo_externo"
+                                   name="codigo_externo" placeholder="Ex: 1001" required>
+                            <div class="form-text">Código do centro de custo no sistema ERP</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="nome_externo" class="form-label">Nome *</label>
+                            <input type="text" class="form-control" id="nome_externo"
+                                   name="nome_externo" placeholder="Nome conforme aparece no ERP" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sistema_origem" class="form-label">Sistema de Origem</label>
+                            <input type="text" class="form-control" id="sistema_origem"
+                                   name="sistema_origem" placeholder="Ex: Consinco, Protheus, SAP">
+                            <div class="form-text">Nome do ERP ou sistema de origem</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="empresas_utilizacao" class="form-label">Empresas de Utilização</label>
+                            <textarea class="form-control" id="empresas_utilizacao"
+                                      name="empresas_utilizacao" rows="2"
+                                      placeholder="Ex: CMC & EBC & Taiff & Action Motors"></textarea>
+                            <div class="form-text">Empresas que utilizam este código (separar com &)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="observacoes" class="form-label">Observações</label>
+                            <textarea class="form-control" id="observacoes"
+                                      name="observacoes" rows="3"></textarea>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="ativo"
+                                   name="ativo" checked>
+                            <label class="form-check-label" for="ativo">
+                                Código ativo
+                            </label>
+                        </div>
+
+                        <div class="alert alert-danger" id="error-message" style="display: none;"></div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'gestor:centrocustoexterno_list' %}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-1"></i> Salvar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('formCodigo').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const errorDiv = document.getElementById('error-message');
+
+    fetch('{% url "gestor:centrocustoexterno_create" %}', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            window.location.href = '{% url "gestor:centrocustoexterno_list" %}';
+        } else {
+            errorDiv.textContent = data.message;
+            errorDiv.style.display = 'block';
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        errorDiv.textContent = 'Erro de conexão';
+        errorDiv.style.display = 'block';
+    });
+});
+</script>
+{% endblock %}

@@ -3,11 +3,24 @@
 {% load static %}
 
 {% block title %}Árvore de Centros de Custo | SynchroBI{% endblock %}
+{% block content_class %}container-fluid{% endblock %}
 
 {% block extra_css %}
 {% include 'gestor/partials/tree_styles.html' %}
 <style>
-    .main-container { padding: 0; }
+    /* FORÇAR ESPAÇAMENTOS - VERSÃO 2 */
+    .content-container {
+        max-width: 100% !important; /* Remove limitação do container */
+        padding: 0 40px !important; /* Padding lateral */
+    }
+
+    .main-container {
+        padding: 0 !important;
+        max-width: 1800px !important; /* Largura máxima aumentada ainda mais */
+        margin: 0 auto !important; /* Centraliza */
+        width: 100% !important;
+    }
+
     .card { border-radius: 0; border: none; margin-bottom: 0; border-bottom: 1px solid #dee2e6; }
     .card:last-child { border-bottom: none; }
     .modal-xl { max-width: 90%; }
@@ -19,6 +32,49 @@
     .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1055; }
     .tree-node.analytic { background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%); border-left-color: #28a745 !important; }
     .tree-node.synthetic { background: linear-gradient(135deg, #fff3cd 0%, #ffffff 100%); border-left-color: #ffc107 !important; }
+
+    /* OVERRIDE COMPLETO DOS ESPAÇAMENTOS */
+    .tree-node {
+        padding: 12px 20px !important; /* Aumenta padding interno MUITO MAIS */
+    }
+
+    .tree-info {
+        gap: 25px !important; /* Espaço entre conteúdo e badges */
+    }
+
+    .tree-content {
+        gap: 15px !important; /* Espaço entre elementos do conteúdo */
+        min-width: 0 !important;
+    }
+
+    .tree-code {
+        min-width: 140px !important; /* Ainda mais largo */
+        margin-right: 10px !important;
+    }
+
+    .tree-name {
+        margin-right: 30px !important; /* MUITO mais espaço antes dos badges */
+        flex: 1 !important;
+    }
+
+    .tree-badges {
+        gap: 15px !important; /* Mais espaço entre badges e ações */
+        margin-left: 20px !important; /* Espaço adicional */
+    }
+
+    .tree-actions {
+        gap: 8px !important; /* Espaço entre botões de ação */
+        margin-left: 15px !important; /* Espaço antes dos botões */
+    }
+
+    .btn-tree-action {
+        padding: 6px 12px !important; /* Botões ainda maiores */
+        margin-left: 2px !important; /* Pequeno espaço entre cada botão */
+    }
+
+    .type-badge {
+        margin-right: 10px !important; /* Espaço após o badge */
+    }
 </style>
 {% endblock %}
 
@@ -29,6 +85,9 @@
         <div class="card-header d-flex justify-content-between align-items-center">
             <h4 class="mb-0">Centros de Custo</h4>
             <div class="d-flex gap-2">
+                <a href="{% url 'gestor:centrocusto_export_excel' %}" class="btn btn-outline-success btn-sm" title="Exportar para Excel">
+                    <i class="fas fa-file-excel me-1"></i> Exportar Excel
+                </a>
                 <button class="btn btn-outline-info btn-sm" onclick="refreshTree()">
                     <i class="fas fa-sync-alt me-1"></i> Atualizar
                 </button>
@@ -97,7 +156,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/tree-manager.js' %}"></script>
+<script src="{% static 'js/tree-manager.js' %}?v=20250929b"></script>
 <script>
 let treeManager;
 document.addEventListener('DOMContentLoaded', () => {
@@ -111,7 +170,10 @@ document.addEventListener('DOMContentLoaded', () => {
         hasCompanyField: false,
         hasDetailModal: false,
         useId: false,
-        isDeclarativeHierarchy: true  // NOVO: indica hierarquia declarada
+        isDeclarativeHierarchy: true,  // Indica hierarquia declarada
+        relatedTableConfig: {
+            configKey: 'external_codes_cc'  // Códigos ERP para centros de custo
+        }
     };
     treeManager = new TreeManager(config);
 });
@@ -121,5 +183,64 @@ function openCreateModal(event, codigoPai) { treeManager.openCreateModal(event, 
 function openEditModal(event, codigo) { treeManager.openEditModal(event, codigo); }
 function deleteCentroCusto(event, codigo, nome) { treeManager.deleteItem(event, codigo, nome); }
 function refreshTree() { treeManager.refreshTree(); }
+
+// Função para abrir modal de códigos ERP para centros de custo
+window.openExternalCentroCustoModal = function(centroCodigo) {
+    const modalId = 'relatedTableModal_external_codes_cc';
+    let modal = document.getElementById(modalId);
+
+    if (!modal) {
+        // Criar modal se não existir
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning">
+                            <h5 class="modal-title">
+                                <i class="fas fa-link me-2"></i>
+                                Códigos ERP - Centro de Custo ${centroCodigo}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" id="${modalId}_body">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary"></div>
+                                <p class="mt-2">Carregando códigos ERP...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        modal = document.getElementById(modalId);
+    }
+
+    // Abrir modal
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Carregar conteúdo via AJAX
+    const body = document.getElementById(`${modalId}_body`);
+    fetch(`/gestor/centros-custo-externos/?centro=${centroCodigo}`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        body.innerHTML = html;
+    })
+    .catch(error => {
+        body.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Erro ao carregar códigos ERP</h6>
+                <p class="mb-2">Erro: ${error.message}</p>
+                <button class="btn btn-sm btn-outline-danger" onclick="window.openExternalCentroCustoModal('${centroCodigo}')">
+                    <i class="fas fa-retry me-1"></i> Tentar Novamente
+                </button>
+            </div>
+        `;
+    });
+};
 </script>
 {% endblock %}

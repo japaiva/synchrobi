@@ -15,26 +15,28 @@ from .relacionamentos import (
     ParametroSistema,
     UsuarioCentroCusto,
     EmpresaCentroCusto,
-    ContaExterna
+    ContaExterna,
+    CentroCustoExterno
 )
 
 # Garantir que todos os modelos sejam exportados
 __all__ = [
     # Base
     'HierarquiaDinamicaMixin',
-    
+
     # Principais
     'Usuario',
-    'Empresa', 
+    'Empresa',
     'Unidade',
     'CentroCusto',
     'ContaContabil',
     'Fornecedor',
     'Movimento',
-    
+
     # Auxiliares
     'ParametroSistema',
-    'UsuarioCentroCusto', 
+    'UsuarioCentroCusto',
     'EmpresaCentroCusto',
-    'ContaExterna'
+    'ContaExterna',
+    'CentroCustoExterno'
 ]

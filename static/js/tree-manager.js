@@ -336,13 +336,22 @@ class TreeManager {
         if (this.config.relatedTableConfig) {
             const config = this.config.relatedTableConfig;
             const configKey = config.configKey;
-            
+
             // VERIFICAR SE É CÓDIGOS ERP E SE EXISTE FUNÇÃO ESPECÍFICA
             if (configKey === 'external_codes' && typeof window.openExternalAccountModal === 'function') {
-                // Usar implementação específica das códigos ERP
+                // Usar implementação específica para códigos ERP de Contas Contábeis
                 buttons += `
-                    <button class="btn btn-sm btn-outline-warning" 
-                            onclick="window.openExternalAccountModal('${item.codigo}')" 
+                    <button class="btn btn-sm btn-outline-warning"
+                            onclick="window.openExternalAccountModal('${item.codigo}')"
+                            title="Códigos ERP">
+                        <i class="fas fa-link"></i>
+                    </button>
+                `;
+            } else if (configKey === 'external_codes_cc' && typeof window.openExternalCentroCustoModal === 'function') {
+                // Usar implementação específica para códigos ERP de Centros de Custo
+                buttons += `
+                    <button class="btn btn-sm btn-outline-warning"
+                            onclick="window.openExternalCentroCustoModal('${item.codigo}')"
                             title="Códigos ERP">
                         <i class="fas fa-link"></i>
                     </button>
@@ -352,8 +361,8 @@ class TreeManager {
                 const relatedConfig = window.relatedTableConfigs?.[configKey];
                 if (relatedConfig) {
                     buttons += `
-                        <button class="btn btn-sm ${relatedConfig.buttonClass || 'btn-outline-warning'}" 
-                                onclick="openRelatedTableModal(event, '${item.codigo}', '${configKey}')" 
+                        <button class="btn btn-sm ${relatedConfig.buttonClass || 'btn-outline-warning'}"
+                                onclick="openRelatedTableModal(event, '${item.codigo}', '${configKey}')"
                                 title="${relatedConfig.buttonLabel || 'Itens Relacionados'}">
                             <i class="${relatedConfig.buttonIcon || 'fas fa-list'}"></i>
                         </button>

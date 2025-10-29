@@ -1,30 +1,32 @@
-<!-- VERSÃO FINAL - SEM BOTÕES EXTRAS DO TREE-MANAGER -->
+<!-- Códigos ERP para Centros de Custo -->
 
 <div class="p-3">
-    <h6>Códigos ERP</h6>
-    
-    {% for externa in page_obj %}
-    <div class="border p-2 mb-2" id="item-{{ externa.id }}">
-        
+    <h6>Códigos ERP - Centros de Custo</h6>
+
+    {% for externo in page_obj %}
+    <div class="border p-2 mb-2" id="item-{{ externo.id }}">
+
         <!-- Visualização -->
-        <div id="view-{{ externa.id }}">
+        <div id="view-{{ externo.id }}">
             <div class="d-flex justify-content-between">
                 <div>
-                    <strong>{{ externa.codigo_externo }}</strong> - {{ externa.nome_externo }}
+                    <strong>{{ externo.codigo_externo }}</strong> - {{ externo.nome_externo }}
+                    {% if externo.sistema_origem %}
+                        <span class="badge bg-info text-dark">{{ externo.sistema_origem }}</span>
+                    {% endif %}
                 </div>
                 <div>
-                    <button type="button" class="btn btn-sm btn-primary" 
+                    <button type="button" class="btn btn-sm btn-primary"
                             onclick="
-                                document.getElementById('view-{{ externa.id }}').style.display = 'none';
-                                document.getElementById('edit-{{ externa.id }}').style.display = 'block';
-                                console.log('Editando item {{ externa.id }}');
+                                document.getElementById('view-{{ externo.id }}').style.display = 'none';
+                                document.getElementById('edit-{{ externo.id }}').style.display = 'block';
                             ">
                         Editar
                     </button>
-                    <button type="button" class="btn btn-sm btn-danger ms-1" 
+                    <button type="button" class="btn btn-sm btn-danger ms-1"
                             onclick="
-                                if (confirm('Excluir código {{ externa.codigo_externo }}?')) {
-                                    fetch('{% url "gestor:api_contaexterna_delete" externa.id %}', {
+                                if (confirm('Excluir código {{ externo.codigo_externo }}?')) {
+                                    fetch('{% url "gestor:api_centrocustoexterno_delete" externo.id %}', {
                                         method: 'POST',
                                         headers: {
                                             'X-CSRFToken': '{{ csrf_token }}',
@@ -34,7 +36,7 @@
                                     .then(response => response.json())
                                     .then(data => {
                                         if (data.success) {
-                                            document.getElementById('item-{{ externa.id }}').remove();
+                                            document.getElementById('item-{{ externo.id }}').remove();
                                             alert('Excluído com sucesso!');
                                         } else {
                                             alert('Erro: ' + data.message);
@@ -53,40 +55,44 @@
         </div>
 
         <!-- Edição -->
-        <div id="edit-{{ externa.id }}" style="display: none;">
+        <div id="edit-{{ externo.id }}" style="display: none;">
             <div class="row g-2">
                 <div class="col-4">
-                    <input type="text" id="codigo-{{ externa.id }}" class="form-control" 
-                           value="{{ externa.codigo_externo }}">
+                    <input type="text" id="codigo-{{ externo.id }}" class="form-control"
+                           value="{{ externo.codigo_externo }}" placeholder="Código ERP">
                 </div>
-                <div class="col-8">
-                    <input type="text" id="nome-{{ externa.id }}" class="form-control" 
-                           value="{{ externa.nome_externo }}">
+                <div class="col-5">
+                    <input type="text" id="nome-{{ externo.id }}" class="form-control"
+                           value="{{ externo.nome_externo }}" placeholder="Nome">
+                </div>
+                <div class="col-3">
+                    <input type="text" id="sistema-{{ externo.id }}" class="form-control"
+                           value="{{ externo.sistema_origem|default:'' }}" placeholder="Sistema">
                 </div>
             </div>
             <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-success" 
+                <button type="button" class="btn btn-sm btn-success"
                         onclick="
-                            const codigo = document.getElementById('codigo-{{ externa.id }}').value.trim();
-                            const nome = document.getElementById('nome-{{ externa.id }}').value.trim();
-                            const errorDiv = document.getElementById('error-{{ externa.id }}');
-                            
+                            const codigo = document.getElementById('codigo-{{ externo.id }}').value.trim();
+                            const nome = document.getElementById('nome-{{ externo.id }}').value.trim();
+                            const sistema = document.getElementById('sistema-{{ externo.id }}').value.trim();
+                            const errorDiv = document.getElementById('error-{{ externo.id }}');
+
                             if (!codigo || !nome) {
                                 errorDiv.textContent = 'Código e nome são obrigatórios';
                                 errorDiv.style.display = 'block';
                                 return;
                             }
-                            
-                            console.log('Salvando:', codigo, nome);
-                            
+
                             const formData = new FormData();
                             formData.append('codigo_externo', codigo);
                             formData.append('nome_externo', nome);
-                            formData.append('conta_contabil', '{{ filtros.conta_codigo }}');
-                            formData.append('ativa', 'on');
+                            formData.append('sistema_origem', sistema);
+                            formData.append('centro_custo', '{{ filtros.centro_codigo }}');
+                            formData.append('ativo', 'on');
                             formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-                            
-                            fetch('{% url "gestor:contaexterna_update" externa.id %}', {
+
+                            fetch('{% url "gestor:centrocustoexterno_update" externo.id %}', {
                                 method: 'POST',
                                 headers: {
                                     'X-Requested-With': 'XMLHttpRequest'
@@ -97,9 +103,9 @@
                             .then(data => {
                                 if (data.success) {
                                     // Recarregar apenas o conteúdo do modal sem fechar
-                                    const modalBody = document.getElementById('relatedTableModal_external_codesBody');
+                                    const modalBody = document.getElementById('relatedTableModal_external_codes_cc_body');
                                     if (modalBody) {
-                                        fetch('/gestor/contas-externas/?conta={{ filtros.conta_codigo }}', {
+                                        fetch('/gestor/centros-custo-externos/?centro={{ filtros.centro_codigo }}', {
                                             headers: {
                                                 'X-Requested-With': 'XMLHttpRequest',
                                                 'X-CSRFToken': '{{ csrf_token }}'
@@ -123,30 +129,29 @@
                         ">
                     Salvar
                 </button>
-                <button type="button" class="btn btn-sm btn-secondary" 
+                <button type="button" class="btn btn-sm btn-secondary"
                         onclick="
-                            document.getElementById('edit-{{ externa.id }}').style.display = 'none';
-                            document.getElementById('view-{{ externa.id }}').style.display = 'block';
-                            document.getElementById('error-{{ externa.id }}').style.display = 'none';
-                            console.log('Cancelando edição {{ externa.id }}');
+                            document.getElementById('edit-{{ externo.id }}').style.display = 'none';
+                            document.getElementById('view-{{ externo.id }}').style.display = 'block';
+                            document.getElementById('error-{{ externo.id }}').style.display = 'none';
                         ">
                     Cancelar
                 </button>
             </div>
-            <div id="error-{{ externa.id }}" style="display: none; color: red; margin-top: 8px;"></div>
+            <div id="error-{{ externo.id }}" style="display: none; color: red; margin-top: 8px;"></div>
         </div>
     </div>
     {% empty %}
     <div class="text-center py-4 text-muted">
         <i class="fas fa-link mb-2" style="font-size: 2rem;"></i>
-        <p>Nenhum código ERP cadastrado</p>
+        <p>Nenhum código ERP cadastrado para este centro de custo</p>
     </div>
     {% endfor %}
 </div>
 
-<!-- Apenas o botão Novo Código - SEM botões extras -->
+<!-- Botão para adicionar novo código -->
 <div class="p-3 border-top">
-    <button type="button" class="btn btn-success btn-sm" 
+    <button type="button" class="btn btn-success btn-sm"
             onclick="
                 const form = document.getElementById('new-form');
                 const isVisible = form.style.display !== 'none';
@@ -155,40 +160,45 @@
                     document.getElementById('new-codigo').focus();
                 }
             ">
-        <i class="fas fa-plus me-1"></i> Novo Código
+        <i class="fas fa-plus me-1"></i> Novo Código ERP
     </button>
-    
+
     <!-- Formulário para novo -->
     <div id="new-form" class="mt-3" style="display: none;">
         <div class="row g-2">
             <div class="col-4">
-                <input type="text" id="new-codigo" class="form-control" placeholder="Código">
+                <input type="text" id="new-codigo" class="form-control" placeholder="Código ERP">
             </div>
-            <div class="col-8">
+            <div class="col-5">
                 <input type="text" id="new-nome" class="form-control" placeholder="Nome/Descrição">
+            </div>
+            <div class="col-3">
+                <input type="text" id="new-sistema" class="form-control" placeholder="Sistema">
             </div>
         </div>
         <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-success" 
+            <button type="button" class="btn btn-sm btn-success"
                     onclick="
                         const codigo = document.getElementById('new-codigo').value.trim();
                         const nome = document.getElementById('new-nome').value.trim();
+                        const sistema = document.getElementById('new-sistema').value.trim();
                         const errorDiv = document.getElementById('new-error');
-                        
+
                         if (!codigo || !nome) {
                             errorDiv.textContent = 'Código e nome são obrigatórios';
                             errorDiv.style.display = 'block';
                             return;
                         }
-                        
+
                         const formData = new FormData();
                         formData.append('codigo_externo', codigo);
                         formData.append('nome_externo', nome);
-                        formData.append('conta_contabil', '{{ filtros.conta_codigo }}');
-                        formData.append('ativa', 'on');
+                        formData.append('sistema_origem', sistema);
+                        formData.append('centro_custo', '{{ filtros.centro_codigo }}');
+                        formData.append('ativo', 'on');
                         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-                        
-                        fetch('{% url "gestor:contaexterna_create" %}', {
+
+                        fetch('{% url "gestor:centrocustoexterno_create" %}', {
                             method: 'POST',
                             headers: {
                                 'X-Requested-With': 'XMLHttpRequest'
@@ -201,13 +211,14 @@
                                 // Limpar formulário
                                 document.getElementById('new-codigo').value = '';
                                 document.getElementById('new-nome').value = '';
+                                document.getElementById('new-sistema').value = '';
                                 document.getElementById('new-form').style.display = 'none';
                                 errorDiv.style.display = 'none';
 
                                 // Recarregar apenas o conteúdo do modal sem fechar
-                                const modalBody = document.getElementById('relatedTableModal_external_codesBody');
+                                const modalBody = document.getElementById('relatedTableModal_external_codes_cc_body');
                                 if (modalBody) {
-                                    fetch('/gestor/contas-externas/?conta={{ filtros.conta_codigo }}', {
+                                    fetch('/gestor/centros-custo-externos/?centro={{ filtros.centro_codigo }}', {
                                         headers: {
                                             'X-Requested-With': 'XMLHttpRequest',
                                             'X-CSRFToken': '{{ csrf_token }}'
@@ -231,12 +242,13 @@
                     ">
                 Salvar
             </button>
-            <button type="button" class="btn btn-sm btn-secondary" 
+            <button type="button" class="btn btn-sm btn-secondary"
                     onclick="
                         document.getElementById('new-form').style.display = 'none';
                         document.getElementById('new-error').style.display = 'none';
                         document.getElementById('new-codigo').value = '';
                         document.getElementById('new-nome').value = '';
+                        document.getElementById('new-sistema').value = '';
                     ">
                 Cancelar
             </button>
@@ -244,19 +256,3 @@
         <div id="new-error" style="display: none; color: red; margin-top: 8px;"></div>
     </div>
 </div>
-
-<script>
-// Esconder botões duplicados do tree-manager
-document.addEventListener('DOMContentLoaded', function() {
-    // Esconder footer do modal se tiver botões duplicados
-    setTimeout(function() {
-        const modalFooter = document.querySelector('.modal-footer');
-        if (modalFooter) {
-            const newExternalBtn = modalFooter.querySelector('button[onclick*="addNewRelatedItem"]');
-            if (newExternalBtn && newExternalBtn.textContent.includes('Novo Código ERP')) {
-                modalFooter.style.display = 'none';
-            }
-        }
-    }, 100);
-});
-</script>

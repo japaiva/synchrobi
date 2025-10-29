@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 import logging
 import json
@@ -405,3 +405,112 @@ def contacontabil_delete(request, codigo):
     if request.method == 'POST':
         return contacontabil_delete_ajax(request, codigo)
     return redirect('gestor:contacontabil_tree')
+
+@login_required
+def export_contas_contabeis_excel(request):
+    """Exporta contas contábeis para Excel com hierarquia"""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from django.utils import timezone
+        import io
+
+        # Criar workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Contas Contábeis"
+
+        # Estilos
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # Cabeçalhos
+        headers = ['Nível', 'Código', 'Nome', 'Tipo', 'Código Pai', 'Descrição', 'Ativa', 'Data Criação', 'Data Alteração']
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = border
+
+        # Buscar contas contábeis ordenadas
+        contas = ContaContabil.objects.all().order_by('nivel', 'codigo')
+
+        # Preencher dados
+        row_num = 2
+        for conta in contas:
+            # Indentação baseada no nível
+            indentation = "  " * (conta.nivel - 1)
+
+            ws.cell(row=row_num, column=1, value=conta.nivel).border = border
+            ws.cell(row=row_num, column=2, value=conta.codigo).border = border
+            ws.cell(row=row_num, column=3, value=f"{indentation}{conta.nome}").border = border
+            ws.cell(row=row_num, column=4, value=conta.get_tipo_display()).border = border
+            ws.cell(row=row_num, column=5, value=conta.codigo_pai or '').border = border
+            ws.cell(row=row_num, column=6, value=conta.descricao or '').border = border
+            ws.cell(row=row_num, column=7, value='Sim' if conta.ativa else 'Não').border = border
+            ws.cell(row=row_num, column=8, value=conta.data_criacao.strftime('%d/%m/%Y %H:%M') if conta.data_criacao else '').border = border
+            ws.cell(row=row_num, column=9, value=conta.data_alteracao.strftime('%d/%m/%Y %H:%M') if conta.data_alteracao else '').border = border
+
+            # Colorir por tipo
+            if conta.tipo == 'S':
+                # Sintético - verde claro
+                tipo_fill = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+            else:
+                # Analítico - azul claro
+                tipo_fill = PatternFill(start_color="D1ECF1", end_color="D1ECF1", fill_type="solid")
+
+            for col in range(1, 10):
+                ws.cell(row=row_num, column=col).fill = tipo_fill
+
+            row_num += 1
+
+        # Ajustar largura das colunas
+        column_widths = {
+            'A': 8,   # Nível
+            'B': 15,  # Código
+            'C': 50,  # Nome (mais largo para hierarquia)
+            'D': 12,  # Tipo
+            'E': 15,  # Código Pai
+            'F': 40,  # Descrição
+            'G': 8,   # Ativa
+            'H': 18,  # Data Criação
+            'I': 18,  # Data Alteração
+        }
+
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+
+        # Congelar primeira linha
+        ws.freeze_panes = 'A2'
+
+        # Salvar em memória
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # Preparar resposta
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="contas_contabeis_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+
+        logger.info(f'Exportação de contas contábeis realizada por {request.user}')
+
+        return response
+
+    except Exception as e:
+        logger.error(f'Erro ao exportar contas contábeis para Excel: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        messages.error(request, f'Erro ao exportar: {str(e)}')
+        return redirect('gestor:contacontabil_tree')

@@ -3,7 +3,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
-from core.models import ParametroSistema, ContaExterna, ContaContabil, Usuario
+from core.models import ParametroSistema, ContaExterna, ContaContabil, CentroCustoExterno, CentroCusto, Usuario
 
 class ParametroSistemaForm(forms.ModelForm):
     """Formulário para criar/editar parâmetros do sistema"""
@@ -370,6 +370,154 @@ class ContaExternaBulkForm(forms.Form):
         elif acao == 'deletar':
             queryset.delete()
             return f"{count} conta(s) externa(s) deletada(s) com sucesso."
-        
+
         else:
             raise forms.ValidationError("Ação inválida selecionada.")
+
+class CentroCustoExternoForm(forms.ModelForm):
+    """Formulário para criar/editar códigos de centros de custo externos"""
+
+    class Meta:
+        model = CentroCustoExterno
+        fields = [
+            'centro_custo', 'codigo_externo', 'nome_externo',
+            'sistema_origem', 'empresas_utilizacao', 'observacoes', 'ativo'
+        ]
+
+        widgets = {
+            'centro_custo': forms.Select(attrs={
+                'class': 'form-select',
+                'placeholder': 'Selecione o centro de custo'
+            }),
+            'codigo_externo': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex: 1001'
+            }),
+            'nome_externo': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nome do centro de custo no sistema externo'
+            }),
+            'sistema_origem': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex: Consinco, Protheus, SAP'
+            }),
+            'empresas_utilizacao': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Ex: CMC & EBC & Taiff & Action Motors'
+            }),
+            'observacoes': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Observações sobre este centro de custo externo'
+            }),
+            'ativo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        centro_custo_codigo = kwargs.pop('centro_custo_codigo', None)
+        super().__init__(*args, **kwargs)
+
+        # Filtrar apenas centros de custo ativos
+        self.fields['centro_custo'].queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
+
+        # Se foi passado um código de centro de custo, pré-selecionar
+        if centro_custo_codigo:
+            try:
+                centro = CentroCusto.objects.get(codigo=centro_custo_codigo)
+                self.fields['centro_custo'].initial = centro
+                self.fields['centro_custo'].widget.attrs['readonly'] = True
+            except CentroCusto.DoesNotExist:
+                pass
+
+        # Help texts personalizados
+        self.fields['codigo_externo'].help_text = "Código do centro de custo no sistema externo (ERP)"
+        self.fields['nome_externo'].help_text = "Nome/descrição do centro conforme aparece no sistema externo"
+        self.fields['sistema_origem'].help_text = "Nome do ERP ou sistema de origem"
+        self.fields['empresas_utilizacao'].help_text = "Empresas que utilizam este centro de custo (separar com &)"
+
+        # Campos obrigatórios
+        self.fields['centro_custo'].required = True
+        self.fields['codigo_externo'].required = True
+        self.fields['nome_externo'].required = True
+
+    def clean_codigo_externo(self):
+        """Validação do código externo"""
+        codigo_externo = self.cleaned_data.get('codigo_externo', '').strip()
+        centro_custo = self.cleaned_data.get('centro_custo')
+
+        if not codigo_externo:
+            raise forms.ValidationError("Código externo é obrigatório.")
+
+        # Verificar duplicação para o mesmo centro de custo
+        if centro_custo:
+            queryset = CentroCustoExterno.objects.filter(
+                centro_custo=centro_custo,
+                codigo_externo=codigo_externo,
+                ativo=True
+            )
+
+            if self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+
+            if queryset.exists():
+                raise forms.ValidationError(
+                    f'Já existe um centro de custo externo ativo com o código "{codigo_externo}" '
+                    f'para o centro de custo "{centro_custo.codigo}".'
+                )
+
+        return codigo_externo
+
+    def clean_nome_externo(self):
+        """Validação do nome externo"""
+        nome_externo = self.cleaned_data.get('nome_externo', '').strip()
+
+        if not nome_externo:
+            raise forms.ValidationError("Nome externo é obrigatório.")
+
+        if len(nome_externo) < 3:
+            raise forms.ValidationError("Nome externo deve ter pelo menos 3 caracteres.")
+
+        return nome_externo
+
+    def clean(self):
+        """Validação geral do formulário"""
+        cleaned_data = super().clean()
+        centro_custo = cleaned_data.get('centro_custo')
+        ativo = cleaned_data.get('ativo')
+
+        # Validação adicional: apenas centros analíticos podem ter códigos externos ativos
+        # (esta regra pode ser flexibilizada se necessário)
+        if centro_custo and ativo and centro_custo.e_sintetico:
+            # Aviso, mas não erro (permitir flexibilidade)
+            pass
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        """Save customizado"""
+        centro_externo = super().save(commit=False)
+
+        # Limpar campos
+        if centro_externo.codigo_externo:
+            centro_externo.codigo_externo = centro_externo.codigo_externo.strip()
+        if centro_externo.nome_externo:
+            centro_externo.nome_externo = centro_externo.nome_externo.strip()
+        if centro_externo.sistema_origem:
+            centro_externo.sistema_origem = centro_externo.sistema_origem.strip()
+
+        if commit:
+            centro_externo.save()
+
+            # Log da operação
+            import logging
+            logger = logging.getLogger('synchrobi')
+            action = "atualizado" if self.instance.pk else "criado"
+            logger.info(
+                f'Centro de custo externo {action}: {centro_externo.codigo_externo} '
+                f'→ {centro_externo.centro_custo.codigo} por {getattr(self, "_user", "sistema")}'
+            )
+
+        return centro_externo

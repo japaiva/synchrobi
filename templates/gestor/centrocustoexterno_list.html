@@ -1,0 +1,136 @@
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}Códigos ERP - Centros de Custo | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="fas fa-bullseye text-primary me-2"></i>
+            Códigos ERP - Centros de Custo
+        </h2>
+        <a href="{% url 'gestor:centrocusto_tree' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Lista de Códigos ERP</h5>
+        </div>
+        <div class="card-body">
+            {% if page_obj %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Código ERP</th>
+                                <th>Nome</th>
+                                <th>Centro de Custo</th>
+                                <th>Sistema</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for externo in page_obj %}
+                            <tr id="row-{{ externo.id }}">
+                                <td><strong>{{ externo.codigo_externo }}</strong></td>
+                                <td>{{ externo.nome_externo }}</td>
+                                <td>{{ externo.centro_custo.codigo }} - {{ externo.centro_custo.nome }}</td>
+                                <td>
+                                    {% if externo.sistema_origem %}
+                                        <span class="badge bg-info text-dark">{{ externo.sistema_origem }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if externo.ativo %}
+                                        <span class="badge bg-success">Ativo</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inativo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            onclick="excluirCodigo({{ externo.id }}, '{{ externo.codigo_externo }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginação -->
+                {% if page_obj.has_other_pages %}
+                <nav aria-label="Page navigation">
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+                            </li>
+                        {% endif %}
+
+                        {% for num in page_obj.paginator.page_range %}
+                            {% if page_obj.number == num %}
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Próxima</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-link text-muted mb-3" style="font-size: 3rem;"></i>
+                    <p class="text-muted">Nenhum código ERP cadastrado</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% csrf_token %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function excluirCodigo(id, codigo) {
+    if (!confirm(`Deseja realmente excluir o código "${codigo}"?`)) {
+        return;
+    }
+
+    fetch(`/gestor/api/centros-custo-externos/${id}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`row-${id}`).remove();
+            alert(data.message);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Erro de conexão');
+        console.error(error);
+    });
+}
+</script>
+{% endblock %}

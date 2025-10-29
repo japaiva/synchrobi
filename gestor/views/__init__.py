@@ -40,15 +40,18 @@ from .centrocusto import (
     centrocusto_create_modal,        # Criar via modal
     centrocusto_update_modal,        # Editar via modal
     centrocusto_delete_ajax,         # Excluir via AJAX
-    
+
     # View principal da árvore
     centrocusto_tree_view,           # View principal da árvore (PRINCIPAL)
-    
+
+    # Exportação
+    export_centros_custo_excel,      # Exportar para Excel
+
     # APIs para árvore
     api_centrocusto_tree_data,       # API com filtros avançados
     api_validar_codigo_centrocusto,  # API para validação de código
     api_centro_custo_detalhes,       # API para detalhes do centro de custo
-    
+
     # Views mantidas para compatibilidade (redirecionam)
     centrocusto_list,                # Redireciona para árvore
     centrocusto_create,              # Redireciona para modal
@@ -62,14 +65,17 @@ from .contacontabil import (
     contacontabil_create_modal,      # Criar via modal
     contacontabil_update_modal,      # Editar via modal
     contacontabil_delete_ajax,       # Excluir via AJAX
-    
+
     # View principal da árvore
     contacontabil_tree_view,         # View principal da árvore (PRINCIPAL)
-    
+
+    # Exportação
+    export_contas_contabeis_excel,   # Exportar para Excel
+
     # APIs para árvore
     api_contacontabil_tree_data,     # API com filtros avançados
     api_validar_codigo_contacontabil, # API para validação de código
-    
+
     # Views mantidas para compatibilidade (redirecionam)
     contacontabil_list,              # Redireciona para árvore
     contacontabil_create,            # Redireciona para modal
@@ -83,10 +89,22 @@ from .contaexterna_inline import (
     contaexterna_list,                        # Lista com edição inline
     contaexterna_create,                      # Criar via inline/modal
     contaexterna_update,                      # Editar inline
-    
+
     # APIs para operações inline
     api_contaexterna_delete,                  # Excluir via AJAX
     api_validar_codigo_externo,               # Validação em tempo real
+)
+
+# Centro Custo Externo - Códigos ERP para centros de custo
+from .centrocustoexterno_inline import (
+    # CRUD com edição inline
+    centrocustoexterno_list,                  # Lista com edição inline
+    centrocustoexterno_create,                # Criar via inline/modal
+    centrocustoexterno_update,                # Editar inline
+
+    # APIs para operações inline
+    api_centrocustoexterno_delete,            # Excluir via AJAX
+    api_validar_codigo_externo_cc,            # Validação em tempo real
 )
 
 # Usuário

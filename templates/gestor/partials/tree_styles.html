@@ -110,7 +110,7 @@
     }
 
     .tree-children.expanded {
-        max-height: 2000px;
+        max-height: 50000px;
         opacity: 1;
     }
 
@@ -119,14 +119,15 @@
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        gap: 15px; /* Espaço entre conteúdo e badges */
+        gap: 20px; /* Aumentado: Espaço entre conteúdo e badges */
     }
 
     .tree-content {
         flex: 1;
         display: flex;
         align-items: center;
-        gap: 8px; /* Espaço entre elementos do conteúdo */
+        gap: 12px; /* Aumentado: Espaço entre elementos do conteúdo */
+        min-width: 0; /* Permite que o conteúdo encolha se necessário */
     }
 
     .tree-code {
@@ -137,7 +138,7 @@
         font-size: 12px;
         font-weight: 600;
         color: #495057;
-        min-width: 100px;
+        min-width: 120px; /* Aumentado para mais espaço */
         flex-shrink: 0; /* Não encolhe */
     }
 
@@ -145,14 +146,18 @@
         font-weight: 500;
         color: #212529;
         flex: 1; /* Ocupa espaço disponível */
-        margin-right: 12px; /* Espaço específico antes dos badges */
+        margin-right: 20px; /* Aumentado: Espaço específico antes dos badges */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap; /* Não quebra linha se ficar longo demais */
     }
 
     .tree-badges {
         display: flex;
-        gap: 8px; /* Espaço entre badges e ações */
+        gap: 12px; /* Aumentado: Espaço entre badges e ações */
         align-items: center;
         flex-shrink: 0; /* Não encolhe */
+        margin-left: auto; /* Empurra para a direita */
     }
 
     .type-badge {
@@ -181,7 +186,8 @@
         opacity: 0;
         transition: opacity 0.2s ease;
         display: flex;
-        gap: 4px; /* Espaço entre botões de ação */
+        gap: 6px; /* Aumentado: Espaço entre botões de ação */
+        margin-left: 10px; /* Espaço antes dos botões */
     }
 
     .tree-node:hover .tree-actions {
@@ -189,12 +195,13 @@
     }
 
     .btn-tree-action {
-        padding: 4px 8px;
+        padding: 5px 10px; /* Aumentado para botões maiores */
         font-size: 12px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
         transition: all 0.2s ease;
+        white-space: nowrap; /* Não quebra linha */
     }
 
     /* Espaçamentos específicos para informações da empresa */

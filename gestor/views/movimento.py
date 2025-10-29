@@ -271,10 +271,10 @@ def movimento_export_excel(request):
         # Cabeçalhos
         headers = [
             'Data', 'Mês', 'Ano', 'Período', 'Empresa',
-            'Código All Strategy', 'Nome Unidade',
-            'Código Centro Custo', 'Nome Centro Custo',
-            'Código Conta Contábil', 'Nome Conta Contábil',
-            'Código ERP', 'Nome ERP',
+            'Cod Unidade', 'Nome Unidade',
+            'Cod C.Custo', 'Nome Centro Custo',
+            'Cod Linha DRE', 'Nome Linha DRE',
+            'Cod C.Contabil', 'Nome C.Contabil',
             'Código Fornecedor', 'Razão Social Fornecedor',
             'Documento', 'Natureza', 'Valor', 'Histórico',
             'Código Projeto', 'Gerador', 'Rateio',
