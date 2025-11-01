@@ -88,6 +88,16 @@ urlpatterns = [
     path('contas-contabeis/<str:codigo>/', views.contacontabil_update, name='contacontabil_update'),
     path('contas-contabeis/<str:codigo>/deletar/', views.contacontabil_delete, name='contacontabil_delete'),
 
+    # ===== GRUPOS CC - CRUD SIMPLES =====
+    path('grupos-cc/', views.grupocc_list, name='grupocc_list'),
+    path('grupos-cc/novo/', views.grupocc_create, name='grupocc_create'),
+    path('grupos-cc/<str:codigo>/editar/', views.grupocc_update, name='grupocc_update'),
+    path('grupos-cc/<str:codigo>/excluir/', views.grupocc_delete, name='grupocc_delete'),
+
+    # APIs para Grupos CC
+    path('api/grupos-cc/validar-codigo/', views.api_validar_codigo_grupocc, name='api_validar_codigo_grupocc'),
+    path('api/grupos-cc/<str:codigo>/', views.api_grupocc_info, name='api_grupocc_info'),
+
     # ===== CONTAS CONTÁBEIS COM CÓDIGOS EXTERNOS =====
     
     # Redirecionamento simples para lista com filtro

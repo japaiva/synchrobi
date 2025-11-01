@@ -381,7 +381,8 @@ class CentroCustoExternoForm(forms.ModelForm):
         model = CentroCustoExterno
         fields = [
             'centro_custo', 'codigo_externo', 'nome_externo',
-            'sistema_origem', 'empresas_utilizacao', 'observacoes', 'ativo'
+            'sistema_origem', 'empresas_utilizacao', 'observacoes', 'ativo',
+            'codigo_responsavel', 'codigo_beneficiado'
         ]
 
         widgets = {
@@ -414,6 +415,14 @@ class CentroCustoExternoForm(forms.ModelForm):
             'ativo': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
             }),
+            'codigo_responsavel': forms.Select(attrs={
+                'class': 'form-select',
+                'placeholder': 'Selecione o responsável'
+            }),
+            'codigo_beneficiado': forms.Select(attrs={
+                'class': 'form-select',
+                'placeholder': 'Selecione o beneficiado'
+            }),
         }
 
     def __init__(self, *args, **kwargs):
@@ -422,6 +431,11 @@ class CentroCustoExternoForm(forms.ModelForm):
 
         # Filtrar apenas centros de custo ativos
         self.fields['centro_custo'].queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
+
+        # Filtrar apenas grupos CC ativos para responsavel e beneficiado
+        from core.models import GrupoCC
+        self.fields['codigo_responsavel'].queryset = GrupoCC.objects.filter(ativa=True).order_by('codigo')
+        self.fields['codigo_beneficiado'].queryset = GrupoCC.objects.filter(ativa=True).order_by('codigo')
 
         # Se foi passado um código de centro de custo, pré-selecionar
         if centro_custo_codigo:
@@ -437,11 +451,15 @@ class CentroCustoExternoForm(forms.ModelForm):
         self.fields['nome_externo'].help_text = "Nome/descrição do centro conforme aparece no sistema externo"
         self.fields['sistema_origem'].help_text = "Nome do ERP ou sistema de origem"
         self.fields['empresas_utilizacao'].help_text = "Empresas que utilizam este centro de custo (separar com &)"
+        self.fields['codigo_responsavel'].help_text = "Grupo CC responsável (opcional)"
+        self.fields['codigo_beneficiado'].help_text = "Grupo CC beneficiado (opcional)"
 
         # Campos obrigatórios
         self.fields['centro_custo'].required = True
         self.fields['codigo_externo'].required = True
         self.fields['nome_externo'].required = True
+        self.fields['codigo_responsavel'].required = False
+        self.fields['codigo_beneficiado'].required = False
 
     def clean_codigo_externo(self):
         """Validação do código externo"""

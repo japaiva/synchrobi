@@ -1,0 +1,159 @@
+{% extends 'gestor/base_gestor.html' %}
+
+{% block title %}{% if form.instance.codigo %}Editar{% else %}Novo{% endif %} Grupo CC | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="card shadow">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas {% if form.instance.codigo %}fa-edit{% else %}fa-plus-circle{% endif %} me-2"></i>
+      {% if form.instance.codigo %}Editar{% else %}Novo{% endif %} Grupo CC
+    </h5>
+    <a href="{% url 'gestor:grupocc_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p class="mb-0">{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <!-- Informações do Grupo CC -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="card-title mb-0">
+            <i class="fas fa-info-circle me-2"></i>
+            Dados do Grupo CC
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Primeira linha: Código e Status -->
+            <div class="col-md-6">
+              <label for="{{ form.codigo.id_for_label }}" class="form-label">
+                Código <span class="text-danger">*</span>
+              </label>
+              {{ form.codigo }}
+              {% if form.codigo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.codigo.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-3">
+              <div class="mt-4">
+                <div class="form-check form-switch">
+                  {{ form.ativa }}
+                  <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
+                    Grupo Ativo
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Status</label>
+              <div class="form-control bg-light" style="height: 38px; padding-top: 8px;">
+                {% if form.instance.codigo %}
+                  {% if form.instance.ativa %}
+                    <span class="badge bg-success">Ativo</span>
+                  {% else %}
+                    <span class="badge bg-danger">Inativo</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-info">Novo Grupo CC</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Segunda linha: Descrição -->
+            <div class="col-md-12">
+              <label for="{{ form.descricao.id_for_label }}" class="form-label">
+                Descrição <span class="text-danger">*</span>
+              </label>
+              {{ form.descricao }}
+              {% if form.descricao.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.descricao.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botões de ação -->
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if form.instance.codigo %}
+          <a href="{% url 'gestor:grupocc_delete' form.instance.codigo %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i> Excluir
+          </a>
+          {% endif %}
+        </div>
+        <div>
+          <a href="{% url 'gestor:grupocc_list' %}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-times me-1"></i> Cancelar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> {% if form.instance.codigo %}Salvar Alterações{% else %}Criar Grupo CC{% endif %}
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Validação em tempo real do código
+    const codigoInput = document.getElementById('{{ form.codigo.id_for_label }}');
+    if (codigoInput) {
+        codigoInput.addEventListener('blur', function() {
+            const codigo = this.value.trim();
+            if (codigo && codigo.length <= 10) {
+                fetch(`{% url 'gestor:api_validar_codigo_grupocc' %}?codigo=${codigo}&atual={{ form.instance.codigo|default:'' }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const feedbackDiv = this.parentElement.querySelector('.validation-feedback') ||
+                                           document.createElement('div');
+                        feedbackDiv.className = 'validation-feedback small mt-1';
+
+                        if (data.valid) {
+                            feedbackDiv.className += ' text-success';
+                            feedbackDiv.textContent = data.message || 'Código válido';
+                            if (data.codigo_formatado && data.codigo_formatado !== codigo) {
+                                this.value = data.codigo_formatado;
+                            }
+                        } else {
+                            feedbackDiv.className += ' text-danger';
+                            feedbackDiv.textContent = data.error;
+                        }
+
+                        if (!this.parentElement.querySelector('.validation-feedback')) {
+                            this.parentElement.appendChild(feedbackDiv);
+                        }
+                    })
+                    .catch(error => console.error('Erro ao validar código:', error));
+            }
+        });
+
+        // Converter para maiúsculas automaticamente
+        codigoInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+        });
+    }
+});
+</script>
+{% endblock %}

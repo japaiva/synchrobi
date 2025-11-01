@@ -19,10 +19,10 @@ def contaexterna_list(request):
     
     # Query base
     queryset = ContaExterna.objects.select_related('conta_contabil').order_by('codigo_externo')
-    
+
     # Filtrar por conta se especificado
     if conta_codigo:
-        queryset = queryset.filter(conta_contabil__codigo=conta_codigo, ativa=True)
+        queryset = queryset.filter(conta_contabil__codigo=conta_codigo)
     
     # Paginação
     paginator = Paginator(queryset, 20)
@@ -51,38 +51,39 @@ def contaexterna_create(request):
             codigo_externo = request.POST.get('codigo_externo', '').strip()
             nome_externo = request.POST.get('nome_externo', '').strip()
             sistema_origem = request.POST.get('sistema_origem', '').strip()
-            
+            ativa = request.POST.get('ativa') == 'on'
+
             # Validações básicas
             if not conta_contabil_codigo:
                 return JsonResponse({'success': False, 'message': 'Conta contábil é obrigatória'})
-            
+
             if not codigo_externo:
                 return JsonResponse({'success': False, 'message': 'Código externo é obrigatório'})
-            
+
             if not nome_externo:
                 return JsonResponse({'success': False, 'message': 'Nome externo é obrigatório'})
-            
+
             # Buscar conta contábil
             try:
                 conta_contabil = ContaContabil.objects.get(codigo=conta_contabil_codigo)
             except ContaContabil.DoesNotExist:
                 return JsonResponse({'success': False, 'message': 'Conta contábil não encontrada'})
-            
-            # Verificar duplicação
-            if ContaExterna.objects.filter(
+
+            # Verificar duplicação (apenas entre códigos ativos)
+            if ativa and ContaExterna.objects.filter(
                 conta_contabil=conta_contabil,
                 codigo_externo=codigo_externo,
                 ativa=True
             ).exists():
                 return JsonResponse({'success': False, 'message': f'Código "{codigo_externo}" já existe para esta conta'})
-            
+
             # Criar conta externa
             conta_externa = ContaExterna.objects.create(
                 conta_contabil=conta_contabil,
                 codigo_externo=codigo_externo,
                 nome_externo=nome_externo,
                 sistema_origem=sistema_origem,
-                ativa=True
+                ativa=ativa
             )
             
             logger.info(f'Conta externa criada: {conta_externa.codigo_externo} por {request.user}')
@@ -113,28 +114,31 @@ def contaexterna_update(request, pk):
             codigo_externo = request.POST.get('codigo_externo', '').strip()
             nome_externo = request.POST.get('nome_externo', '').strip()
             sistema_origem = request.POST.get('sistema_origem', '').strip()
-            
+            ativa = request.POST.get('ativa') == 'on'
+
             # Validações básicas
             if not codigo_externo:
                 return JsonResponse({'success': False, 'message': 'Código externo é obrigatório'})
-            
+
             if not nome_externo:
                 return JsonResponse({'success': False, 'message': 'Nome externo é obrigatório'})
-            
-            # Verificar duplicação (excluindo o atual)
-            duplicata = ContaExterna.objects.filter(
-                conta_contabil=conta_externa.conta_contabil,
-                codigo_externo=codigo_externo,
-                ativa=True
-            ).exclude(pk=pk)
-            
-            if duplicata.exists():
-                return JsonResponse({'success': False, 'message': f'Código "{codigo_externo}" já existe para esta conta'})
-            
+
+            # Verificar duplicação (excluindo o atual, apenas entre ativos)
+            if ativa:
+                duplicata = ContaExterna.objects.filter(
+                    conta_contabil=conta_externa.conta_contabil,
+                    codigo_externo=codigo_externo,
+                    ativa=True
+                ).exclude(pk=pk)
+
+                if duplicata.exists():
+                    return JsonResponse({'success': False, 'message': f'Código "{codigo_externo}" já existe para esta conta'})
+
             # Atualizar
             conta_externa.codigo_externo = codigo_externo
             conta_externa.nome_externo = nome_externo
             conta_externa.sistema_origem = sistema_origem
+            conta_externa.ativa = ativa
             conta_externa.save()
             
             logger.info(f'Conta externa editada: {conta_externa.codigo_externo} por {request.user}')

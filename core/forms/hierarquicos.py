@@ -189,7 +189,7 @@ class ContaContabilForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
     
     class Meta:
         model = ContaContabil
-        fields = ['codigo', 'nome', 'codigo_pai', 'tipo', 'descricao', 'ativa']
+        fields = ['codigo', 'nome', 'codigo_pai', 'tipo', 'descricao', 'ativa', 'relatorio_despesa']
         widgets = {
             'codigo': forms.TextInput(attrs={'class': 'form-control'}),
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
@@ -197,6 +197,7 @@ class ContaContabilForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
             'tipo': forms.Select(attrs={'class': 'form-select'}),
             'descricao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'ativa': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'relatorio_despesa': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
     def __init__(self, *args, **kwargs):

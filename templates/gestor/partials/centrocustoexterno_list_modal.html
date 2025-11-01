@@ -7,12 +7,24 @@
     <div class="border p-2 mb-2" id="item-{{ externo.id }}">
 
         <!-- Visualização -->
-        <div id="view-{{ externo.id }}">
+        <div id="view-{{ externo.id }}" {% if not externo.ativo %}style="opacity: 0.6;"{% endif %}>
             <div class="d-flex justify-content-between">
                 <div>
                     <strong>{{ externo.codigo_externo }}</strong> - {{ externo.nome_externo }}
                     {% if externo.sistema_origem %}
                         <span class="badge bg-info text-dark">{{ externo.sistema_origem }}</span>
+                    {% endif %}
+                    {% if not externo.ativo %}
+                        <span class="badge bg-secondary">Inativo</span>
+                    {% else %}
+                        <span class="badge bg-success">Ativo</span>
+                    {% endif %}
+                    <br>
+                    {% if externo.codigo_responsavel %}
+                        <small class="text-muted">Resp: {{ externo.codigo_responsavel.codigo }} - {{ externo.codigo_responsavel.descricao }}</small>
+                    {% endif %}
+                    {% if externo.codigo_beneficiado %}
+                        <br><small class="text-muted">Benef: {{ externo.codigo_beneficiado.codigo }} - {{ externo.codigo_beneficiado.descricao }}</small>
                     {% endif %}
                 </div>
                 <div>
@@ -57,17 +69,56 @@
         <!-- Edição -->
         <div id="edit-{{ externo.id }}" style="display: none;">
             <div class="row g-2">
-                <div class="col-4">
-                    <input type="text" id="codigo-{{ externo.id }}" class="form-control"
+                <div class="col-md-6">
+                    <label class="form-label small">Código ERP *</label>
+                    <input type="text" id="codigo-{{ externo.id }}" class="form-control form-control-sm"
                            value="{{ externo.codigo_externo }}" placeholder="Código ERP">
                 </div>
-                <div class="col-5">
-                    <input type="text" id="nome-{{ externo.id }}" class="form-control"
-                           value="{{ externo.nome_externo }}" placeholder="Nome">
-                </div>
-                <div class="col-3">
-                    <input type="text" id="sistema-{{ externo.id }}" class="form-control"
+                <div class="col-md-6">
+                    <label class="form-label small">Sistema</label>
+                    <input type="text" id="sistema-{{ externo.id }}" class="form-control form-control-sm"
                            value="{{ externo.sistema_origem|default:'' }}" placeholder="Sistema">
+                </div>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-12">
+                    <label class="form-label small">Nome *</label>
+                    <input type="text" id="nome-{{ externo.id }}" class="form-control form-control-sm"
+                           value="{{ externo.nome_externo }}" placeholder="Nome/Descrição">
+                </div>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-md-6">
+                    <label class="form-label small">Responsável</label>
+                    <select id="responsavel-{{ externo.id }}" class="form-select form-select-sm">
+                        <option value="">---------</option>
+                        {% for grupo in grupos_cc %}
+                        <option value="{{ grupo.codigo }}" {% if externo.codigo_responsavel and externo.codigo_responsavel.codigo == grupo.codigo %}selected{% endif %}>
+                            {{ grupo.codigo }} - {{ grupo.descricao }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small">Beneficiado</label>
+                    <select id="beneficiado-{{ externo.id }}" class="form-select form-select-sm">
+                        <option value="">---------</option>
+                        {% for grupo in grupos_cc %}
+                        <option value="{{ grupo.codigo }}" {% if externo.codigo_beneficiado and externo.codigo_beneficiado.codigo == grupo.codigo %}selected{% endif %}>
+                            {{ grupo.codigo }} - {{ grupo.descricao }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 mt-2">
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="ativo-{{ externo.id }}" {% if externo.ativo %}checked{% endif %}>
+                        <label class="form-check-label small" for="ativo-{{ externo.id }}">
+                            Código ativo
+                        </label>
+                    </div>
                 </div>
             </div>
             <div class="mt-2">
@@ -76,6 +127,9 @@
                             const codigo = document.getElementById('codigo-{{ externo.id }}').value.trim();
                             const nome = document.getElementById('nome-{{ externo.id }}').value.trim();
                             const sistema = document.getElementById('sistema-{{ externo.id }}').value.trim();
+                            const responsavel = document.getElementById('responsavel-{{ externo.id }}').value;
+                            const beneficiado = document.getElementById('beneficiado-{{ externo.id }}').value;
+                            const ativo = document.getElementById('ativo-{{ externo.id }}').checked;
                             const errorDiv = document.getElementById('error-{{ externo.id }}');
 
                             if (!codigo || !nome) {
@@ -88,8 +142,12 @@
                             formData.append('codigo_externo', codigo);
                             formData.append('nome_externo', nome);
                             formData.append('sistema_origem', sistema);
-                            formData.append('centro_custo', '{{ filtros.centro_codigo }}');
-                            formData.append('ativo', 'on');
+                            formData.append('codigo_responsavel', responsavel);
+                            formData.append('codigo_beneficiado', beneficiado);
+                            formData.append('centro_custo', '{{ externo.centro_custo.codigo }}');
+                            if (ativo) {
+                                formData.append('ativo', 'on');
+                            }
                             formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
                             fetch('{% url "gestor:centrocustoexterno_update" externo.id %}', {
@@ -166,14 +224,49 @@
     <!-- Formulário para novo -->
     <div id="new-form" class="mt-3" style="display: none;">
         <div class="row g-2">
-            <div class="col-4">
-                <input type="text" id="new-codigo" class="form-control" placeholder="Código ERP">
+            <div class="col-md-6">
+                <label class="form-label small">Código ERP *</label>
+                <input type="text" id="new-codigo" class="form-control form-control-sm" placeholder="Código ERP">
             </div>
-            <div class="col-5">
-                <input type="text" id="new-nome" class="form-control" placeholder="Nome/Descrição">
+            <div class="col-md-6">
+                <label class="form-label small">Sistema</label>
+                <input type="text" id="new-sistema" class="form-control form-control-sm" placeholder="Sistema">
             </div>
-            <div class="col-3">
-                <input type="text" id="new-sistema" class="form-control" placeholder="Sistema">
+        </div>
+        <div class="row g-2 mt-1">
+            <div class="col-12">
+                <label class="form-label small">Nome *</label>
+                <input type="text" id="new-nome" class="form-control form-control-sm" placeholder="Nome/Descrição">
+            </div>
+        </div>
+        <div class="row g-2 mt-1">
+            <div class="col-md-6">
+                <label class="form-label small">Responsável</label>
+                <select id="new-responsavel" class="form-select form-select-sm">
+                    <option value="">---------</option>
+                    {% for grupo in grupos_cc %}
+                    <option value="{{ grupo.codigo }}">{{ grupo.codigo }} - {{ grupo.descricao }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small">Beneficiado</label>
+                <select id="new-beneficiado" class="form-select form-select-sm">
+                    <option value="">---------</option>
+                    {% for grupo in grupos_cc %}
+                    <option value="{{ grupo.codigo }}">{{ grupo.codigo }} - {{ grupo.descricao }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="row g-2 mt-2">
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="new-ativo" checked>
+                    <label class="form-check-label small" for="new-ativo">
+                        Código ativo
+                    </label>
+                </div>
             </div>
         </div>
         <div class="mt-2">
@@ -182,6 +275,9 @@
                         const codigo = document.getElementById('new-codigo').value.trim();
                         const nome = document.getElementById('new-nome').value.trim();
                         const sistema = document.getElementById('new-sistema').value.trim();
+                        const responsavel = document.getElementById('new-responsavel').value;
+                        const beneficiado = document.getElementById('new-beneficiado').value;
+                        const ativo = document.getElementById('new-ativo').checked;
                         const errorDiv = document.getElementById('new-error');
 
                         if (!codigo || !nome) {
@@ -194,8 +290,12 @@
                         formData.append('codigo_externo', codigo);
                         formData.append('nome_externo', nome);
                         formData.append('sistema_origem', sistema);
+                        formData.append('codigo_responsavel', responsavel);
+                        formData.append('codigo_beneficiado', beneficiado);
                         formData.append('centro_custo', '{{ filtros.centro_codigo }}');
-                        formData.append('ativo', 'on');
+                        if (ativo) {
+                            formData.append('ativo', 'on');
+                        }
                         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
                         fetch('{% url "gestor:centrocustoexterno_create" %}', {
@@ -212,6 +312,9 @@
                                 document.getElementById('new-codigo').value = '';
                                 document.getElementById('new-nome').value = '';
                                 document.getElementById('new-sistema').value = '';
+                                document.getElementById('new-responsavel').value = '';
+                                document.getElementById('new-beneficiado').value = '';
+                                document.getElementById('new-ativo').checked = true;
                                 document.getElementById('new-form').style.display = 'none';
                                 errorDiv.style.display = 'none';
 
@@ -249,6 +352,9 @@
                         document.getElementById('new-codigo').value = '';
                         document.getElementById('new-nome').value = '';
                         document.getElementById('new-sistema').value = '';
+                        document.getElementById('new-responsavel').value = '';
+                        document.getElementById('new-beneficiado').value = '';
+                        document.getElementById('new-ativo').checked = true;
                     ">
                 Cancelar
             </button>

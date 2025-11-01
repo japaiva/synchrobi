@@ -7,6 +7,7 @@ from .base import CustomDateInput, CustomDateTimeInput, DateAwareModelForm, Hier
 from .usuario import UsuarioForm
 from .empresa import EmpresaForm
 from .hierarquicos import UnidadeForm, CentroCustoForm, ContaContabilForm
+from .grupocc import GrupoCCForm
 from .fornecedor import FornecedorForm
 from .movimento import MovimentoForm, MovimentoFiltroForm
 
@@ -33,6 +34,7 @@ __all__ = [
     'UnidadeForm',
     'CentroCustoForm',
     'ContaContabilForm',
+    'GrupoCCForm',
     'FornecedorForm',
     'MovimentoForm',
     'MovimentoFiltroForm',

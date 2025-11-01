@@ -409,6 +409,7 @@ class ContaContabil(models.Model, HierarchiaDeclaradaMixin):
     
     nivel = models.IntegerField(verbose_name="Nível Hierárquico")
     ativa = models.BooleanField(default=True, verbose_name="Ativa")
+    relatorio_despesa = models.BooleanField(default=True, verbose_name="Relatório Despesa")
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
     
@@ -497,6 +498,7 @@ class ContaContabil(models.Model, HierarchiaDeclaradaMixin):
             models.Index(fields=['codigo']),
             models.Index(fields=['codigo_pai']),
             models.Index(fields=['ativa']),
+            models.Index(fields=['relatorio_despesa']),
             models.Index(fields=['nivel']),
             models.Index(fields=['tipo']),
         ]

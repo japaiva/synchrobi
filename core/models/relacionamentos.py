@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from .usuario import Usuario
 from .empresa import Empresa
 from .hierarquicos import CentroCusto, ContaContabil
+from .grupocc import GrupoCC
 
 class ParametroSistema(models.Model):
     """Parâmetros globais de configuração do sistema"""
@@ -401,6 +402,27 @@ class CentroCustoExterno(models.Model):
         help_text="Se o centro de custo do ERP está ativo"
     )
 
+    # Relacionamentos com Grupo CC
+    codigo_responsavel = models.ForeignKey(
+        GrupoCC,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='centros_custo_responsavel',
+        verbose_name="Responsável",
+        help_text="Grupo CC responsável"
+    )
+
+    codigo_beneficiado = models.ForeignKey(
+        GrupoCC,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='centros_custo_beneficiado',
+        verbose_name="Beneficiado",
+        help_text="Grupo CC beneficiado"
+    )
+
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
 
@@ -475,4 +497,6 @@ class CentroCustoExterno(models.Model):
             models.Index(fields=['ativo']),
             models.Index(fields=['sincronizado']),
             models.Index(fields=['codigo_externo', 'ativo']),  # ÍNDICE COMPOSTO
+            models.Index(fields=['codigo_responsavel']),
+            models.Index(fields=['codigo_beneficiado']),
         ]

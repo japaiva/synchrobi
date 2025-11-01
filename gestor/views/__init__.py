@@ -83,6 +83,18 @@ from .contacontabil import (
     contacontabil_delete,            # Redireciona para AJAX
 )
 
+# Grupo CC - CRUD simples
+from .grupocc import (
+    grupocc_list,                    # Lista de grupos CC
+    grupocc_create,                  # Criar grupo CC
+    grupocc_update,                  # Editar grupo CC
+    grupocc_delete,                  # Excluir grupo CC
+
+    # APIs para grupos CC
+    api_validar_codigo_grupocc,      # Validação de código
+    api_grupocc_info,                # Informações do grupo CC
+)
+
 # Conta Externa - Edição inline moderna
 from .contaexterna_inline import (
     # CRUD com edição inline

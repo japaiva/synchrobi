@@ -28,6 +28,8 @@
                                 <th>Código ERP</th>
                                 <th>Nome</th>
                                 <th>Centro de Custo</th>
+                                <th>Responsável</th>
+                                <th>Beneficiado</th>
                                 <th>Sistema</th>
                                 <th>Status</th>
                                 <th>Ações</th>
@@ -39,6 +41,22 @@
                                 <td><strong>{{ externo.codigo_externo }}</strong></td>
                                 <td>{{ externo.nome_externo }}</td>
                                 <td>{{ externo.centro_custo.codigo }} - {{ externo.centro_custo.nome }}</td>
+                                <td>
+                                    {% if externo.codigo_responsavel %}
+                                        <span class="badge bg-secondary">{{ externo.codigo_responsavel.codigo }}</span>
+                                        <small class="text-muted d-block">{{ externo.codigo_responsavel.descricao }}</small>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if externo.codigo_beneficiado %}
+                                        <span class="badge bg-secondary">{{ externo.codigo_beneficiado.codigo }}</span>
+                                        <small class="text-muted d-block">{{ externo.codigo_beneficiado.descricao }}</small>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if externo.sistema_origem %}
                                         <span class="badge bg-info text-dark">{{ externo.sistema_origem }}</span>
@@ -54,8 +72,14 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    <a href="{% url 'gestor:centrocustoexterno_update' externo.id %}"
+                                       class="btn btn-sm btn-primary me-1"
+                                       title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
                                     <button type="button" class="btn btn-sm btn-danger"
-                                            onclick="excluirCodigo({{ externo.id }}, '{{ externo.codigo_externo }}')">
+                                            onclick="excluirCodigo({{ externo.id }}, '{{ externo.codigo_externo }}')"
+                                            title="Excluir">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </td>

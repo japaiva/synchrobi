@@ -67,7 +67,7 @@
                     </div>
                 </div>
                 
-                <!-- Segunda linha: Tipo e Ativa -->
+                <!-- Segunda linha: Tipo -->
                 <div class="col-md-6">
                     <label for="{{ form.tipo.id_for_label }}" class="form-label">
                         Tipo <span class="text-danger">*</span>
@@ -80,19 +80,34 @@
                     {% endif %}
                     <div class="form-text">{{ form.tipo.help_text }}</div>
                 </div>
-                
+
+                <!-- Checkboxes: Conta Ativa e Relatório Despesa -->
                 <div class="col-md-6">
-                    <div class="form-check form-switch mt-4">
-                        {{ form.ativa }}
-                        <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
-                            Conta Ativa
-                        </label>
-                    </div>
-                    {% if form.ativa.errors %}
-                        <div class="invalid-feedback d-block">
-                            {% for error in form.ativa.errors %}{{ error }}{% endfor %}
+                    <div class="mt-4">
+                        <div class="form-check form-switch">
+                            {{ form.ativa }}
+                            <label class="form-check-label" for="{{ form.ativa.id_for_label }}">
+                                Conta Ativa
+                            </label>
                         </div>
-                    {% endif %}
+                        {% if form.ativa.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.ativa.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="form-check form-switch mt-2">
+                            {{ form.relatorio_despesa }}
+                            <label class="form-check-label" for="{{ form.relatorio_despesa.id_for_label }}">
+                                Relatório Despesa
+                            </label>
+                        </div>
+                        {% if form.relatorio_despesa.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.relatorio_despesa.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
                 
                 <!-- Terceira linha: Nome -->
