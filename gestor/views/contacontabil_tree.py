@@ -13,9 +13,9 @@ def contacontabil_tree_view(request):
     """Visualização hierárquica de contas contábeis - HIERARQUIA DECLARADA"""
     
     try:
-        # Query única otimizada
-        contas_queryset = ContaContabil.objects.filter(ativa=True).order_by('codigo')
-        
+        # Query única otimizada - incluindo inativas
+        contas_queryset = ContaContabil.objects.all().order_by('codigo')
+
         # Construir árvore usando hierarquia declarada
         tree_data = construir_arvore_declarada(contas_queryset)
         

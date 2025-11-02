@@ -22,9 +22,9 @@ def contacontabil_tree_view(request):
     """Visualização hierárquica de contas contábeis - HIERARQUIA DECLARADA"""
     
     try:
-        # Query única otimizada
-        contas_queryset = ContaContabil.objects.filter(ativa=True).order_by('codigo')
-        
+        # Query única otimizada - incluindo inativas
+        contas_queryset = ContaContabil.objects.all().order_by('codigo')
+
         # Construir árvore usando hierarquia declarada (importar de contacontabil_tree.py)
         from .contacontabil_tree import construir_arvore_declarada, calcular_stats_contas
         tree_data = construir_arvore_declarada(contas_queryset)
@@ -287,13 +287,11 @@ def api_contacontabil_tree_data(request):
         tipo = request.GET.get('tipo', '')
         ativa = request.GET.get('ativa', '')
         
-        # Query com filtros
-        queryset = ContaContabil.objects.order_by('codigo')
-        
+        # Query com filtros - incluindo inativas por padrão
+        queryset = ContaContabil.objects.all().order_by('codigo')
+
         if ativa != '':
             queryset = queryset.filter(ativa=ativa.lower() == 'true')
-        else:
-            queryset = queryset.filter(ativa=True)
         
         if search:
             queryset = queryset.filter(

@@ -274,28 +274,36 @@ class TreeManager {
     }
     
     createNodeHTML(item, hasChildren, isExpanded, typeClass) {
-        const typeBadge = item.tipo ? 
+        // Verificar se item está inativo (ativo ou ativa dependendo do modelo)
+        const isInactive = (item.ativo === false || item.ativa === false);
+        const inactiveClass = isInactive ? 'inactive' : '';
+
+        const typeBadge = item.tipo ?
             `<span class="type-badge ${typeClass}">${item.tipo === 'A' ? 'Analítico' : 'Sintético'}</span>` : '';
-        
-        const empresaInfo = this.config.hasCompanyField && item.empresa_sigla ? 
+
+        const inactiveBadge = isInactive ?
+            `<span class="badge bg-secondary ms-2"><i class="fas fa-ban me-1"></i>Inativo</span>` : '';
+
+        const empresaInfo = this.config.hasCompanyField && item.empresa_sigla ?
             `<small class="text-muted ms-2">(${item.empresa_sigla})</small>` : '';
-        
+
         const nivelDisplay = this.config.isDeclarativeHierarchy ? item.nivel : this.calculateLevel(item.codigo);
-        
+
         const actionButtons = this.createActionButtons(item);
-        
+
         return `
-            <div class="tree-node level-${nivelDisplay} ${typeClass}">
+            <div class="tree-node level-${nivelDisplay} ${typeClass} ${inactiveClass}">
                 <div class="tree-info">
                     <div class="tree-content">
-                        ${hasChildren ? 
+                        ${hasChildren ?
                             `<button class="tree-toggle ${isExpanded ? 'expanded' : ''}" onclick="treeManager.toggleNode(event, '${item.codigo}')">
                                 <i class="fas fa-chevron-right"></i>
-                            </button>` : 
+                            </button>` :
                             '<span style="width: 22px; display: inline-block;"></span>'
                         }
                         <span class="tree-code">${this.escapeHtml(item.codigo)}</span>
                         <span class="tree-name">${this.escapeHtml(item.nome)}</span>
+                        ${inactiveBadge}
                         ${empresaInfo}
                     </div>
                     <div class="tree-badges">
@@ -306,7 +314,7 @@ class TreeManager {
                     </div>
                 </div>
             </div>
-            ${hasChildren ? 
+            ${hasChildren ?
                 `<ul class="tree-children ${isExpanded ? 'expanded' : 'collapsed'}"></ul>` : ''
             }
         `;

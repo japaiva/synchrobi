@@ -27,9 +27,9 @@ def centrocusto_tree_view(request):
     """Visualização hierárquica de centros de custo - HIERARQUIA DECLARADA"""
     
     try:
-        # Query única otimizada
-        centros_queryset = CentroCusto.objects.filter(ativo=True).order_by('codigo')
-        
+        # Query única otimizada - incluindo inativos
+        centros_queryset = CentroCusto.objects.all().order_by('codigo')
+
         # Construir árvore usando hierarquia declarada
         tree_data = construir_arvore_declarada(centros_queryset)
         
@@ -348,13 +348,11 @@ def api_centrocusto_tree_data(request):
         tipo = request.GET.get('tipo', '')
         ativo = request.GET.get('ativo', '')
         
-        # Query com filtros
-        queryset = CentroCusto.objects.order_by('codigo')
-        
+        # Query com filtros - incluindo inativos por padrão
+        queryset = CentroCusto.objects.all().order_by('codigo')
+
         if ativo != '':
             queryset = queryset.filter(ativo=ativo.lower() == 'true')
-        else:
-            queryset = queryset.filter(ativo=True)
         
         if search:
             queryset = queryset.filter(
@@ -385,7 +383,7 @@ def api_centrocusto_tree_data(request):
             'success': True,
             'tree_data': tree_data,
             'stats': stats,
-            'total_sem_filtro': CentroCusto.objects.filter(ativo=True).count()
+            'total_sem_filtro': CentroCusto.objects.count()
         })
         
     except Exception as e:

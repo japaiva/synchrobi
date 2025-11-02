@@ -70,6 +70,21 @@
         border-left-width: 4px;
     }
 
+    .tree-node.inactive {
+        opacity: 0.6;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        border-left-color: #6c757d !important;
+    }
+
+    .tree-node.inactive .tree-code,
+    .tree-node.inactive .tree-name {
+        color: #6c757d;
+    }
+
+    .tree-node.inactive:hover {
+        opacity: 0.8;
+    }
+
     .tree-toggle {
         display: inline-flex;
         align-items: center;
