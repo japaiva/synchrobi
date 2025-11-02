@@ -54,7 +54,6 @@
                   {% for error in form.codigo.errors %}{{ error }}{% endfor %}
                 </div>
               {% endif %}
-              <div class="form-text">{{ form.codigo.help_text }}</div>
             </div>
             
             <div class="col-md-3">
@@ -97,7 +96,6 @@
                   {% for error in form.razao_social.errors %}{{ error }}{% endfor %}
                 </div>
               {% endif %}
-              <div class="form-text">{{ form.razao_social.help_text }}</div>
             </div>
             
             <!-- Terceira linha: Nome Fantasia -->
@@ -109,6 +107,19 @@
               {% if form.nome_fantasia.errors %}
                 <div class="text-danger small mt-1">
                   {% for error in form.nome_fantasia.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Quarta linha: Grupo de Fornecedor -->
+            <div class="col-md-12">
+              <label for="{{ form.grupo.id_for_label }}" class="form-label">
+                Grupo de Fornecedor
+              </label>
+              {{ form.grupo }}
+              {% if form.grupo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.grupo.errors %}{{ error }}{% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -136,7 +147,6 @@
                   {% for error in form.cnpj_cpf.errors %}{{ error }}{% endfor %}
                 </div>
               {% endif %}
-              <div class="form-text">{{ form.cnpj_cpf.help_text }}</div>
             </div>
             
             <!-- Preview do tipo de pessoa -->

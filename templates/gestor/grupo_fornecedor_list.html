@@ -1,16 +1,18 @@
+<!-- gestor/templates/gestor/grupo_fornecedor_list.html -->
 {% extends 'gestor/base_gestor.html' %}
+{% load static %}
 
-{% block title %}Grupos CC | SynchroBI{% endblock %}
+{% block title %}Grupos de Fornecedores | SynchroBI{% endblock %}
 
 {% block content %}
-<div class="card shadow" style="max-width: 1400px; margin: 0 auto;">
+<div class="card shadow">
   <div class="card-header bg-light d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      Grupos de Centro de Custo
+      Grupos de Fornecedores
     </h5>
     <div>
-      <a href="{% url 'gestor:grupocc_create' %}" class="btn btn-primary btn-sm">
-        <i class="fas fa-plus me-1"></i> Novo Grupo CC
+      <a href="{% url 'gestor:grupo_fornecedor_create' %}" class="btn btn-primary btn-sm">
+        <i class="fas fa-plus me-1"></i> Novo Grupo
       </a>
       <a href="{% url 'gestor:dashboard' %}" class="btn btn-outline-secondary btn-sm">
         <i class="fas fa-arrow-left me-1"></i> Voltar
@@ -24,15 +26,15 @@
       <div class="col-md-6">
         <label for="search" class="form-label small">Buscar</label>
         <input type="text" name="search" id="search" class="form-control form-control-sm"
-               placeholder="Código ou descrição..." value="{{ search|default:'' }}">
+               placeholder="Código, nome ou descrição..." value="{{ search|default:'' }}">
       </div>
 
       <div class="col-md-2">
-        <label for="ativa" class="form-label small">Status</label>
-        <select name="ativa" id="ativa" class="form-select form-select-sm">
+        <label for="ativo" class="form-label small">Status</label>
+        <select name="ativo" id="ativo" class="form-select form-select-sm">
           <option value="">Todos</option>
-          <option value="true" {% if ativa == 'true' %}selected{% endif %}>Ativos</option>
-          <option value="false" {% if ativa == 'false' %}selected{% endif %}>Inativos</option>
+          <option value="true" {% if ativo == 'true' %}selected{% endif %}>Ativos</option>
+          <option value="false" {% if ativo == 'false' %}selected{% endif %}>Inativos</option>
         </select>
       </div>
 
@@ -43,7 +45,7 @@
       </div>
 
       <div class="col-md-2">
-        <a href="{% url 'gestor:grupocc_list' %}" class="btn btn-sm btn-outline-secondary w-100">
+        <a href="{% url 'gestor:grupo_fornecedor_list' %}" class="btn btn-sm btn-outline-secondary w-100">
           <i class="fas fa-eraser me-1"></i> Limpar
         </a>
       </div>
@@ -56,36 +58,50 @@
       <table class="table table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
-            <th style="width: 200px;">Código</th>
-            <th>Descrição</th>
-            <th style="width: 120px;" class="text-center">Status</th>
-            <th style="width: 120px;" class="text-end">Ações</th>
+            <th style="width: 100px;">Código</th>
+            <th>Nome do Grupo</th>
+            <th style="width: 40px;" class="text-center">Status</th>
+            <th style="width: 40px;" class="text-center">Fornecedores</th>
+            <th style="width: 150px;" class="text-end">Ações</th>
           </tr>
         </thead>
         <tbody>
           {% for grupo in page_obj %}
-            <tr {% if not grupo.ativa %}class="table-light text-muted"{% endif %}>
+            <tr {% if not grupo.ativo %}class="table-light text-muted"{% endif %}>
               <td>
                 <code class="small fw-bold">{{ grupo.codigo }}</code>
               </td>
               <td>
-                <div>{{ grupo.descricao }}</div>
+                <div class="fw-bold">{{ grupo.nome }}</div>
+                {% if grupo.descricao %}
+                  <div class="small text-muted">{{ grupo.descricao|truncatechars:60 }}</div>
+                {% endif %}
               </td>
               <td class="text-center">
-                {% if grupo.ativa %}
+                {% if grupo.ativo %}
                   <span class="badge bg-success">Ativo</span>
                 {% else %}
                   <span class="badge bg-danger">Inativo</span>
                 {% endif %}
               </td>
+              <td class="text-center">
+                <span class="badge bg-info">{{ grupo.total_fornecedores_count|default:0 }}</span>
+              </td>
               <td class="text-end">
                 <div class="btn-group" role="group" aria-label="Ações">
-                  <a href="{% url 'gestor:grupocc_update' grupo.codigo %}"
+                  <a href="{% url 'gestor:grupo_fornecedor_detail' grupo.codigo %}"
+                     class="btn btn-sm btn-outline-info"
+                     title="Ver Fornecedores">
+                    <i class="fas fa-eye"></i>
+                  </a>
+
+                  <a href="{% url 'gestor:grupo_fornecedor_update' grupo.codigo %}"
                      class="btn btn-sm btn-outline-primary"
                      title="Editar">
                     <i class="fas fa-edit"></i>
                   </a>
-                  <a href="{% url 'gestor:grupocc_delete' grupo.codigo %}"
+
+                  <a href="{% url 'gestor:grupo_fornecedor_delete' grupo.codigo %}"
                      class="btn btn-sm btn-outline-danger"
                      title="Excluir">
                     <i class="fas fa-trash-alt"></i>
@@ -95,17 +111,17 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="4" class="text-center py-5 text-muted">
-                {% if search or ativa %}
-                  <p>Nenhum Grupo CC encontrado com os critérios de busca.</p>
-                  <a href="{% url 'gestor:grupocc_list' %}" class="btn btn-sm btn-outline-primary">
+              <td colspan="5" class="text-center py-5 text-muted">
+                {% if search or ativo %}
+                  <p>Nenhum grupo encontrado com os critérios de busca.</p>
+                  <a href="{% url 'gestor:grupo_fornecedor_list' %}" class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-eraser me-1"></i> Limpar filtros
                   </a>
                 {% else %}
-                  <p>Nenhum Grupo CC cadastrado ainda.</p>
+                  <p>Nenhum grupo cadastrado ainda.</p>
                   <div class="d-flex gap-2 justify-content-center">
-                    <a href="{% url 'gestor:grupocc_create' %}" class="btn btn-sm btn-primary">
-                      <i class="fas fa-plus me-1"></i> Criar primeiro Grupo CC
+                    <a href="{% url 'gestor:grupo_fornecedor_create' %}" class="btn btn-sm btn-primary">
+                      <i class="fas fa-plus me-1"></i> Criar primeiro grupo
                     </a>
                   </div>
                 {% endif %}
@@ -123,12 +139,12 @@
           <ul class="pagination pagination-sm justify-content-center mb-0">
             {% if page_obj.has_previous %}
               <li class="page-item">
-                <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if ativo %}&ativo={{ ativo }}{% endif %}">
                   <i class="fas fa-angle-double-left"></i>
                 </a>
               </li>
               <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if ativo %}&ativo={{ ativo }}{% endif %}">
                   <i class="fas fa-angle-left"></i>
                 </a>
               </li>
@@ -140,12 +156,12 @@
 
             {% if page_obj.has_next %}
               <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if ativo %}&ativo={{ ativo }}{% endif %}">
                   <i class="fas fa-angle-right"></i>
                 </a>
               </li>
               <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if ativa %}&ativa={{ ativa }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if ativo %}&ativo={{ ativo }}{% endif %}">
                   <i class="fas fa-angle-double-right"></i>
                 </a>
               </li>
@@ -155,12 +171,30 @@
 
         <div class="text-center mt-2">
           <small class="text-muted">
-            Mostrando {{ page_obj|length }} de {{ page_obj.paginator.count }} grupo{{ page_obj.paginator.count|pluralize }}
-            {% if search or ativa %}(filtrado{{ page_obj.paginator.count|pluralize }}){% endif %}
+            Mostrando {{ page_obj|length }} de {{ page_obj.paginator.count }} grupo{{ page_obj.paginator.count|pluralize:"s" }}
+            {% if search or ativo %}(filtrado{{ page_obj.paginator.count|pluralize:"s" }}){% endif %}
           </small>
         </div>
       </div>
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Auto-submit no select de filtro
+    $('#ativo').change(function() {
+        $(this).closest('form').submit();
+    });
+
+    // Enter para submeter busca
+    $('#search').on('keypress', function(e) {
+        if (e.which === 13) {
+            $(this).closest('form').submit();
+        }
+    });
+});
+</script>
 {% endblock %}

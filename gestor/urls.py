@@ -141,12 +141,19 @@ urlpatterns = [
     path('parametros/<str:codigo>/editar/', views.parametro_update, name='parametro_update'),
     path('parametros/<str:codigo>/excluir/', views.parametro_delete, name='parametro_delete'),
     
+    # ===== GRUPOS DE FORNECEDORES =====
+    path('grupos-fornecedores/', views.grupo_fornecedor_list, name='grupo_fornecedor_list'),
+    path('grupos-fornecedores/novo/', views.grupo_fornecedor_create, name='grupo_fornecedor_create'),
+    path('grupos-fornecedores/<str:codigo>/editar/', views.grupo_fornecedor_update, name='grupo_fornecedor_update'),
+    path('grupos-fornecedores/<str:codigo>/excluir/', views.grupo_fornecedor_delete, name='grupo_fornecedor_delete'),
+    path('grupos-fornecedores/<str:codigo>/detalhes/', views.grupo_fornecedor_detail, name='grupo_fornecedor_detail'),
+
     # ===== FORNECEDORES =====
     path('fornecedores/', views.fornecedor_list, name='fornecedor_list'),
     path('fornecedores/novo/', views.fornecedor_create, name='fornecedor_create'),
     path('fornecedores/<str:codigo>/editar/', views.fornecedor_update, name='fornecedor_update'),
     path('fornecedores/<str:codigo>/excluir/', views.fornecedor_delete, name='fornecedor_delete'),
-    
+
     # APIs Fornecedor
     path('api/fornecedor/validar-codigo/', views.api_validar_codigo_fornecedor, name='api_validar_codigo_fornecedor'),
     path('api/fornecedor/buscar/', views.api_buscar_fornecedor, name='api_buscar_fornecedor'),

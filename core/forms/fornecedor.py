@@ -9,10 +9,10 @@ class FornecedorForm(forms.ModelForm):
     class Meta:
         model = Fornecedor
         fields = [
-            'codigo', 'razao_social', 'nome_fantasia', 'cnpj_cpf',
-            'telefone', 'email', 'endereco', 'ativo'
+            'codigo', 'razao_social', 'nome_fantasia', 'grupo',
+            'cnpj_cpf', 'telefone', 'email', 'endereco', 'ativo'
         ]
-        
+
         widgets = {
             'codigo': forms.TextInput(attrs={
                 'class': 'form-control'
@@ -25,6 +25,9 @@ class FornecedorForm(forms.ModelForm):
             }),
             'cnpj_cpf': forms.TextInput(attrs={
                 'class': 'form-control cnpj-cpf-mask'
+            }),
+            'grupo': forms.Select(attrs={
+                'class': 'form-select'
             }),
             'telefone': forms.TextInput(attrs={
                 'class': 'form-control telefone-mask'
@@ -43,19 +46,24 @@ class FornecedorForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Campos obrigatórios
         self.fields['codigo'].required = True
         self.fields['razao_social'].required = True
-        
+
+        # Filtrar apenas grupos ativos
+        from core.models import GrupoFornecedor
+        self.fields['grupo'].queryset = GrupoFornecedor.objects.filter(ativo=True).order_by('nome')
+        self.fields['grupo'].required = False
+        self.fields['grupo'].empty_label = "--- Selecione um grupo (opcional) ---"
+
+        # Remover textos de ajuda de todos os campos
+        for field_name in self.fields:
+            self.fields[field_name].help_text = ''
+
         # Se estiver editando, código não pode ser alterado
         if self.instance.pk:
             self.fields['codigo'].widget.attrs['readonly'] = True
-            self.fields['codigo'].help_text = "Código não pode ser alterado após criação"
-            
-            # Mostrar informação sobre criação automática
-            if self.instance.criado_automaticamente:
-                self.fields['codigo'].help_text += " (Criado automaticamente do histórico)"
     
     def clean_codigo(self):
         """Validação do código do fornecedor"""

@@ -164,13 +164,22 @@ from .movimento_import import (
     corrigir_estrutura_excel,            # Corrige estrutura do Excel
 )
 
+# Grupo Fornecedor - Gestão de grupos de fornecedores
+from .grupo_fornecedor import (
+    grupo_fornecedor_list,               # Lista de grupos
+    grupo_fornecedor_create,             # Criar grupo
+    grupo_fornecedor_update,             # Editar grupo
+    grupo_fornecedor_delete,             # Excluir grupo
+    grupo_fornecedor_detail,             # Detalhes do grupo
+)
+
 # Fornecedor - Gestão de fornecedores
 from .fornecedor import (
     fornecedor_list,                     # Lista de fornecedores
     fornecedor_create,                   # Criar fornecedor
     fornecedor_update,                   # Editar fornecedor
     fornecedor_delete,                   # Excluir fornecedor
-    
+
     # APIs para fornecedores
     api_validar_codigo_fornecedor,       # Validação de código
     api_buscar_fornecedor,               # Busca de fornecedores

@@ -89,26 +89,17 @@ class CentroCustoForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Configurar campo pai como texto
         self.configurar_campo_pai_texto(CentroCusto)
-        
-        # Help texts
-        self.fields['codigo'].help_text = "Código do centro de custo"
-        self.fields['codigo_pai'].help_text = "Digite o código do centro pai (deixe vazio se for raiz)"
-        self.fields['tipo'].help_text = "S=Sintético (pode ter sub-centros), A=Analítico"
-        
+
+        # Remover textos de ajuda de todos os campos
+        for field_name in self.fields:
+            self.fields[field_name].help_text = ''
+
         # Readonly se editando
         if self.instance.pk:
             self.fields['codigo'].widget.attrs['readonly'] = True
-            
-            # Mostrar informação do pai atual se existir
-            if self.instance.codigo_pai:
-                try:
-                    pai = CentroCusto.objects.get(codigo=self.instance.codigo_pai)
-                    self.fields['codigo_pai'].help_text = f"Pai atual: {pai.codigo} - {pai.nome}"
-                except CentroCusto.DoesNotExist:
-                    pass
     
     def clean_codigo(self):
         codigo = self.cleaned_data.get('codigo', '').strip()
@@ -150,18 +141,17 @@ class UnidadeForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Configurar empresa
         self.fields['empresa'].queryset = Empresa.objects.filter(ativa=True).order_by('sigla')
-        
+
         # Configurar campo pai como texto
         self.configurar_campo_pai_texto(Unidade)
-        
-        # Help texts
-        self.fields['codigo'].help_text = "Código da unidade (ex: 1.2.01.30)"
-        self.fields['codigo_pai'].help_text = "Digite o código da unidade pai (deixe vazio se for raiz)"
-        self.fields['codigo_allstrategy'].help_text = "Código All Strategy (opcional para sintéticos)"
-        
+
+        # Remover textos de ajuda de todos os campos
+        for field_name in self.fields:
+            self.fields[field_name].help_text = ''
+
         # Readonly se editando
         if self.instance.pk:
             self.fields['codigo'].widget.attrs['readonly'] = True
@@ -202,26 +192,17 @@ class ContaContabilForm(forms.ModelForm, HierarchiaDeclaradaFormMixin):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Configurar campo pai como texto
         self.configurar_campo_pai_texto(ContaContabil)
-        
-        # Help texts
-        self.fields['codigo'].help_text = "Código da conta contábil (ex: 1.1.01.001)"
-        self.fields['codigo_pai'].help_text = "Digite o código da conta pai (deixe vazio se for raiz)"
-        self.fields['tipo'].help_text = "S=Sintético (pode ter sub-contas), A=Analítico"
-        
+
+        # Remover textos de ajuda de todos os campos
+        for field_name in self.fields:
+            self.fields[field_name].help_text = ''
+
         # Readonly se editando
         if self.instance.pk:
             self.fields['codigo'].widget.attrs['readonly'] = True
-            
-            # Mostrar informação do pai atual se existir
-            if self.instance.codigo_pai:
-                try:
-                    pai = ContaContabil.objects.get(codigo=self.instance.codigo_pai)
-                    self.fields['codigo_pai'].help_text = f"Pai atual: {pai.codigo} - {pai.nome}"
-                except ContaContabil.DoesNotExist:
-                    pass
     
     def clean_codigo(self):
         codigo = self.cleaned_data.get('codigo', '').strip()

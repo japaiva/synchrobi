@@ -8,6 +8,7 @@ from .usuario import Usuario
 from .empresa import Empresa
 from .hierarquicos import Unidade, CentroCusto, ContaContabil
 from .grupocc import GrupoCC
+from .grupo_fornecedor import GrupoFornecedor
 from .fornecedor import Fornecedor
 from .movimento import Movimento
 
@@ -32,6 +33,7 @@ __all__ = [
     'CentroCusto',
     'ContaContabil',
     'GrupoCC',
+    'GrupoFornecedor',
     'Fornecedor',
     'Movimento',
 

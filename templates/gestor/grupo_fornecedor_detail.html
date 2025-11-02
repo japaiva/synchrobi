@@ -1,0 +1,180 @@
+<!-- gestor/templates/gestor/grupo_fornecedor_detail.html -->
+{% extends 'gestor/base_gestor.html' %}
+{% load static %}
+
+{% block title %}Detalhes do Grupo | SynchroBI{% endblock %}
+
+{% block content %}
+<div class="row">
+  <!-- Informações do Grupo -->
+  <div class="col-md-12 mb-3">
+    <div class="card shadow">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+          <i class="fas fa-layer-group me-2"></i>
+          {{ grupo.nome }}
+        </h5>
+        <div>
+          <a href="{% url 'gestor:grupo_fornecedor_update' grupo.codigo %}" class="btn btn-primary btn-sm">
+            <i class="fas fa-edit me-1"></i> Editar Grupo
+          </a>
+          <a href="{% url 'gestor:grupo_fornecedor_list' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6">
+            <p class="mb-2"><strong>Código:</strong> <code>{{ grupo.codigo }}</code></p>
+            <p class="mb-2"><strong>Status:</strong>
+              {% if grupo.ativo %}
+                <span class="badge bg-success">Ativo</span>
+              {% else %}
+                <span class="badge bg-danger">Inativo</span>
+              {% endif %}
+            </p>
+            {% if grupo.descricao %}
+            <p class="mb-2"><strong>Descrição:</strong> {{ grupo.descricao }}</p>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <p class="mb-2"><strong>Total de Fornecedores:</strong> <span class="badge bg-info">{{ total_fornecedores }}</span></p>
+            <p class="mb-2"><strong>Fornecedores Ativos:</strong> <span class="badge bg-success">{{ grupo.total_fornecedores_ativos }}</span></p>
+            <p class="mb-2"><strong>Criado em:</strong> {{ grupo.data_criacao|date:"d/m/Y H:i" }}</p>
+            <p class="mb-2"><strong>Última alteração:</strong> {{ grupo.data_alteracao|date:"d/m/Y H:i" }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista de Fornecedores -->
+  <div class="col-md-12">
+    <div class="card shadow">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+          <i class="fas fa-users me-2"></i>
+          Fornecedores do Grupo
+        </h5>
+        <div>
+          <span class="badge bg-info">{{ total_fornecedores }} fornecedor{{ total_fornecedores|pluralize:"es" }}</span>
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+        {% if page_obj %}
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 100px;">Código</th>
+                  <th>Fornecedor</th>
+                  <th style="width: 150px;">CNPJ/CPF</th>
+                  <th style="width: 40px;" class="text-center">Status</th>
+                  <th style="width: 40px;" class="text-center">Movs</th>
+                  <th style="width: 100px;" class="text-end">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for fornecedor in page_obj %}
+                  <tr {% if not fornecedor.ativo %}class="table-light text-muted"{% endif %}>
+                    <td>
+                      <code class="small fw-bold">{{ fornecedor.codigo }}</code>
+                    </td>
+                    <td>
+                      <div class="fw-bold">{{ fornecedor.razao_social|truncatechars:40 }}</div>
+                      {% if fornecedor.nome_fantasia %}
+                        <div class="small text-muted">{{ fornecedor.nome_fantasia|truncatechars:40 }}</div>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if fornecedor.cnpj_cpf %}
+                        <small>{{ fornecedor.cnpj_cpf_formatado }}</small>
+                      {% else %}
+                        <span class="text-muted">-</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-center">
+                      {% if fornecedor.ativo %}
+                        <span class="badge bg-success">Ativo</span>
+                      {% else %}
+                        <span class="badge bg-danger">Inativo</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-center">
+                      <span class="badge bg-info">{{ fornecedor.movimentos.count|default:0 }}</span>
+                    </td>
+                    <td class="text-end">
+                      <div class="btn-group" role="group" aria-label="Ações">
+                        <a href="{% url 'gestor:fornecedor_update' fornecedor.codigo %}"
+                           class="btn btn-sm btn-outline-primary"
+                           title="Editar">
+                          <i class="fas fa-edit"></i>
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Paginação -->
+          {% if page_obj.has_other_pages %}
+            <div class="card-footer bg-white">
+              <nav aria-label="Paginação">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                  {% if page_obj.has_previous %}
+                    <li class="page-item">
+                      <a class="page-link" href="?page=1">
+                        <i class="fas fa-angle-double-left"></i>
+                      </a>
+                    </li>
+                    <li class="page-item">
+                      <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+                        <i class="fas fa-angle-left"></i>
+                      </a>
+                    </li>
+                  {% endif %}
+
+                  <li class="page-item active">
+                    <span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                  </li>
+
+                  {% if page_obj.has_next %}
+                    <li class="page-item">
+                      <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                        <i class="fas fa-angle-right"></i>
+                      </a>
+                    </li>
+                    <li class="page-item">
+                      <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">
+                        <i class="fas fa-angle-double-right"></i>
+                      </a>
+                    </li>
+                  {% endif %}
+                </ul>
+              </nav>
+
+              <div class="text-center mt-2">
+                <small class="text-muted">
+                  Mostrando {{ page_obj|length }} de {{ page_obj.paginator.count }} fornecedor{{ page_obj.paginator.count|pluralize:"es" }}
+                </small>
+              </div>
+            </div>
+          {% endif %}
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="fas fa-users fa-3x mb-3"></i>
+            <p>Este grupo ainda não possui fornecedores associados.</p>
+            <a href="{% url 'gestor:fornecedor_list' %}" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-users me-1"></i> Ver todos os fornecedores
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -9,30 +9,41 @@ logger = logging.getLogger('synchrobi')
 
 class Fornecedor(models.Model):
     """Cadastro de fornecedores com dados simplificados - VERSÃO ATUALIZADA"""
-    
+
     codigo = models.CharField(max_length=20, primary_key=True, verbose_name="Código")
     razao_social = models.CharField(
-        max_length=255, 
+        max_length=255,
         verbose_name="Razão Social",
         db_index=True  # ÍNDICE PARA BUSCA POR NOME
     )
     nome_fantasia = models.CharField(max_length=255, blank=True, verbose_name="Nome Fantasia")
     cnpj_cpf = models.CharField(max_length=18, blank=True, verbose_name="CNPJ/CPF")
-    
+
+    # Relacionamento com grupo de fornecedor
+    grupo = models.ForeignKey(
+        'GrupoFornecedor',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fornecedores',
+        verbose_name="Grupo",
+        help_text="Grupo ao qual este fornecedor pertence"
+    )
+
     # Dados de contato
     telefone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
     email = models.EmailField(blank=True, verbose_name="E-mail")
     endereco = models.TextField(blank=True, verbose_name="Endereço")
-    
+
     # Controle
     ativo = models.BooleanField(default=True, verbose_name="Ativo")
     criado_automaticamente = models.BooleanField(default=False, verbose_name="Criado Automaticamente")
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_alteracao = models.DateTimeField(auto_now=True)
-    
+
     # Campos para rastreamento da origem
     origem_historico = models.TextField(
-        blank=True, 
+        blank=True,
         verbose_name="Histórico de Origem",
         help_text="Histórico original de onde foi extraído"
     )

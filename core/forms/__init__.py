@@ -8,6 +8,7 @@ from .usuario import UsuarioForm
 from .empresa import EmpresaForm
 from .hierarquicos import UnidadeForm, CentroCustoForm, ContaContabilForm
 from .grupocc import GrupoCCForm
+from .grupo_fornecedor import GrupoFornecedorForm
 from .fornecedor import FornecedorForm
 from .movimento import MovimentoForm, MovimentoFiltroForm
 
@@ -35,6 +36,7 @@ __all__ = [
     'CentroCustoForm',
     'ContaContabilForm',
     'GrupoCCForm',
+    'GrupoFornecedorForm',
     'FornecedorForm',
     'MovimentoForm',
     'MovimentoFiltroForm',
