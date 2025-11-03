@@ -156,7 +156,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/tree-manager.js' %}?v=20251102a"></script>
+<script src="{% static 'js/tree-manager.js' %}?v=20251103a"></script>
 <script>
 let treeManager;
 document.addEventListener('DOMContentLoaded', () => {
@@ -196,7 +196,7 @@ window.openExternalCentroCustoModal = function(centroCodigo) {
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
                         <div class="modal-header bg-warning">
-                            <h5 class="modal-title">
+                            <h5 class="modal-title" id="${modalId}_title">
                                 <i class="fas fa-link me-2"></i>
                                 Códigos ERP - Centro de Custo ${centroCodigo}
                             </h5>
@@ -213,6 +213,15 @@ window.openExternalCentroCustoModal = function(centroCodigo) {
             </div>
         `);
         modal = document.getElementById(modalId);
+    }
+
+    // Atualizar o título do modal com o código do centro de custo atual
+    const modalTitle = document.getElementById(`${modalId}_title`);
+    if (modalTitle) {
+        modalTitle.innerHTML = `
+            <i class="fas fa-link me-2"></i>
+            Códigos ERP - Centro de Custo ${centroCodigo}
+        `;
     }
 
     // Abrir modal

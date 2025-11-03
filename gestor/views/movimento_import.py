@@ -21,6 +21,131 @@ from gestor.services.fornecedor_extractor_service import (
 logger = logging.getLogger('synchrobi')
 
 
+# === FUNÇÕES DE CRÍTICA E ANÁLISE ===
+
+def analisar_arquivo_pre_importacao(df, data_inicio, data_fim):
+    """
+    Analisa o arquivo antes de importar e retorna críticas detalhadas
+
+    Returns:
+        dict com estatísticas e problemas encontrados
+    """
+    criticas = {
+        'total_linhas': len(df),
+        'linhas_no_periodo': 0,
+        'linhas_fora_periodo': 0,
+        'linhas_sem_relatorio_despesa': 0,
+        'valor_total_sem_relatorio_despesa': Decimal('0.00'),
+        'unidades_nao_encontradas': set(),
+        'centros_nao_encontrados': set(),
+        'contas_nao_encontradas': set(),
+        'contas_sem_relatorio_despesa': {},  # {codigo: {nome, quantidade, valor_total}}
+        'erros_validacao': [],
+        'linhas_validas_para_importar': 0,
+        'valor_total_valido': Decimal('0.00'),
+    }
+
+    for idx, linha in df.iterrows():
+        try:
+            # Validar data
+            data_linha = linha.get('Data')
+            try:
+                if isinstance(data_linha, str):
+                    data_linha = datetime.strptime(data_linha, '%Y-%m-%d').date()
+                elif hasattr(data_linha, 'date'):
+                    data_linha = data_linha.date()
+                elif isinstance(data_linha, datetime):
+                    data_linha = data_linha.date()
+                elif isinstance(data_linha, (int, float)) and not pd.isna(data_linha):
+                    excel_epoch = date(1900, 1, 1)
+                    data_linha = excel_epoch + timedelta(days=int(data_linha) - 2)
+
+                if data_inicio <= data_linha <= data_fim:
+                    criticas['linhas_no_periodo'] += 1
+                else:
+                    criticas['linhas_fora_periodo'] += 1
+                    continue  # Pular análise adicional para linhas fora do período
+            except Exception:
+                criticas['linhas_fora_periodo'] += 1
+                continue
+
+            # Extrair campos
+            codigo_unidade = str(linha.get('Cód. da unidade', '')).strip()
+            codigo_centro = str(linha.get('Cód. do centro de custo', '')).strip()
+            codigo_conta = str(linha.get('Cód. da conta contábil', '')).strip()
+            valor = linha.get('Valor', 0)
+
+            # Converter valor
+            try:
+                if valor is not None and valor != '' and not pd.isna(valor):
+                    valor_decimal = abs(Decimal(str(valor))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                else:
+                    valor_decimal = Decimal('0.00')
+            except:
+                valor_decimal = Decimal('0.00')
+
+            linha_valida = True
+
+            # Validar unidade
+            if codigo_unidade:
+                unidade = Unidade.buscar_unidade_para_movimento(codigo_unidade)
+                if not unidade:
+                    criticas['unidades_nao_encontradas'].add(codigo_unidade)
+                    linha_valida = False
+            else:
+                linha_valida = False
+
+            # Validar centro de custo
+            if codigo_centro:
+                try:
+                    CentroCusto.objects.get(codigo=codigo_centro, ativo=True)
+                except CentroCusto.DoesNotExist:
+                    criticas['centros_nao_encontrados'].add(codigo_centro)
+                    linha_valida = False
+            else:
+                linha_valida = False
+
+            # Validar conta contábil e filtro de relatório de despesas
+            if codigo_conta:
+                try:
+                    conta_externa = ContaExterna.objects.get(codigo_externo=codigo_conta, ativa=True)
+                    conta_contabil = conta_externa.conta_contabil
+
+                    # === FILTRO PRINCIPAL: RELATÓRIO DE DESPESAS ===
+                    if not conta_contabil.relatorio_despesa:
+                        criticas['linhas_sem_relatorio_despesa'] += 1
+                        criticas['valor_total_sem_relatorio_despesa'] += valor_decimal
+
+                        # Agrupar por código de conta
+                        if codigo_conta not in criticas['contas_sem_relatorio_despesa']:
+                            criticas['contas_sem_relatorio_despesa'][codigo_conta] = {
+                                'nome': conta_contabil.nome,
+                                'codigo_interno': conta_contabil.codigo,
+                                'quantidade': 0,
+                                'valor_total': Decimal('0.00')
+                            }
+
+                        criticas['contas_sem_relatorio_despesa'][codigo_conta]['quantidade'] += 1
+                        criticas['contas_sem_relatorio_despesa'][codigo_conta]['valor_total'] += valor_decimal
+                        linha_valida = False
+
+                except ContaExterna.DoesNotExist:
+                    criticas['contas_nao_encontradas'].add(codigo_conta)
+                    linha_valida = False
+            else:
+                linha_valida = False
+
+            # Contabilizar linha válida
+            if linha_valida:
+                criticas['linhas_validas_para_importar'] += 1
+                criticas['valor_total_valido'] += valor_decimal
+
+        except Exception as e:
+            criticas['erros_validacao'].append(f'Linha {idx + 2}: {str(e)}')
+
+    return criticas
+
+
 # === FUNÇÕES DE PROCESSAMENTO DE MOVIMENTOS ===
 
 def processar_linha_excel_otimizada(linha_dados, numero_linha, nome_arquivo, data_inicio, data_fim):
@@ -112,6 +237,10 @@ def processar_linha_excel_otimizada(linha_dados, numero_linha, nome_arquivo, dat
             conta_contabil = conta_externa.conta_contabil
         except ContaExterna.DoesNotExist:
             return None, f'Conta contábil não encontrada: {codigo_conta_contabil} - linha ignorada'
+
+        # === FILTRO: NÃO IMPORTAR SE CONTA NÃO É PARA RELATÓRIO DE DESPESAS ===
+        if not conta_contabil.relatorio_despesa:
+            return None, f'Conta {codigo_conta_contabil} marcada como "não usar em relatório de despesas" - linha ignorada'
         
         # === USAR SERVIÇO DE EXTRAÇÃO OTIMIZADO ===
         numero_documento = ''
@@ -711,6 +840,112 @@ def api_validar_periodo_simples(request):
         
     except Exception:
         return JsonResponse({'success': False, 'periodo_valido': False})
+
+
+@login_required
+@require_POST
+def api_criticar_arquivo_importacao(request):
+    """
+    API para crítica detalhada do arquivo antes de importar
+    Retorna análise completa incluindo contas com relatorio_despesa=False
+    """
+    try:
+        if 'arquivo' not in request.FILES:
+            return JsonResponse({'success': False, 'error': 'Nenhum arquivo foi enviado'})
+
+        arquivo = request.FILES['arquivo']
+        data_inicio_str = request.POST.get('data_inicio')
+        data_fim_str = request.POST.get('data_fim')
+
+        if not data_inicio_str or not data_fim_str:
+            return JsonResponse({'success': False, 'error': 'Período não informado'})
+
+        try:
+            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        except ValueError as e:
+            return JsonResponse({'success': False, 'error': f'Formato de data inválido: {str(e)}'})
+
+        if not arquivo.name.endswith(('.xlsx', '.xls')):
+            return JsonResponse({'success': False, 'error': 'Arquivo deve ser Excel (.xlsx ou .xls)'})
+
+        # Carregar e corrigir estrutura
+        try:
+            df = corrigir_estrutura_excel(arquivo)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Erro na estrutura do arquivo: {str(e)}'})
+
+        if df.empty:
+            return JsonResponse({'success': False, 'error': 'Arquivo está vazio ou não contém dados válidos'})
+
+        # Executar análise
+        logger.info(f'Iniciando crítica do arquivo {arquivo.name}')
+        criticas = analisar_arquivo_pre_importacao(df, data_inicio, data_fim)
+
+        # Formatar contas sem relatório de despesa para resposta
+        contas_sem_relatorio = []
+        for codigo, info in criticas['contas_sem_relatorio_despesa'].items():
+            contas_sem_relatorio.append({
+                'codigo_externo': codigo,
+                'codigo_interno': info['codigo_interno'],
+                'nome': info['nome'],
+                'quantidade_movimentos': info['quantidade'],
+                'valor_total': float(info['valor_total'])
+            })
+
+        # Ordenar por valor total (maior primeiro)
+        contas_sem_relatorio = sorted(contas_sem_relatorio, key=lambda x: x['valor_total'], reverse=True)
+
+        # Preparar resposta
+        resultado = {
+            'success': True,
+            'arquivo': arquivo.name,
+            'periodo': f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}",
+            'resumo': {
+                'total_linhas_arquivo': criticas['total_linhas'],
+                'linhas_no_periodo': criticas['linhas_no_periodo'],
+                'linhas_fora_periodo': criticas['linhas_fora_periodo'],
+                'linhas_validas_importar': criticas['linhas_validas_para_importar'],
+                'valor_total_importar': float(criticas['valor_total_valido']),
+            },
+            'excluidos_relatorio_despesa': {
+                'quantidade': criticas['linhas_sem_relatorio_despesa'],
+                'valor_total': float(criticas['valor_total_sem_relatorio_despesa']),
+                'contas': contas_sem_relatorio[:20],  # Top 20
+                'total_contas_distintas': len(criticas['contas_sem_relatorio_despesa'])
+            },
+            'problemas': {
+                'unidades_nao_encontradas': {
+                    'quantidade': len(criticas['unidades_nao_encontradas']),
+                    'codigos': list(criticas['unidades_nao_encontradas'])[:20]
+                },
+                'centros_nao_encontrados': {
+                    'quantidade': len(criticas['centros_nao_encontrados']),
+                    'codigos': list(criticas['centros_nao_encontrados'])[:20]
+                },
+                'contas_nao_encontradas': {
+                    'quantidade': len(criticas['contas_nao_encontradas']),
+                    'codigos': list(criticas['contas_nao_encontradas'])[:20]
+                },
+                'erros_validacao': criticas['erros_validacao'][:10]
+            },
+            'pode_importar': criticas['linhas_validas_para_importar'] > 0
+        }
+
+        logger.info(
+            f'Crítica concluída: {criticas["linhas_validas_para_importar"]} linhas válidas, '
+            f'{criticas["linhas_sem_relatorio_despesa"]} excluídas (relatório despesa), '
+            f'valor excluído: R$ {criticas["valor_total_sem_relatorio_despesa"]}'
+        )
+
+        return JsonResponse(resultado)
+
+    except Exception as e:
+        logger.error(f'Erro na crítica: {str(e)}', exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': f'Erro interno: {str(e)}'
+        })
 
 
 @login_required

@@ -705,7 +705,7 @@ window.addNewRelatedItem = function(parentCode, configKey) {
 window.openExternalAccountModal = function(contaCodigo) {
     const modalId = 'relatedTableModal_external_codes';
     let modal = document.getElementById(modalId);
-    
+
     if (!modal) {
         // Criar modal se não existir
         document.body.insertAdjacentHTML('beforeend', `
@@ -713,7 +713,7 @@ window.openExternalAccountModal = function(contaCodigo) {
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
                         <div class="modal-header bg-warning text-dark">
-                            <h5 class="modal-title">
+                            <h5 class="modal-title" id="${modalId}Title">
                                 <i class="fas fa-link me-2"></i>Códigos ERP - ${contaCodigo}
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -730,7 +730,15 @@ window.openExternalAccountModal = function(contaCodigo) {
         `);
         modal = document.getElementById(modalId);
     }
-    
+
+    // Atualizar o título do modal com o código da conta atual
+    const modalTitle = document.getElementById(`${modalId}Title`);
+    if (modalTitle) {
+        modalTitle.innerHTML = `
+            <i class="fas fa-link me-2"></i>Códigos ERP - ${contaCodigo}
+        `;
+    }
+
     const body = document.getElementById(`${modalId}Body`);
     const bootstrapModal = new bootstrap.Modal(modal);
     bootstrapModal.show();

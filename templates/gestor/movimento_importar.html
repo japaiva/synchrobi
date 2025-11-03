@@ -30,26 +30,29 @@
         
         <div class="row g-3">
           <!-- Período -->
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label for="data_inicio" class="form-label">Data Início</label>
             <input type="date" id="data_inicio" name="data_inicio" class="form-control" required>
           </div>
-          
-          <div class="col-md-3">
+
+          <div class="col-md-2">
             <label for="data_fim" class="form-label">Data Fim</label>
             <input type="date" id="data_fim" name="data_fim" class="form-control" required>
           </div>
-          
+
           <!-- Arquivo -->
           <div class="col-md-4">
             <label for="arquivo" class="form-label">Arquivo Excel</label>
-            <input type="file" id="arquivo" name="arquivo" class="form-control" 
+            <input type="file" id="arquivo" name="arquivo" class="form-control"
                    accept=".xlsx,.xls" required>
           </div>
           
-          <!-- Botão -->
-          <div class="col-md-2 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" id="btnImportar">
+          <!-- Botões -->
+          <div class="col-md-4 d-flex align-items-end gap-2">
+            <button type="button" class="btn btn-info flex-fill" id="btnCriticar">
+              <i class="fas fa-search me-1"></i> Analisar
+            </button>
+            <button type="submit" class="btn btn-primary flex-fill" id="btnImportar">
               <i class="fas fa-upload me-1"></i> Importar
             </button>
           </div>
@@ -261,7 +264,177 @@ document.addEventListener('DOMContentLoaded', function() {
         btnImportar.disabled = false;
         btnImportar.innerHTML = '<i class="fas fa-upload me-1"></i> Importar';
     }
-    
+
+    // === FUNÇÃO DE CRÍTICA/ANÁLISE ===
+    const btnCriticar = document.getElementById('btnCriticar');
+
+    btnCriticar.addEventListener('click', function() {
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        // Preparar interface
+        btnCriticar.disabled = true;
+        btnCriticar.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Analisando...';
+        btnImportar.disabled = true;
+        resultadoDiv.style.display = 'none';
+
+        // Enviar para análise
+        const formData = new FormData(form);
+
+        fetch('{% url "gestor:api_criticar_arquivo_importacao" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            mostrarCritica(data);
+            btnCriticar.disabled = false;
+            btnCriticar.innerHTML = '<i class="fas fa-search me-1"></i> Analisar';
+            btnImportar.disabled = false;
+        })
+        .catch(error => {
+            resultadoDiv.style.display = 'block';
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Erro ao analisar arquivo: ${error.message}
+                </div>
+            `;
+            btnCriticar.disabled = false;
+            btnCriticar.innerHTML = '<i class="fas fa-search me-1"></i> Analisar';
+            btnImportar.disabled = false;
+        });
+    });
+
+    function mostrarCritica(data) {
+        resultadoDiv.style.display = 'block';
+
+        if (!data.success) {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Erro na Análise
+                    </h6>
+                    <p class="mb-0">${data.error}</p>
+                </div>
+            `;
+            return;
+        }
+
+        const resumo = data.resumo;
+        const excluidos = data.excluidos_relatorio_despesa;
+        const problemas = data.problemas;
+
+        const formatarValor = (valor) => {
+            return 'R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        };
+
+        resultadoDiv.innerHTML = `
+            <div class="alert ${data.pode_importar ? 'alert-info' : 'alert-warning'}">
+                <h6 class="alert-heading">
+                    <i class="fas fa-analytics me-2"></i>Análise do Arquivo: ${data.arquivo}
+                </h6>
+                <p class="mb-2"><strong>Período:</strong> ${data.periodo}</p>
+
+                <hr>
+
+                <!-- Resumo Geral -->
+                <div class="row g-3 mt-2">
+                    <div class="col-md-3">
+                        <div class="text-center p-2 border rounded bg-light">
+                            <div class="h5 mb-1">${resumo.total_linhas_arquivo}</div>
+                            <div class="small text-muted">Total Linhas</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center p-2 border rounded bg-light">
+                            <div class="h5 mb-1">${resumo.linhas_no_periodo}</div>
+                            <div class="small text-muted">No Período</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center p-2 border rounded ${resumo.linhas_validas_importar > 0 ? 'bg-success-subtle' : ''}">
+                            <div class="h5 mb-1 text-success">${resumo.linhas_validas_importar}</div>
+                            <div class="small">✅ Serão Importadas</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center p-2 border rounded bg-light">
+                            <div class="h5 mb-1">${formatarValor(resumo.valor_total_importar)}</div>
+                            <div class="small text-muted">Valor Total</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${excluidos.quantidade > 0 ? `
+                    <hr>
+                    <div class="mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-ban text-warning me-2"></i>
+                            Movimentos NÃO Importados (Relatório Despesa = Não)
+                        </h6>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <div class="small"><strong>Quantidade:</strong> ${excluidos.quantidade} movimentos</div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="small"><strong>Valor Total:</strong> ${formatarValor(excluidos.valor_total)}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="small"><strong>Contas Distintas:</strong> ${excluidos.total_contas_distintas}</div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${problemas.unidades_nao_encontradas.quantidade > 0 ||
+                  problemas.centros_nao_encontrados.quantidade > 0 ||
+                  problemas.contas_nao_encontradas.quantidade > 0 ? `
+                    <hr>
+                    <div class="mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                            Problemas de Validação
+                        </h6>
+                        <ul class="small mb-0">
+                            ${problemas.unidades_nao_encontradas.quantidade > 0 ? `
+                                <li><strong>Unidades não encontradas:</strong> ${problemas.unidades_nao_encontradas.quantidade} (${problemas.unidades_nao_encontradas.codigos.slice(0, 5).join(', ')}${problemas.unidades_nao_encontradas.codigos.length > 5 ? '...' : ''})</li>
+                            ` : ''}
+                            ${problemas.centros_nao_encontrados.quantidade > 0 ? `
+                                <li><strong>Centros não encontrados:</strong> ${problemas.centros_nao_encontrados.quantidade} (${problemas.centros_nao_encontrados.codigos.slice(0, 5).join(', ')}${problemas.centros_nao_encontrados.codigos.length > 5 ? '...' : ''})</li>
+                            ` : ''}
+                            ${problemas.contas_nao_encontradas.quantidade > 0 ? `
+                                <li><strong>Contas não encontradas:</strong> ${problemas.contas_nao_encontradas.quantidade} (${problemas.contas_nao_encontradas.codigos.slice(0, 5).join(', ')}${problemas.contas_nao_encontradas.codigos.length > 5 ? '...' : ''})</li>
+                            ` : ''}
+                        </ul>
+                    </div>
+                ` : ''}
+
+                <hr>
+                <div class="mt-3 text-center">
+                    ${data.pode_importar ? `
+                        <div class="text-success">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                            <p class="mt-2 mb-0"><strong>Arquivo pode ser importado</strong></p>
+                            <p class="small mb-0">Clique em "Importar" para prosseguir</p>
+                        </div>
+                    ` : `
+                        <div class="text-danger">
+                            <i class="fas fa-times-circle fa-2x"></i>
+                            <p class="mt-2 mb-0"><strong>Arquivo não pode ser importado</strong></p>
+                            <p class="small mb-0">Corrija os problemas e tente novamente</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
     // Data padrão (mês atual)
     const hoje = new Date();
     const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);

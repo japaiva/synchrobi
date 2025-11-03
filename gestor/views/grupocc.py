@@ -63,7 +63,7 @@ def grupocc_create(request):
 
     context = {
         'form': form,
-        'title': 'Novo Grupo CC',
+        'title': 'Novo Grupo Centro de Custo',
         'is_create': True
     }
     return render(request, 'gestor/grupocc_form.html', context)

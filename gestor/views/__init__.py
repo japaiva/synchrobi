@@ -156,12 +156,14 @@ from .movimento_import import (
     api_preview_movimentos_excel,        # Preview antes da importação
     api_importar_movimentos_excel,       # Importação real do Excel
     api_validar_periodo_importacao,      # Validação de período
-    api_validar_periodo_simples,         # Validação simples de período  
+    api_validar_periodo_simples,         # Validação simples de período
     api_importar_movimentos_simples,     # Importação simplificada
-    
+    api_criticar_arquivo_importacao,     # Crítica detalhada antes de importar
+
     # Funções auxiliares usando SERVIÇO
     processar_linha_excel_otimizada,     # Processa linha com serviço otimizado
     corrigir_estrutura_excel,            # Corrige estrutura do Excel
+    analisar_arquivo_pre_importacao,     # Análise prévia do arquivo
 )
 
 # Grupo Fornecedor - Gestão de grupos de fornecedores

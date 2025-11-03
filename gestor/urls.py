@@ -176,6 +176,7 @@ urlpatterns = [
     path('api/movimento/validar-periodo/', views.api_validar_periodo_importacao, name='api_validar_periodo_importacao'),
     path('api/movimento/validar-periodo-simples/', views.api_validar_periodo_simples, name='api_validar_periodo_simples'),
     path('api/movimento/importar-simples/', views.api_importar_movimentos_simples, name='api_importar_movimentos_simples'),
+    path('api/movimento/criticar-arquivo/', views.api_criticar_arquivo_importacao, name='api_criticar_arquivo_importacao'),
 
     # APIs gerais
     path('api/parametro/<str:codigo>/valor/', views.api_parametro_valor, name='api_parametro_valor'),
