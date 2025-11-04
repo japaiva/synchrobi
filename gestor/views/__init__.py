@@ -187,4 +187,5 @@ from .fornecedor import (
     api_buscar_fornecedor,               # Busca de fornecedores
     api_fornecedor_info,                 # Informações do fornecedor
     api_extrair_fornecedor_historico,    # Extração do histórico
+    api_sugerir_fornecedores,            # Sugestões de fornecedores similares
 )
