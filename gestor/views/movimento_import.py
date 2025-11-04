@@ -36,13 +36,15 @@ def analisar_arquivo_pre_importacao(df, data_inicio, data_fim):
         'linhas_fora_periodo': 0,
         'linhas_sem_relatorio_despesa': 0,
         'valor_total_sem_relatorio_despesa': Decimal('0.00'),
-        'unidades_nao_encontradas': set(),
-        'centros_nao_encontrados': set(),
-        'contas_nao_encontradas': set(),
+        'unidades_nao_encontradas': {},  # {codigo: {quantidade, valor_total}}
+        'centros_nao_encontrados': {},  # {codigo: {quantidade, valor_total}}
+        'contas_nao_encontradas': {},  # {codigo: {quantidade, valor_total}}
         'contas_sem_relatorio_despesa': {},  # {codigo: {nome, quantidade, valor_total}}
         'erros_validacao': [],
         'linhas_validas_para_importar': 0,
         'valor_total_valido': Decimal('0.00'),
+        'total_movimentos_nao_importados': 0,
+        'valor_total_nao_importado': Decimal('0.00'),
     }
 
     for idx, linha in df.iterrows():
@@ -90,7 +92,13 @@ def analisar_arquivo_pre_importacao(df, data_inicio, data_fim):
             if codigo_unidade:
                 unidade = Unidade.buscar_unidade_para_movimento(codigo_unidade)
                 if not unidade:
-                    criticas['unidades_nao_encontradas'].add(codigo_unidade)
+                    if codigo_unidade not in criticas['unidades_nao_encontradas']:
+                        criticas['unidades_nao_encontradas'][codigo_unidade] = {
+                            'quantidade': 0,
+                            'valor_total': Decimal('0.00')
+                        }
+                    criticas['unidades_nao_encontradas'][codigo_unidade]['quantidade'] += 1
+                    criticas['unidades_nao_encontradas'][codigo_unidade]['valor_total'] += valor_decimal
                     linha_valida = False
             else:
                 linha_valida = False
@@ -100,7 +108,13 @@ def analisar_arquivo_pre_importacao(df, data_inicio, data_fim):
                 try:
                     CentroCusto.objects.get(codigo=codigo_centro, ativo=True)
                 except CentroCusto.DoesNotExist:
-                    criticas['centros_nao_encontrados'].add(codigo_centro)
+                    if codigo_centro not in criticas['centros_nao_encontrados']:
+                        criticas['centros_nao_encontrados'][codigo_centro] = {
+                            'quantidade': 0,
+                            'valor_total': Decimal('0.00')
+                        }
+                    criticas['centros_nao_encontrados'][codigo_centro]['quantidade'] += 1
+                    criticas['centros_nao_encontrados'][codigo_centro]['valor_total'] += valor_decimal
                     linha_valida = False
             else:
                 linha_valida = False
@@ -130,15 +144,24 @@ def analisar_arquivo_pre_importacao(df, data_inicio, data_fim):
                         linha_valida = False
 
                 except ContaExterna.DoesNotExist:
-                    criticas['contas_nao_encontradas'].add(codigo_conta)
+                    if codigo_conta not in criticas['contas_nao_encontradas']:
+                        criticas['contas_nao_encontradas'][codigo_conta] = {
+                            'quantidade': 0,
+                            'valor_total': Decimal('0.00')
+                        }
+                    criticas['contas_nao_encontradas'][codigo_conta]['quantidade'] += 1
+                    criticas['contas_nao_encontradas'][codigo_conta]['valor_total'] += valor_decimal
                     linha_valida = False
             else:
                 linha_valida = False
 
-            # Contabilizar linha válida
+            # Contabilizar linha válida ou não importada
             if linha_valida:
                 criticas['linhas_validas_para_importar'] += 1
                 criticas['valor_total_valido'] += valor_decimal
+            else:
+                criticas['total_movimentos_nao_importados'] += 1
+                criticas['valor_total_nao_importado'] += valor_decimal
 
         except Exception as e:
             criticas['erros_validacao'].append(f'Linha {idx + 2}: {str(e)}')
@@ -882,19 +905,48 @@ def api_criticar_arquivo_importacao(request):
         logger.info(f'Iniciando crítica do arquivo {arquivo.name}')
         criticas = analisar_arquivo_pre_importacao(df, data_inicio, data_fim)
 
-        # Formatar contas sem relatório de despesa para resposta
-        contas_sem_relatorio = []
-        for codigo, info in criticas['contas_sem_relatorio_despesa'].items():
-            contas_sem_relatorio.append({
-                'codigo_externo': codigo,
-                'codigo_interno': info['codigo_interno'],
-                'nome': info['nome'],
-                'quantidade_movimentos': info['quantidade'],
+        # Formatar linhas de erros de validação (SEM incluir relatório despesa)
+        linhas_erros_validacao = []
+
+        # 1. Unidades não encontradas
+        for codigo, info in criticas['unidades_nao_encontradas'].items():
+            linhas_erros_validacao.append({
+                'motivo': 'Unidade não encontrada',
+                'detalhe': f"Código: {codigo}",
+                'codigo': codigo,
+                'nome': '',
+                'quantidade': info['quantidade'],
+                'valor_total': float(info['valor_total'])
+            })
+
+        # 2. Centros de custo não encontrados
+        for codigo, info in criticas['centros_nao_encontrados'].items():
+            linhas_erros_validacao.append({
+                'motivo': 'Centro de Custo não encontrado',
+                'detalhe': f"Código: {codigo}",
+                'codigo': codigo,
+                'nome': '',
+                'quantidade': info['quantidade'],
+                'valor_total': float(info['valor_total'])
+            })
+
+        # 3. Contas contábeis não encontradas
+        for codigo, info in criticas['contas_nao_encontradas'].items():
+            linhas_erros_validacao.append({
+                'motivo': 'Conta Contábil não encontrada',
+                'detalhe': f"Código: {codigo}",
+                'codigo': codigo,
+                'nome': '',
+                'quantidade': info['quantidade'],
                 'valor_total': float(info['valor_total'])
             })
 
         # Ordenar por valor total (maior primeiro)
-        contas_sem_relatorio = sorted(contas_sem_relatorio, key=lambda x: x['valor_total'], reverse=True)
+        linhas_erros_validacao = sorted(linhas_erros_validacao, key=lambda x: x['valor_total'], reverse=True)
+
+        # Calcular total de erros de validação
+        total_erros_qtd = sum(l['quantidade'] for l in linhas_erros_validacao)
+        total_erros_valor = sum(l['valor_total'] for l in linhas_erros_validacao)
 
         # Preparar resposta
         resultado = {
@@ -908,34 +960,27 @@ def api_criticar_arquivo_importacao(request):
                 'linhas_validas_importar': criticas['linhas_validas_para_importar'],
                 'valor_total_importar': float(criticas['valor_total_valido']),
             },
-            'excluidos_relatorio_despesa': {
+            'sem_relatorio_despesa': {
                 'quantidade': criticas['linhas_sem_relatorio_despesa'],
                 'valor_total': float(criticas['valor_total_sem_relatorio_despesa']),
-                'contas': contas_sem_relatorio[:20],  # Top 20
-                'total_contas_distintas': len(criticas['contas_sem_relatorio_despesa'])
             },
-            'problemas': {
-                'unidades_nao_encontradas': {
-                    'quantidade': len(criticas['unidades_nao_encontradas']),
-                    'codigos': list(criticas['unidades_nao_encontradas'])[:20]
-                },
-                'centros_nao_encontrados': {
-                    'quantidade': len(criticas['centros_nao_encontrados']),
-                    'codigos': list(criticas['centros_nao_encontrados'])[:20]
-                },
-                'contas_nao_encontradas': {
-                    'quantidade': len(criticas['contas_nao_encontradas']),
-                    'codigos': list(criticas['contas_nao_encontradas'])[:20]
-                },
-                'erros_validacao': criticas['erros_validacao'][:10]
+            'erros_validacao': {
+                'total_quantidade': total_erros_qtd,
+                'total_valor': total_erros_valor,
+                'linhas': linhas_erros_validacao,
+                'total_tipos': len(linhas_erros_validacao)
+            },
+            'total_nao_importados': {
+                'quantidade': criticas['total_movimentos_nao_importados'],
+                'valor': float(criticas['valor_total_nao_importado'])
             },
             'pode_importar': criticas['linhas_validas_para_importar'] > 0
         }
 
         logger.info(
             f'Crítica concluída: {criticas["linhas_validas_para_importar"]} linhas válidas, '
-            f'{criticas["linhas_sem_relatorio_despesa"]} excluídas (relatório despesa), '
-            f'valor excluído: R$ {criticas["valor_total_sem_relatorio_despesa"]}'
+            f'{criticas["total_movimentos_nao_importados"]} não importados, '
+            f'valor não importado: R$ {criticas["valor_total_nao_importado"]}'
         )
 
         return JsonResponse(resultado)

@@ -24,8 +24,8 @@ def contaexterna_list(request):
     if conta_codigo:
         queryset = queryset.filter(conta_contabil__codigo=conta_codigo)
     
-    # Paginação
-    paginator = Paginator(queryset, 20)
+    # Paginação (100 itens por página)
+    paginator = Paginator(queryset, 100)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     

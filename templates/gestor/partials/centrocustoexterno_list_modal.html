@@ -1,7 +1,10 @@
 <!-- Códigos ERP para Centros de Custo -->
 
 <div class="p-3">
-    <h6>Códigos ERP - Centros de Custo</h6>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Códigos ERP - Centros de Custo</h6>
+        <small class="text-muted">Total: {{ page_obj.paginator.count }} código{{ page_obj.paginator.count|pluralize }}</small>
+    </div>
 
     {% for externo in page_obj %}
     <div class="border p-2 mb-2" id="item-{{ externo.id }}">
@@ -205,6 +208,59 @@
         <p>Nenhum código ERP cadastrado para este centro de custo</p>
     </div>
     {% endfor %}
+
+    <!-- Paginação -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Navegação de páginas" class="mt-3">
+        <ul class="pagination pagination-sm justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadPage({{ page_obj.previous_page_number }})">Anterior</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Anterior</span>
+            </li>
+            {% endif %}
+
+            <li class="page-item disabled">
+                <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            </li>
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadPage({{ page_obj.next_page_number }})">Próxima</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Próxima</span>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <script>
+    function loadPage(page) {
+        const modalBody = document.getElementById('relatedTableModal_external_codes_cc_body');
+        if (modalBody) {
+            fetch('/gestor/centros-custo-externos/?centro={{ filtros.centro_codigo }}&page=' + page, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                modalBody.innerHTML = html;
+                modalBody.scrollTop = 0;
+            })
+            .catch(error => {
+                console.error('Erro ao carregar página:', error);
+            });
+        }
+    }
+    </script>
+    {% endif %}
 </div>
 
 <!-- Botão para adicionar novo código -->

@@ -29,8 +29,8 @@ def centrocustoexterno_list(request):
     if centro_codigo:
         queryset = queryset.filter(centro_custo__codigo=centro_codigo)
 
-    # Paginação
-    paginator = Paginator(queryset, 20)
+    # Paginação (100 itens por página)
+    paginator = Paginator(queryset, 100)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 

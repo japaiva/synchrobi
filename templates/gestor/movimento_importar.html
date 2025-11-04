@@ -327,8 +327,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const resumo = data.resumo;
-        const excluidos = data.excluidos_relatorio_despesa;
-        const problemas = data.problemas;
+        const semRelatorio = data.sem_relatorio_despesa;
+        const errosValidacao = data.erros_validacao;
+        const totalNaoImportados = data.total_nao_importados;
 
         const formatarValor = (valor) => {
             return 'R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -371,47 +372,76 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
 
-                ${excluidos.quantidade > 0 ? `
+                ${semRelatorio.quantidade > 0 || errosValidacao.total_quantidade > 0 ? `
                     <hr>
                     <div class="mt-3">
-                        <h6 class="mb-2">
+                        <h6 class="mb-3">
                             <i class="fas fa-ban text-warning me-2"></i>
-                            Movimentos NÃO Importados (Relatório Despesa = Não)
+                            Movimentos NÃO Importados
                         </h6>
-                        <div class="row g-2">
-                            <div class="col-md-4">
-                                <div class="small"><strong>Quantidade:</strong> ${excluidos.quantidade} movimentos</div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="small"><strong>Valor Total:</strong> ${formatarValor(excluidos.valor_total)}</div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="small"><strong>Contas Distintas:</strong> ${excluidos.total_contas_distintas}</div>
-                            </div>
-                        </div>
-                    </div>
-                ` : ''}
 
-                ${problemas.unidades_nao_encontradas.quantidade > 0 ||
-                  problemas.centros_nao_encontrados.quantidade > 0 ||
-                  problemas.contas_nao_encontradas.quantidade > 0 ? `
-                    <hr>
-                    <div class="mt-3">
-                        <h6 class="mb-2">
-                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
-                            Problemas de Validação
-                        </h6>
-                        <ul class="small mb-0">
-                            ${problemas.unidades_nao_encontradas.quantidade > 0 ? `
-                                <li><strong>Unidades não encontradas:</strong> ${problemas.unidades_nao_encontradas.quantidade} (${problemas.unidades_nao_encontradas.codigos.slice(0, 5).join(', ')}${problemas.unidades_nao_encontradas.codigos.length > 5 ? '...' : ''})</li>
-                            ` : ''}
-                            ${problemas.centros_nao_encontrados.quantidade > 0 ? `
-                                <li><strong>Centros não encontrados:</strong> ${problemas.centros_nao_encontrados.quantidade} (${problemas.centros_nao_encontrados.codigos.slice(0, 5).join(', ')}${problemas.centros_nao_encontrados.codigos.length > 5 ? '...' : ''})</li>
-                            ` : ''}
-                            ${problemas.contas_nao_encontradas.quantidade > 0 ? `
-                                <li><strong>Contas não encontradas:</strong> ${problemas.contas_nao_encontradas.quantidade} (${problemas.contas_nao_encontradas.codigos.slice(0, 5).join(', ')}${problemas.contas_nao_encontradas.codigos.length > 5 ? '...' : ''})</li>
-                            ` : ''}
-                        </ul>
+                        ${semRelatorio.quantidade > 0 ? `
+                            <div class="alert alert-warning mb-3">
+                                <strong>Total NÃO é Relatório de Despesa:</strong><br>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        Quantidade: <strong>${semRelatorio.quantidade}</strong> movimentos
+                                    </div>
+                                    <div class="col-md-6">
+                                        Valor Total: <strong>${formatarValor(semRelatorio.valor_total)}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${errosValidacao.total_tipos > 0 ? `
+                            <div class="mt-3">
+                                <strong class="mb-2 d-block">Detalhamento de Erros de Validação:</strong>
+                                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover table-bordered">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th style="width: 30%;">Motivo</th>
+                                                <th style="width: 45%;">Detalhe</th>
+                                                <th style="width: 12%;" class="text-end">Qtd.</th>
+                                                <th style="width: 13%;" class="text-end">Valor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="small">
+                                            ${errosValidacao.linhas.map(linha => `
+                                                <tr>
+                                                    <td>${linha.motivo}</td>
+                                                    <td>${linha.detalhe}</td>
+                                                    <td class="text-end">${linha.quantidade}</td>
+                                                    <td class="text-end">${formatarValor(linha.valor_total)}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                        <tfoot class="table-light fw-bold">
+                                            <tr>
+                                                <td colspan="2" class="text-end">Subtotal Erros:</td>
+                                                <td class="text-end">${errosValidacao.total_quantidade}</td>
+                                                <td class="text-end">${formatarValor(errosValidacao.total_valor)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${totalNaoImportados.quantidade > 0 ? `
+                            <div class="alert alert-danger mt-3 mb-0">
+                                <strong>TOTAL GERAL NÃO IMPORTADOS:</strong><br>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        Quantidade: <strong>${totalNaoImportados.quantidade}</strong> movimentos
+                                    </div>
+                                    <div class="col-md-6">
+                                        Valor Total: <strong>${formatarValor(totalNaoImportados.valor)}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
 

@@ -38,72 +38,99 @@ def imprimir_critica(criticas, arquivo_nome):
     print(f"   Total de linhas no arquivo: {criticas['total_linhas']:,}")
     print(f"   Linhas no período informado: {criticas['linhas_no_periodo']:,}")
     print(f"   Linhas fora do período: {criticas['linhas_fora_periodo']:,}")
-    print(f"\n✅ LINHAS VÁLIDAS PARA IMPORTAR: {criticas['linhas_validas_para_importar']:,}")
+    print(f"\n✅ MOVIMENTOS VÁLIDOS (serão importados): {criticas['linhas_validas_para_importar']:,}")
     print(f"   Valor total a importar: {formatar_valor_reais(criticas['valor_total_valido'])}")
+    print(f"\n🚫 MOVIMENTOS NÃO IMPORTADOS: {criticas['total_movimentos_nao_importados']:,}")
+    print(f"   Valor total não importado: {formatar_valor_reais(criticas['valor_total_nao_importado'])}")
 
-    # FILTRO DE RELATÓRIO DE DESPESAS
-    print(f"\n" + "-" * 100)
-    print(f"🚫 MOVIMENTOS NÃO IMPORTADOS (Conta marcada como 'não usar em relatório de despesas')")
-    print(f"-" * 100)
-    print(f"   Quantidade de movimentos: {criticas['linhas_sem_relatorio_despesa']:,}")
-    print(f"   Valor total excluído: {formatar_valor_reais(criticas['valor_total_sem_relatorio_despesa'])}")
-    if criticas['contas_sem_relatorio_despesa']:
-        print(f"   Contas distintas envolvidas: {len(criticas['contas_sem_relatorio_despesa'])}")
+    # MOVIMENTOS NÃO IMPORTADOS
+    if criticas['total_movimentos_nao_importados'] > 0:
+        print(f"\n" + "-" * 130)
+        print(f"🚫 MOVIMENTOS NÃO IMPORTADOS")
+        print(f"-" * 130)
 
-    # PROBLEMAS DE VALIDAÇÃO
-    print(f"\n" + "-" * 100)
-    print(f"⚠️  PROBLEMAS DE VALIDAÇÃO")
-    print(f"-" * 100)
+        # 1. SEM RELATÓRIO DESPESA (apenas total)
+        if criticas['linhas_sem_relatorio_despesa'] > 0:
+            print(f"\n   ⚠️  TOTAL NÃO É RELATÓRIO DE DESPESA:")
+            print(f"       Quantidade: {criticas['linhas_sem_relatorio_despesa']:>8,} movimentos")
+            print(f"       Valor Total: {formatar_valor_reais(criticas['valor_total_sem_relatorio_despesa']):>20}")
 
-    tem_problemas = False
+        # 2. ERROS DE VALIDAÇÃO (detalhado)
+        linhas_erros = []
 
-    if criticas['unidades_nao_encontradas']:
-        tem_problemas = True
-        print(f"\n   ❌ Unidades não encontradas ({len(criticas['unidades_nao_encontradas'])} códigos distintos):")
-        lista_unidades = sorted(list(criticas['unidades_nao_encontradas']))
-        for i in range(0, min(20, len(lista_unidades)), 5):
-            print(f"      {', '.join(lista_unidades[i:i+5])}")
-        if len(lista_unidades) > 20:
-            print(f"      ... e mais {len(lista_unidades) - 20}")
+        for codigo, info in criticas['unidades_nao_encontradas'].items():
+            linhas_erros.append({
+                'motivo': 'Unidade não encontrada',
+                'detalhe': f"Código: {codigo}",
+                'quantidade': info['quantidade'],
+                'valor': info['valor_total']
+            })
 
-    if criticas['centros_nao_encontrados']:
-        tem_problemas = True
-        print(f"\n   ❌ Centros de Custo não encontrados ({len(criticas['centros_nao_encontrados'])} códigos distintos):")
-        lista_centros = sorted(list(criticas['centros_nao_encontrados']))
-        for i in range(0, min(20, len(lista_centros)), 5):
-            print(f"      {', '.join(lista_centros[i:i+5])}")
-        if len(lista_centros) > 20:
-            print(f"      ... e mais {len(lista_centros) - 20}")
+        for codigo, info in criticas['centros_nao_encontrados'].items():
+            linhas_erros.append({
+                'motivo': 'Centro não encontrado',
+                'detalhe': f"Código: {codigo}",
+                'quantidade': info['quantidade'],
+                'valor': info['valor_total']
+            })
 
-    if criticas['contas_nao_encontradas']:
-        tem_problemas = True
-        print(f"\n   ❌ Contas Contábeis não encontradas ({len(criticas['contas_nao_encontradas'])} códigos distintos):")
-        lista_contas = sorted(list(criticas['contas_nao_encontradas']))
-        for i in range(0, min(20, len(lista_contas)), 5):
-            print(f"      {', '.join(lista_contas[i:i+5])}")
-        if len(lista_contas) > 20:
-            print(f"      ... e mais {len(lista_contas) - 20}")
+        for codigo, info in criticas['contas_nao_encontradas'].items():
+            linhas_erros.append({
+                'motivo': 'Conta não encontrada',
+                'detalhe': f"Código: {codigo}",
+                'quantidade': info['quantidade'],
+                'valor': info['valor_total']
+            })
 
+        if linhas_erros:
+            # Ordenar por valor (maior primeiro)
+            linhas_erros = sorted(linhas_erros, key=lambda x: x['valor'], reverse=True)
+
+            # Calcular subtotal de erros
+            subtotal_qtd = sum(l['quantidade'] for l in linhas_erros)
+            subtotal_valor = sum(l['valor'] for l in linhas_erros)
+
+            print(f"\n   📋 DETALHAMENTO DE ERROS DE VALIDAÇÃO:")
+            print(f"\n   {'Motivo':<30} {'Detalhe':<65} {'Qtd.':>8} {'Valor':>20}")
+            print(f"   {'-'*30} {'-'*65} {'-'*8} {'-'*20}")
+
+            for linha in linhas_erros:
+                print(f"   {linha['motivo']:<30} {linha['detalhe']:<65} {linha['quantidade']:>8,} {formatar_valor_reais(linha['valor']):>20}")
+
+            print(f"   {'-'*30} {'-'*65} {'-'*8} {'-'*20}")
+            print(f"   {'Subtotal Erros':<30} {'':<65} {subtotal_qtd:>8,} {formatar_valor_reais(subtotal_valor):>20}")
+
+        # 3. TOTAL GERAL
+        print(f"\n   {'='*130}")
+        print(f"   {'TOTAL GERAL NÃO IMPORTADOS':<96} {criticas['total_movimentos_nao_importados']:>8,} {formatar_valor_reais(criticas['valor_total_nao_importado']):>20}")
+        print(f"   {'='*130}")
+
+    # OUTROS ERROS DE VALIDAÇÃO
     if criticas['erros_validacao']:
-        tem_problemas = True
-        print(f"\n   ❌ Outros erros de validação ({len(criticas['erros_validacao'])} erros):")
+        print(f"\n" + "-" * 130)
+        print(f"⚠️  OUTROS ERROS DE VALIDAÇÃO")
+        print(f"-" * 130)
         for erro in criticas['erros_validacao'][:10]:
-            print(f"      - {erro}")
+            print(f"   - {erro}")
         if len(criticas['erros_validacao']) > 10:
-            print(f"      ... e mais {len(criticas['erros_validacao']) - 10} erros")
-
-    if not tem_problemas:
-        print("\n   ✅ Nenhum problema de validação encontrado!")
+            print(f"   ... e mais {len(criticas['erros_validacao']) - 10} erros")
 
     # CONCLUSÃO
-    print(f"\n" + "=" * 100)
+    print(f"\n" + "=" * 130)
     if criticas['linhas_validas_para_importar'] > 0:
-        percentual = (criticas['linhas_validas_para_importar'] / criticas['linhas_no_periodo'] * 100) if criticas['linhas_no_periodo'] > 0 else 0
+        percentual_validas = (criticas['linhas_validas_para_importar'] / criticas['linhas_no_periodo'] * 100) if criticas['linhas_no_periodo'] > 0 else 0
+        percentual_nao_importadas = (criticas['total_movimentos_nao_importados'] / criticas['linhas_no_periodo'] * 100) if criticas['linhas_no_periodo'] > 0 else 0
+
         print(f"✅ ARQUIVO PODE SER IMPORTADO")
-        print(f"   {criticas['linhas_validas_para_importar']:,} de {criticas['linhas_no_periodo']:,} linhas no período serão importadas ({percentual:.1f}%)")
+        print(f"\n   Resumo:")
+        print(f"   - Total no período: {criticas['linhas_no_periodo']:,} movimentos")
+        print(f"   - ✅ Serão importados: {criticas['linhas_validas_para_importar']:,} ({percentual_validas:.1f}%) - {formatar_valor_reais(criticas['valor_total_valido'])}")
+        print(f"   - 🚫 Não serão importados: {criticas['total_movimentos_nao_importados']:,} ({percentual_nao_importadas:.1f}%) - {formatar_valor_reais(criticas['valor_total_nao_importado'])}")
     else:
         print(f"❌ ARQUIVO NÃO PODE SER IMPORTADO - Nenhuma linha válida encontrada")
-    print("=" * 100 + "\n")
+        print(f"   - Total no período: {criticas['linhas_no_periodo']:,} movimentos")
+        print(f"   - Todos foram rejeitados ({criticas['total_movimentos_nao_importados']:,} movimentos)")
+    print("=" * 130 + "\n")
 
 
 def main():
