@@ -262,8 +262,9 @@ def processar_linha_excel_otimizada(linha_dados, numero_linha, nome_arquivo, dat
             return None, f'Conta contábil não encontrada: {codigo_conta_contabil} - linha ignorada'
 
         # === FILTRO: NÃO IMPORTAR SE CONTA NÃO É PARA RELATÓRIO DE DESPESAS ===
+        # Retorna None, None para pular silenciosamente (não é um erro de validação)
         if not conta_contabil.relatorio_despesa:
-            return None, f'Conta {codigo_conta_contabil} marcada como "não usar em relatório de despesas" - linha ignorada'
+            return None, None
         
         # === USAR SERVIÇO DE EXTRAÇÃO OTIMIZADO ===
         numero_documento = ''
@@ -711,7 +712,7 @@ def api_importar_movimentos_excel(request):
                                 fornecedores_encontrados += 1
 
                     elif erro:
-                        # Ignorar erros de período
+                        # Ignorar erros de período (sem contar como erro)
                         if 'fora do período' in erro:
                             continue
 
@@ -1086,8 +1087,9 @@ def api_importar_movimentos_simples(request):
                                     fornecedores_novos_codigos.add(movimento.fornecedor.codigo)
                                     fornecedores_criados += 1
                     elif erro:
+                        # Ignorar erros de período e filtros silenciosos (sem contar como erro)
                         if 'fora do período' in erro:
-                            continue  # Ignorar silenciosamente
+                            continue
 
                         # Extrair código específico do erro
                         if 'Conta contábil não encontrada:' in erro:
