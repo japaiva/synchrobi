@@ -159,7 +159,8 @@ urlpatterns = [
     path('api/fornecedor/buscar/', views.api_buscar_fornecedor, name='api_buscar_fornecedor'),
     path('api/fornecedor/<str:codigo>/', views.api_fornecedor_info, name='api_fornecedor_info'),
     path('api/fornecedor/extrair-historico/', views.api_extrair_fornecedor_historico, name='api_extrair_fornecedor_historico'),
-    
+    path('api/fornecedor/sugerir/', views.api_sugerir_fornecedores, name='api_sugerir_fornecedores'),
+
     # ===== MOVIMENTOS - CRUD BÁSICO =====
     path('movimentos/', views.movimento_list, name='movimento_list'),
     path('movimentos/novo/', views.movimento_create, name='movimento_create'),

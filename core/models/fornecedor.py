@@ -2,6 +2,8 @@
 
 import logging
 import re
+from difflib import SequenceMatcher
+from typing import List, Tuple, Optional
 from django.db import models
 from django.core.exceptions import ValidationError
 
@@ -127,20 +129,100 @@ class Fornecedor(models.Model):
         """
         if not nome_parcial or len(nome_parcial) < 3:
             return cls.objects.none()
-        
+
         nome_limpo = nome_parcial.strip().upper()
-        
+
         try:
             query = cls.objects.filter(razao_social__icontains=nome_limpo)
             if apenas_ativos:
                 query = query.filter(ativo=True)
-            
+
             return query.order_by('razao_social')
-            
+
         except Exception as e:
             logger.error(f'Erro na busca parcial por nome {nome_parcial}: {str(e)}')
             return cls.objects.none()
-    
+
+    @classmethod
+    def buscar_similares(cls, nome: str, min_score: float = 0.60, apenas_ativos: bool = True, limit: int = 5) -> List[Tuple['Fornecedor', float]]:
+        """
+        Busca fornecedores similares usando fuzzy matching
+
+        Args:
+            nome: Nome para buscar
+            min_score: Score mínimo de similaridade (0.0 a 1.0) - padrão 0.60 (60%)
+            apenas_ativos: Se True, busca apenas fornecedores ativos
+            limit: Número máximo de resultados
+
+        Returns:
+            Lista de tuplas (Fornecedor, score) ordenada por relevância (maior score primeiro)
+
+        Exemplo:
+            resultados = Fornecedor.buscar_similares("BEAUTY FAIR EVENTOS", min_score=0.60)
+            # Pode retornar: [(Fornecedor("BEAUTY FAIR"), 0.75), ...]
+        """
+        if not nome or len(nome) < 3:
+            return []
+
+        nome_limpo = nome.strip().upper()
+
+        try:
+            # 1. Busca exata primeiro (score = 1.0)
+            exato = cls.buscar_por_nome(nome_limpo, apenas_ativos=apenas_ativos)
+            if exato:
+                return [(exato, 1.0)]
+
+            # 2. Pegar primeiras palavras significativas para filtro inicial
+            palavras_chave = nome_limpo.split()[:3]  # Primeiras 3 palavras
+
+            # 3. Buscar candidatos que contenham pelo menos uma palavra-chave
+            query = cls.objects.filter(ativo=True) if apenas_ativos else cls.objects.all()
+
+            if len(palavras_chave) >= 1:
+                # Criar filtro Q para buscar qualquer palavra-chave
+                from django.db.models import Q
+                filtro_q = Q()
+                for palavra in palavras_chave:
+                    if len(palavra) >= 3:  # Apenas palavras com 3+ caracteres
+                        filtro_q |= Q(razao_social__icontains=palavra)
+
+                if filtro_q:
+                    query = query.filter(filtro_q)
+
+            candidatos = query[:100]  # Limitar candidatos para performance
+
+            # 4. Calcular score de similaridade para cada candidato
+            resultados = []
+            for candidato in candidatos:
+                # Usar SequenceMatcher do difflib (algoritmo Ratcliff-Obershelp)
+                score = SequenceMatcher(None, nome_limpo, candidato.razao_social).ratio()
+
+                # Calcular também similaridade por palavras (Jaccard)
+                palavras_nome = set(nome_limpo.split())
+                palavras_candidato = set(candidato.razao_social.split())
+
+                if palavras_nome and palavras_candidato:
+                    intersecao = len(palavras_nome & palavras_candidato)
+                    uniao = len(palavras_nome | palavras_candidato)
+                    score_jaccard = intersecao / uniao if uniao > 0 else 0
+
+                    # Score final é a média ponderada (70% SequenceMatcher, 30% Jaccard)
+                    score_final = (score * 0.70) + (score_jaccard * 0.30)
+                else:
+                    score_final = score
+
+                if score_final >= min_score:
+                    resultados.append((candidato, score_final))
+
+            # 5. Ordenar por score (maior primeiro) e limitar resultados
+            resultados.sort(key=lambda x: x[1], reverse=True)
+
+            return resultados[:limit]
+
+        except Exception as e:
+            logger.error(f'Erro ao buscar fornecedores similares a "{nome}": {str(e)}')
+            return []
+
     @classmethod
     def gerar_codigo_automatico(cls, nome):
         """

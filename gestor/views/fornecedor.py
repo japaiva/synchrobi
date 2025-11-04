@@ -283,13 +283,13 @@ def api_fornecedor_info(request, codigo):
 def api_extrair_fornecedor_historico(request):
     """API para extrair fornecedor do histórico (para testes)"""
     historico = request.GET.get('historico', '').strip()
-    
+
     if not historico:
         return JsonResponse({'success': False, 'error': 'Histórico é obrigatório'})
-    
+
     try:
         fornecedor = Fornecedor.extrair_do_historico(historico, salvar=False)
-        
+
         if fornecedor:
             return JsonResponse({
                 'success': True,
@@ -304,10 +304,76 @@ def api_extrair_fornecedor_historico(request):
                 'success': False,
                 'error': 'Nenhum fornecedor encontrado no histórico'
             })
-            
+
     except Exception as e:
         logger.error(f'Erro ao extrair fornecedor: {str(e)}')
         return JsonResponse({
             'success': False,
             'error': 'Erro ao processar histórico'
+        })
+
+@login_required
+def api_sugerir_fornecedores(request):
+    """
+    API para sugerir fornecedores similares ao nome digitado
+
+    Parâmetros:
+        - nome: Nome para buscar fornecedores similares
+        - min_score: Score mínimo de similaridade (0.0 a 1.0) - padrão 0.60
+        - limit: Número máximo de resultados - padrão 5
+
+    Retorna:
+        JSON com lista de fornecedores similares ordenados por relevância
+
+    Exemplo de uso:
+        /api/fornecedor/sugerir/?nome=BEAUTY FAIR EVENTOS&min_score=0.60
+    """
+    nome = request.GET.get('nome', '').strip()
+    min_score = float(request.GET.get('min_score', 0.60))
+    limit = int(request.GET.get('limit', 5))
+
+    if not nome or len(nome) < 3:
+        return JsonResponse({
+            'success': False,
+            'message': 'Nome deve ter pelo menos 3 caracteres'
+        })
+
+    try:
+        # Usar o novo método buscar_similares
+        resultados = Fornecedor.buscar_similares(
+            nome=nome,
+            min_score=min_score,
+            apenas_ativos=True,
+            limit=limit
+        )
+
+        sugestoes = []
+        for fornecedor, score in resultados:
+            sugestoes.append({
+                'codigo': fornecedor.codigo,
+                'razao_social': fornecedor.razao_social,
+                'nome_fantasia': fornecedor.nome_fantasia,
+                'nome_display': fornecedor.nome_display,
+                'cnpj_cpf': fornecedor.cnpj_cpf_formatado,
+                'tipo_pessoa': fornecedor.tipo_pessoa,
+                'criado_automaticamente': fornecedor.criado_automaticamente,
+                'score': round(score, 3),  # Score de 0.0 a 1.0
+                'score_percent': round(score * 100, 1),  # Score em percentual
+                'telefone': fornecedor.telefone,
+                'email': fornecedor.email
+            })
+
+        return JsonResponse({
+            'success': True,
+            'nome_buscado': nome.upper(),
+            'sugestoes': sugestoes,
+            'total_encontrado': len(sugestoes),
+            'min_score_usado': min_score
+        })
+
+    except Exception as e:
+        logger.error(f'Erro ao buscar fornecedores similares: {str(e)}')
+        return JsonResponse({
+            'success': False,
+            'error': 'Erro ao buscar sugestões'
         })

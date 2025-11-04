@@ -409,15 +409,15 @@ class FornecedorExtractorService:
         return matches[0] if matches else ''
     
     @classmethod
-    def buscar_ou_criar_fornecedor(cls, fornecedor_extraido: FornecedorExtraido, 
+    def buscar_ou_criar_fornecedor(cls, fornecedor_extraido: FornecedorExtraido,
                                   historico_original: str = '') -> Optional[Fornecedor]:
         """
         Busca fornecedor existente ou cria novo
-        
+
         Args:
             fornecedor_extraido: Dados do fornecedor extraído
             historico_original: Histórico original para referência
-            
+
         Returns:
             Instância de Fornecedor ou None
         """
@@ -426,12 +426,65 @@ class FornecedorExtractorService:
         if fornecedor_existente:
             # Removido log de sucesso
             return fornecedor_existente
-        
+
         # Criar novo fornecedor
         novo_fornecedor = cls._criar_fornecedor_automatico(fornecedor_extraido.nome, historico_original)
         # Log apenas na criação (já existe no método _criar_fornecedor_automatico)
         return novo_fornecedor
-    
+
+    @classmethod
+    def buscar_ou_sugerir_fornecedor(cls, fornecedor_extraido: FornecedorExtraido,
+                                     historico_original: str = '',
+                                     min_score: float = 0.60) -> Dict:
+        """
+        Busca fornecedor existente ou retorna sugestões de fornecedores similares
+
+        Args:
+            fornecedor_extraido: Dados do fornecedor extraído
+            historico_original: Histórico original para referência
+            min_score: Score mínimo para sugestões (0.0 a 1.0)
+
+        Returns:
+            Dicionário com:
+            - 'encontrado': True se encontrou match exato, False se são sugestões
+            - 'fornecedor': Fornecedor encontrado (se encontrado)
+            - 'sugestoes': Lista de tuplas (Fornecedor, score) se não encontrou exato
+            - 'nome_extraido': Nome que foi extraído do histórico
+            - 'tipo': Tipo do fornecedor (PJ ou PF)
+            - 'confianca': Confiança da extração
+        """
+        nome_extraido = fornecedor_extraido.nome
+
+        # 1. Buscar match exato primeiro
+        fornecedor_existente = cls._buscar_fornecedor_existente(nome_extraido)
+        if fornecedor_existente:
+            return {
+                'encontrado': True,
+                'fornecedor': fornecedor_existente,
+                'sugestoes': [],
+                'nome_extraido': nome_extraido,
+                'tipo': fornecedor_extraido.tipo,
+                'confianca': fornecedor_extraido.confianca
+            }
+
+        # 2. Buscar fornecedores similares usando o novo método
+        sugestoes = Fornecedor.buscar_similares(
+            nome=nome_extraido,
+            min_score=min_score,
+            apenas_ativos=True,
+            limit=5
+        )
+
+        # 3. Retornar resultado com sugestões
+        return {
+            'encontrado': False,
+            'fornecedor': None,
+            'sugestoes': sugestoes,  # Lista de (Fornecedor, score)
+            'nome_extraido': nome_extraido,
+            'tipo': fornecedor_extraido.tipo,
+            'confianca': fornecedor_extraido.confianca
+        }
+
     @classmethod
     def _deve_ignorar_completamente(cls, historico: str) -> bool:
         """Verifica se deve ignorar sem tentar extrair"""

@@ -215,46 +215,106 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Módulo de Sugestão de Fornecedores -->
+<script src="{% static 'js/fornecedor-sugestao.js' %}"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-completar fornecedor baseado no histórico
+    // Inicializar módulo de sugestão de fornecedores
+    FornecedorSugestao.init({
+        fieldFornecedorSelector: '#{{ form.fornecedor.id_for_label }}',
+        autoSuggest: false,  // Não sugerir automaticamente ao digitar, apenas ao sair do histórico
+        onSelecionado: function(fornecedor) {
+            console.log('Fornecedor selecionado:', fornecedor);
+            // Mostrar mensagem de sucesso
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show mt-2';
+            alert.innerHTML = `
+                <i class="fas fa-check-circle me-2"></i>
+                Fornecedor selecionado: <strong>${fornecedor.razao_social}</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('#{{ form.fornecedor.id_for_label }}').parentElement.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        },
+        onCriarNovo: function(nome) {
+            console.log('Criar novo fornecedor:', nome);
+            // Mostrar mensagem informativa
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-info alert-dismissible fade show mt-2';
+            alert.innerHTML = `
+                <i class="fas fa-info-circle me-2"></i>
+                Ao salvar, um novo fornecedor <strong>"${nome}"</strong> será criado automaticamente.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('#{{ form.fornecedor.id_for_label }}').parentElement.appendChild(alert);
+        }
+    });
+
+    // Auto-completar fornecedor baseado no histórico (com sugestão inteligente)
     const historicoInput = document.getElementById('{{ form.historico.id_for_label }}');
     const fornecedorSelect = document.getElementById('{{ form.fornecedor.id_for_label }}');
-    
+
     if (historicoInput && fornecedorSelect) {
-        historicoInput.addEventListener('blur', function() {
-            const historico = this.value;
-            
+        historicoInput.addEventListener('blur', async function() {
+            const historico = this.value.trim();
+
+            if (!historico) return;
+
             // Buscar padrão de fornecedor no histórico
-            const match = historico.match(/- (\d+)\s+([A-Z\s&\.\-_]+?) -/);
-            
+            // Exemplo: "... - 826498 AUTOPEL AUTOMACAO COMERCIAL E INFORMATICA LTDA - ..."
+            const match = historico.match(/- \d+\s+([A-Z\s&\.\-_]+?) -/);
+
             if (match) {
-                const codigoFornecedor = match[1];
-                
-                // Procurar fornecedor no select
+                const nomeFornecedor = match[1].trim();
+
+                // Buscar fornecedor exato no select primeiro
+                let encontrouExato = false;
                 for (let option of fornecedorSelect.options) {
-                    if (option.text.includes(codigoFornecedor)) {
+                    if (option.text.toUpperCase().includes(nomeFornecedor)) {
                         fornecedorSelect.value = option.value;
-                        
+                        encontrouExato = true;
+
                         // Mostrar feedback
                         const feedback = document.createElement('div');
-                        feedback.className = 'alert alert-info alert-dismissible fade show mt-2';
+                        feedback.className = 'alert alert-success alert-dismissible fade show mt-2';
                         feedback.innerHTML = `
-                            <i class="fas fa-robot me-2"></i>
-                            Fornecedor identificado automaticamente: ${option.text}
+                            <i class="fas fa-check-circle me-2"></i>
+                            Fornecedor identificado: <strong>${option.text}</strong>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         `;
-                        
+
                         fornecedorSelect.parentElement.appendChild(feedback);
-                        
-                        // Remover feedback após 5 segundos
-                        setTimeout(() => {
-                            if (feedback.parentElement) {
-                                feedback.remove();
-                            }
-                        }, 5000);
-                        
+                        setTimeout(() => feedback.remove(), 5000);
+
                         break;
+                    }
+                }
+
+                // Se não encontrou exato, buscar sugestões similares
+                if (!encontrouExato && nomeFornecedor.length >= 3) {
+                    try {
+                        const resultado = await FornecedorSugestao.buscarSugestoes(nomeFornecedor, false);
+
+                        if (resultado && resultado.success && resultado.sugestoes.length > 0) {
+                            // Mostrar modal com sugestões
+                            FornecedorSugestao.mostrarModal(nomeFornecedor, resultado.sugestoes);
+                        } else {
+                            // Nenhuma sugestão encontrada - informar usuário
+                            const feedback = document.createElement('div');
+                            feedback.className = 'alert alert-warning alert-dismissible fade show mt-2';
+                            feedback.innerHTML = `
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Fornecedor <strong>"${nomeFornecedor}"</strong> não encontrado.
+                                Será criado automaticamente ao salvar.
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            `;
+
+                            fornecedorSelect.parentElement.appendChild(feedback);
+                            setTimeout(() => feedback.remove(), 8000);
+                        }
+                    } catch (error) {
+                        console.error('Erro ao buscar sugestões:', error);
                     }
                 }
             }
