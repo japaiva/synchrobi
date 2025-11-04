@@ -83,6 +83,7 @@ class Movimento(models.Model):
     )
     
     historico = models.TextField(
+        blank=True,
         verbose_name="Histórico",
         help_text="Histórico completo da movimentação"
     )
